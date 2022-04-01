@@ -1,0 +1,184 @@
+History
+=======
+
+0.12.0
+---------------------
+
+* Add augmentation of SatNet `tf.data.Dataset`. This feature allows injecting synthetic targets into real data during training.
+* Add FFT convolution to `add_patch` sprite render and `scatter_shift` image augmenter for speed improvement.
+* Add cache last PSF FFT to `fftconv2p` for speed improvement for static PSFs.
+* Add two-body state vector as a trackable target.
+* Add moon and sun model and misc methods to calculate phase angle and target brightness.
+
+
+0.11.0
+---------------------
+
+* Add support to render star motion with FFT. Set sim option `star_render_mode` to `fft`.
+* Add option to sample photon noise multiple times. Set sim option `num_shot_noise_samples` to integer number.
+* Add support to render a satellite as a sprite. Set `model` option in obs.
+* Add support to load and augment sprite model with `$pipeline` operator.
+* Add cropped POPPY PSF generation.
+* Fix GreatCircle propagator tracking offset.
+* Fix runtime exception when site and track_mode are not defined.
+* Add TensorFlow 2.6 and update TensorFlow 2.2 and 2.4 Docker build file.
+
+
+0.10.0
+---------------------
+
+* Add support for piecewise rendering. Set sim option `render_size` to enable. For example, [256, 256].
+* Add `fixed` tracking mode with mount azimuth and elevation.
+* Add great circle propagator for targets.
+* Add in-memory image generation. See generator function `image_generator`.
+* Fix missing stars when FOV crosses zero degree RA.
+* Add curved targets using bezier curve raster. Enabled by default. Set sim option `num_target_samples` to 2 to enable linear raster.
+* Add LRU cache to star catalog reader.
+* Add option to turn off SNR calculation. Set sim option `calculate_snr` to false will render targets and stars together.
+* Handle unstable SGP4 TLEs.
+* Add TensorFlow 2.4 Docker build file.
+* Add debug output for pristine images of targets and stars.
+
+
+0.9.1
+---------------------
+
+* Calculate POPPY input wavefront resolution to avoid PSF aliasing.
+* Add support for additional FITS image data types (`int16`, `uint16`, `int32`, `uint32`, `float32`).
+* Add batch processing to `transform_and_add_counts` to support batch processing of stars.
+* Add `auto` option to calculate temporal oversample factor based on star velocities.
+* Add option to turn off serializing config data to pickle file (`save_pickle`).
+* Add option to turn off png movie output (`save_movie`).
+* Add `crop_and_resize` and `flip` image augmentation.
+* Set pixels with values beyond the pixel data type's capacity to the maximum value for that data type.
+* Add `lognormal` function to generate a distribution with a true target mean.
+* Fix issue with sidereal track.
+* Fix issue with fragment velocity not being randomly sampled.
+
+
+0.9.0
+---------------------
+
+* Add Physical Optics Propagation in Python (POPPY) PSF generation.
+* Add PSF augmentation with `$pipeline` replacement key.
+* Add `$function` and `$compound` replacement key.
+* Add ability to generate stray light from a `$function` replacement key.
+* Add built-in 2D polynomial image generator for stray light, `polygrid2d`.
+* Add built-in cosine fourth image generator for irradiance falloff, `radial_cos2d`.
+* Add built-in sine wave image generator for fix pattern noise, `sin2d`.
+* Add built-in image generator from AstroPy model, `astropy_model2d`.
+* Add built-in image augmentation, `scatter_shift` and `scatter_shift_polar`.
+* Add `$cache` replacement key (caching works for PSF and `$function`).
+
+
+0.8.3
+---------------------
+
+* Fix new Skyfield incompatibility.
+
+
+0.8.2
+---------------------
+
+* Prefix replacement keys with `$` in SatSim configuration file.
+* Add option to scale collision fragments by cosine of the exit angle.
+
+
+0.8.1
+---------------------
+
+* Add astrometric metadata into FITS header
+* Refactor WCS library
+* Add option to flip images about x or y axis
+* Add option to refresh stars for each frame
+* Add RPO from TLE generator
+
+
+0.8.0
+---------------------
+
+* Add two body propagator
+* Add object `create`, `delete`, and `update` events
+* Add collision generator
+* Add breakup generator
+* Add `ref` keyword to configuration
+* Add `key` keyword to `import` configuration
+* Refactor astrometric library
+
+
+0.7.2
+---------------------
+
+* Add option to specify star and obs velocity in polar coordinates
+
+
+0.7.1
+---------------------
+
+* Add option to turn off shot noise: `sim.enable_shot_noise: true`
+* Add option to turn off annotation boxes in image: `sim.show_obs_boxes: true`
+* Add option to specify velocity in arcseconds: `sim.velocity_units: arcsec`
+* Fix PNG output threading issue
+
+
+0.7.0
+---------------------
+
+* Add function pipelines to support variable target brightness
+
+
+0.6.1
+---------------------
+
+* Fix built-in generators not included in distribution
+* Add dockerfile
+
+
+0.6.0
+---------------------
+
+* Add configuration import.
+* Add configuration generator functions.
+* Add built-in generator for breakups.
+* Add built-in generator for CSOs.
+* Add built-in generator for loading TLE files.
+
+
+0.5.0
+---------------------
+
+* Runtime optimization.
+* Add parallel processing and multi-gpu utilization.
+* Add option to limit gpu memory usage.
+
+
+0.4.0
+---------------------
+
+* Add signal to noise calculation for target pixels.
+
+
+0.3.0
+---------------------
+
+* Add support for two line element set SGP4 satellite propagator.
+* Add support for rate and sidereal track from topocentric site.
+
+
+0.2.0
+---------------------
+
+* Add support for SSTR7 star catalog.
+
+
+0.1.1
+---------------------
+
+* Add target position to annotation file.
+* Updates to run GitLab CI.
+
+
+0.1.0
+---------------------
+
+* First release.

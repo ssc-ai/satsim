@@ -1,0 +1,51 @@
+image: tensorflow/tensorflow:2.8.0-gpu
+
+# Change pip's cache directory to be inside the project directory since we can
+# only cache local items.
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  GIT_SSL_NO_VERIFY: "1"
+
+# Pip's cache doesn't store the python packages
+# https://pip.pypa.io/en/stable/reference/pip_install/#caching
+#
+# If you want to also cache the installed packages, you have to install
+# them in a virtualenv and cache it as well.
+# cache:
+#   paths:
+#     - .cache/pip
+#     - venv/
+
+before_script:
+  - python3 -V # Print out python version for debugging
+  - nvidia-smi # Print nvidia for debugging
+  - python3 -m pip install -U -r requirements_dev.txt
+  - pip3 install imageio==2.15.0 --user # fix numpy version conflict
+  - python3 setup.py develop --user
+  - source ~/.profile
+  - pip3 freeze # Print modules for debugging
+
+test:
+  script:
+  - flake8 satsim tests examples
+  - make coverage
+  artifacts:
+    paths:
+    - htmlcov
+
+run:
+  script:
+  - make dist
+  artifacts:
+    paths:
+    - dist/*.whl
+
+pages:
+  script:
+  - make docs
+  - mv docs/_build/html/ public/
+  artifacts:
+    paths:
+    - public
+  only:
+  - master

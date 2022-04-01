@@ -1,0 +1,82 @@
+satsim.geometry package
+=======================
+
+.. automodule:: satsim.geometry
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Submodules
+----------
+
+satsim.geometry.astrometric module
+----------------------------------
+
+.. automodule:: satsim.geometry.astrometric
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.draw module
+---------------------------
+
+.. automodule:: satsim.geometry.draw
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.random module
+-----------------------------
+
+.. automodule:: satsim.geometry.random
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.sgp4 module
+---------------------------
+
+.. automodule:: satsim.geometry.sgp4
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.sprite module
+-----------------------------
+
+.. automodule:: satsim.geometry.sprite
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.sstr7 module
+----------------------------
+
+.. automodule:: satsim.geometry.sstr7
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.transform module
+--------------------------------
+
+.. automodule:: satsim.geometry.transform
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.twobody module
+------------------------------
+
+.. automodule:: satsim.geometry.twobody
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.wcs module
+--------------------------
+
+.. automodule:: satsim.geometry.wcs
+   :members:
+   :undoc-members:
+   :show-inheritance:
