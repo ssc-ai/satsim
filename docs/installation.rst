@@ -8,9 +8,9 @@ Installation
 Stable Release
 --------------
 
-To install SatSim, download the python wheel file from `GitLab releases`_:
+To install SatSim, download the python wheel file from `GitHub releases`_:
 
-.. _GitLab releases: https://gitlab.pacificds.com/machine-learning/satsim/releases
+.. _GitHub releases: https://github.com/ssc-ai/satsim/releases
 
 
 Then run this command in your terminal from the location of the python wheel
@@ -31,19 +31,19 @@ you through the process.
 From Sources
 ------------
 
-The sources for SatSim can be downloaded from the `GitLab repo`_.
+The sources for SatSim can be downloaded from the `GitHub repo`_.
 
 You can either clone the repository:
 
 .. code-block:: console
 
-    $ git -c http.sslVerify=false clone https://gitlab.pacificds.com/machine-learning/satsim.git
+    $ git -c clone https://github.com/ssc-ai/satsim.git
 
 Or download the `tarball`_:
 
 .. code-block:: console
 
-    $ curl -k -OL https://gitlab.pacificds.com/machine-learning/satsim/-/archive/master/satsim-master.tar.gz
+    $ curl -k -OL https://github.com/ssc-ai/satsim/archive/refs/heads/master.zip
 
 Once you have a copy of the source, change directory into SatSim and install
 it with:
@@ -59,5 +59,5 @@ should install with:
 
     $ python3 setup.py develop -or- make develop
 
-.. _GitLab repo: https://gitlab.pacificds.com/machine-learning/satsim.git
-.. _tarball: https://gitlab.pacificds.com/machine-learning/satsim/-/archive/master/satsim-master.tar.gz
+.. _GitHub repo: https://github.com/ssc-ai/satsim.git
+.. _tarball: https://github.com/ssc-ai/satsim/archive/refs/heads/master.zip

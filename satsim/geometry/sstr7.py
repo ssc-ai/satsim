@@ -178,7 +178,7 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_S
         x_fov: `float`, x fov in degrees
         ra: `float`, right ascension of top left corner of array, [0,0]
         dec: `float`, declination of top left corner of array, [0,0]
-        rot: `float`, focal plane rotation (not implemented)
+        rot: `float`, focal plane rotation
         rootPath: path to root directory. default: environment variable SATSIM_SSTR7_PATH
         pad_mult: `float`, padding multiplier
         origin: `string`, if `center`, rr and cc will be defined where the line of sight is at the center of

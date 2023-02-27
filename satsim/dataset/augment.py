@@ -16,7 +16,7 @@ def augment_satnet_with_satsim(dataset, augment_satsim_params, prob=0.5, rn=0, m
     Args:
         dataset: `tf.Dataset`, Dataset object that returns SatNet types:
             image: tf.float32,
-            bounding box nnnotations: tf.float32,
+            bounding box annotations: tf.float32,
             filename: tf.string,
             annotation filename : tf.string
         augment_satsim_params: `dict`, SatSim simulation parameters
@@ -46,7 +46,7 @@ def augment_satnet_with_satsim(dataset, augment_satsim_params, prob=0.5, rn=0, m
         sspc['augment']['image']['post'] = tf.squeeze(image)
 
         ig = image_generator(sspc, with_meta=True)
-        fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples = ig.__next__()
+        fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache = ig.__next__()
 
         anno = init_annotation('.', 0, h, w, y_fov, x_fov)
         snr = signal_to_noise_ratio(fpa_conv_targ, tf.squeeze(image) * a2d_gain, rn)

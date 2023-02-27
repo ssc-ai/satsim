@@ -33,6 +33,14 @@ satsim.math.fft module
    :undoc-members:
    :show-inheritance:
 
+satsim.math.interpolate module
+------------------------------
+
+.. automodule:: satsim.math.interpolate
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.math.random module
 -------------------------
 

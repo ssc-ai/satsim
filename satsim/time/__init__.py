@@ -1,3 +1,6 @@
+from datetime import timezone
+
+import numpy as np
 from skyfield.api import load
 from skyfield.timelib import Time
 
@@ -84,3 +87,65 @@ def to_utc_list(t):
     """
     tu = t.utc
     return [int(tu[0]), int(tu[1]), int(tu[2]), int(tu[3]), int(tu[4]), float(tu[5])]
+
+
+def from_datetime(dt, utc=False):
+    if utc:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return _ts.from_datetime(dt)
+
+
+def to_astropy(t):
+    """ Convert a Skyfield `Time` object to an AstroPy `Time`.
+
+    Args:
+        t: `Time`, a Skyfield `Time`
+
+    Returns:
+        An AstroPy `Time` object
+    """
+    from astropy import time
+    return time.Time(t.whole, t.tt_fraction, format='jd', scale='tt').utc
+
+
+def from_astropy(t):
+    """ Convert an AstroPy `Time` to Skyfield `Time`.
+
+    Args:
+        t: `Time`, an AstroPy `Time`
+
+    Returns:
+        A Skyfield `Time` object
+    """
+    return _ts.from_astropy(t)
+
+
+def linspace(t0, t1, num=50):
+    """ Return evenly spaced Skyfield times over a specified interval.
+
+    Args:
+        t0: `Time`, start Skyfield `Time`
+        t1: `Time`, end Skyfield `Time`
+        num: `int`, number of samples to generate. default=50
+
+    Returns:
+        A `list` of Skyfield times equally spaced between `t0` and `t1`.
+    """
+    whole0 = t0.whole
+    frac0 = t0.tt_fraction
+    whole1 = t1.whole
+    frac1 = t1.tt_fraction
+    return Time(
+        _ts,
+        np.linspace(whole0, whole1, num),
+        np.linspace(frac0, frac1, num),
+    )
+
+def delta_sec(t0, t1):
+    """ Subtract t0 and t1. (t0 - t1)
+
+    Returns:
+        A `float` in seconds.
+    """
+    return (t0 - t1) * 86400

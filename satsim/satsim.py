@@ -24,11 +24,14 @@ from satsim.image.render import render_piecewise, render_full
 from satsim.geometry.draw import gen_line, gen_line_from_endpoints, gen_curve_from_points
 from satsim.geometry.random import gen_random_points
 from satsim.geometry.sstr7 import query_by_los
+from satsim.geometry.csvsc import query_by_los as csvsc_query_by_los
 from satsim.geometry.sgp4 import create_sgp4
+from satsim.geometry.ephemeris import create_ephemeris_object
 from satsim.geometry.astrometric import create_topocentric, gen_track, get_los, get_los_azel, GreatCircle
 from satsim.geometry.twobody import create_twobody
 from satsim.io.satnet import write_frame, set_frame_annotation, init_annotation
 from satsim.io.image import save_apng
+from satsim.io.czml import save_czml
 from satsim.util import tic, toc, MultithreadedTaskQueue, configure_eager, configure_single_gpu
 from satsim.config import transform, save_debug, _transform, save_cache
 from satsim.pipeline import _delta_t
@@ -145,32 +148,40 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
         y_ifov,
         x_ifov)
 
-    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
-        snr = signal_to_noise_ratio(fpa_conv_targ, fpa_conv_star + bg_tf + dc_tf, rn_tf)
-        if num_shot_noise_samples is not None:
-            snr = snr * np.sqrt(num_shot_noise_samples)
-        meta_data = set_frame_annotation(meta_data, frame_num, h_fpa_os, w_fpa_os, obs_os_pix, [20 * s_osf, 20 * s_osf], snr=snr)
-        if queue is not None:
-            queue.task(write_frame, {
-                'dir_name': dir_name,
-                'sat_name': set_name,
-                'fpa_digital': fpa_digital.numpy(),
-                'meta_data': copy.deepcopy(meta_data),
-                'frame_num': frame_num,
-                'exposure_time': exposure_time,
-                'time_stamp': dt,
-                'ssp': ssp_orig,
-                'show_obs_boxes': ssp['sim']['show_obs_boxes'],
-                'astrometrics': astrometrics.copy(),
-                'save_pickle': ssp['sim']['save_pickle'],
-                'dtype': a2d_dtype,
-                'save_jpeg': ssp['sim']['save_jpeg'],
-            }, tag=dir_name)
-        if output_debug:
-            with open(os.path.join(dir_debug, 'metadata_{}.json'.format(frame_num)), 'w') as jsonfile:
-                json.dump(meta_data, jsonfile, indent=2)
+    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
+        if fpa_digital is not None:
+            snr = signal_to_noise_ratio(fpa_conv_targ, fpa_conv_star + bg_tf + dc_tf, rn_tf)
+            if num_shot_noise_samples is not None:
+                snr = snr * np.sqrt(num_shot_noise_samples)
+            meta_data = set_frame_annotation(meta_data, frame_num, h_fpa_os, w_fpa_os, obs_os_pix, [20 * s_osf, 20 * s_osf], snr=snr)
+            if queue is not None:
+                queue.task(write_frame, {
+                    'dir_name': dir_name,
+                    'sat_name': set_name,
+                    'fpa_digital': fpa_digital.numpy(),
+                    'meta_data': copy.deepcopy(meta_data),
+                    'frame_num': frame_num,
+                    'exposure_time': exposure_time,
+                    'time_stamp': dt,
+                    'ssp': ssp_orig,
+                    'show_obs_boxes': ssp['sim']['show_obs_boxes'],
+                    'astrometrics': astrometrics.copy(),
+                    'save_pickle': ssp['sim']['save_pickle'],
+                    'dtype': a2d_dtype,
+                    'save_jpeg': ssp['sim']['save_jpeg'],
+                }, tag=dir_name)
+            if output_debug:
+                with open(os.path.join(dir_debug, 'metadata_{}.json'.format(frame_num)), 'w') as jsonfile:
+                    json.dump(meta_data, jsonfile, indent=2)
 
-        logger.debug('Finished frame {} of {} in {} sec.'.format(frame_num + 1, num_frames, toc('gen_frame', frame_num)))
+            logger.debug('Finished frame {} of {} in {} sec.'.format(frame_num + 1, num_frames, toc('gen_frame', frame_num)))
+        else:
+            if queue is not None:
+                def f():
+                    return None
+                queue.task(f, {}, tag=dir_name)
+            logger.debug('Render mode off. Skipping frame generation.')
+            break
 
     # write movie
     def wait_and_run():
@@ -179,7 +190,11 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                 sleep(0.1)
             else:
                 if ssp['sim']['save_movie']:
+                    logger.debug('Saving PNG movie.')
                     save_apng(dirname=os.path.join(dir_name,'AnnotatedImages'), filename='movie.png')
+                if ssp['sim']['save_czml']:
+                    logger.debug('Saving CZML.')
+                    save_czml(ssp, obs_cache, os.path.join(dir_name,'satsim.czml'))
                 return
 
     if queue is not None:
@@ -355,13 +370,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     if 'save_movie' not in ssp['sim']:
         ssp['sim']['save_movie'] = ssp['sim']['save_jpeg']
 
+    if 'save_czml' not in ssp['sim']:
+        ssp['sim']['save_czml'] = True
+
+    if 'mode' not in ssp['sim']:
+        ssp['sim']['mode'] = 'fftconv2p'
+
     if 'save_pickle' not in ssp['sim']:
         ssp['sim']['save_pickle'] = False
 
     if star_mode == 'bins':
         star_dn = ssp['geometry']['stars']['mv']['density']
         star_pe = mv_to_pe(zeropoint, ssp['geometry']['stars']['mv']['bins']) * exposure_time
-    elif star_mode == 'sstr7':
+    elif star_mode == 'sstr7' or star_mode == 'csv':
         star_ra = ssp['geometry']['stars']['ra'] if 'ra' in ssp['geometry']['stars'] else 0
         star_dec = ssp['geometry']['stars']['dec'] if 'dec' in ssp['geometry']['stars'] else 0
         star_rot = ssp['geometry']['stars']['rotation'] if 'rotation' in ssp['geometry']['stars'] else 0
@@ -609,7 +630,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     ovrc = [ovrc[0] / y_to_pix * s_osf, ovrc[1] / x_to_pix * s_osf]
                     epoch = o['epoch'] if 'epoch' in o else 0
                     (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch)
-                elif o['mode'] == 'tle' or o['mode'] == 'twobody' or o['mode'] == 'gc':
+                elif o['mode'] == 'tle' or o['mode'] == 'twobody' or o['mode'] == 'gc' or o['mode'] == 'ephemeris':
                     if obs_cache[i] is None or updated:
                         if o['mode'] == 'tle':
                             if 'tle' in o:
@@ -622,6 +643,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                 obs_cache[i] = [GreatCircle(o['az'], o['el'], o['heading'], o['velocity'], ts_epoch, observer)]
                             else:
                                 obs_cache[i] = [GreatCircle(o['ra'], o['dec'], o['heading'], o['velocity'], ts_epoch, None)]
+                        elif o['mode'] == 'ephemeris':
+                            ts_epoch = time.utc_from_list(o['epoch'])
+                            obs_cache[i] = [create_ephemeris_object(o['positions'], o['velocities'], o['seconds_from_epoch'], ts_epoch)]
                         else:
                             ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                             obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
@@ -636,7 +660,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     try:
                         [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(h_fpa_os, w_fpa_os, y_fov, x_fov, observer, track, sat, [ope], t0, [ts_start, ts_mid, ts_end], star_rot, 1, track_mode, offset=o_offset, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
                     except Exception:
-                        logger.warning("Error propagating target. Possibly unstable element set: {}".format(o))
+                        logger.exception("Error propagating target. {}".format(o))
                         continue
 
                     if len(rr0) > 0 and not math.isnan(rr0[0]) and not math.isnan(cc0[0]) and not math.isnan(rr2[0]) and not math.isnan(cc2[0]):
@@ -656,6 +680,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                             (orr, occ, opp, ott) = gen_curve_from_points(rr0[0], cc0[0], rr1[0], cc1[0], rr2[0], cc2[0], ope, t_start, t_end)
                     else:
                         continue
+                elif o['mode'] == 'none':
+                    continue
 
                 opp = pe_func(opp, ott)
                 avg_pe = np.sum(opp) / (t_end - t_start)
@@ -716,10 +742,14 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
                 # refresh catalog stars
                 # TODO should save stars and transform to FPA again on every frame
-                if star_mode == 'sstr7' and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
+                if (star_mode == 'sstr7' or star_mode == 'csv') and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
                     if track_mode is not None:
                         star_ra, star_dec, star_tran_os, star_rot_rate = calculate_star_position_and_motion(ts_start, ts_end, star_rot, track_mode)
-                    r_stars_os, c_stars_os, m_stars_os = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
+                    if star_mode == 'sstr7':
+                        r_stars_os, c_stars_os, m_stars_os = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
+                    elif star_mode == 'csv':
+                        r_stars_os, c_stars_os, m_stars_os = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
+
                     pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * exposure_time
                     t_start_star = 0.0
                     t_end_star = exposure_time
@@ -743,6 +773,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 r_obs_os = tf.cast(r_obs_os, tf.float32)
                 c_obs_os = tf.cast(c_obs_os, tf.float32)
                 pe_obs_os = tf.cast(pe_obs_os, tf.float32)
+
+                # TODO should refactor this
+                if ssp['sim']['mode'] == 'none':
+                    if with_meta:
+                        yield None, 0, None, None, None, None, None, None, None, None, obs_cache
+                    else:
+                        yield None
 
                 # augment TODO abstract this
                 if pydash.objects.has(ssp, 'augment.fpa.psf'):
@@ -803,6 +840,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         pickle.dump([r_stars_os.numpy(), c_stars_os.numpy(), pe_stars_os.numpy(), t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os], picklefile)
 
                 if with_meta:
-                    yield fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples']
+                    yield fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache
                 else:
                     yield fpa_digital

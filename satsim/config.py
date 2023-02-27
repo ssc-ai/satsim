@@ -20,7 +20,7 @@ _config = {}
 
 def parse_function(param):
     """Parse a function. The input argument, `param`, should contain
-    the following keys and values which discribe the function to run.
+    the following keys and values which describe the function to run.
     For example::
 
         param = {
@@ -92,7 +92,7 @@ def parse_function_pipeline(param):
 
 def parse_cache(param):
     """Parse a cache parameter. The input argument, `param`, may contain
-    the following keys and values which discribe the function to run.
+    the following keys and values which describe the function to run.
     For example::
 
         param = {
@@ -120,7 +120,7 @@ def parse_cache(param):
 
 def parse_import(param):
     """Parse a import key. The input argument, `param`, should contain the
-    following keys and values which discribe the function to run.
+    following keys and values which describe the function to run.
     For example::
 
         param = {
@@ -172,7 +172,7 @@ def parse_random_sample(param):
         x = parse_random_sample(p)
         # x is a value between 5 and 22
 
-    If the key `$sample` is equal to `random.choice`, one option will be choosen
+    If the key `$sample` is equal to `random.choice`, one option will be chosen
     from the key `choices`. For example::
 
         p = { "$sample": "random.choice", "choices": [1, 2, 4, 8] }
@@ -246,7 +246,7 @@ def parse_param(param, dirname=None, run_generator=False, eval_python=False, run
     Args:
         param: `dict`, root parameter
         dirname: `str`, root directory for files referenced in `param`
-        run_generator: `boolean`, evaulate generator functions during this pass
+        run_generator: `boolean`, evaluate generator functions during this pass
 
     Returns:
         A `any`, a random sample, contents of pickle file, or original value
@@ -316,8 +316,7 @@ def transform(config, dirname=None, max_stages=5, with_debug=False, max_imports=
                 `dict`, in place transformation of `config`
             if `with_debug` is `True`:
                 config: `dict`, in place transformation of `config`
-                stages: `array`, array of dictionaries after each transformation
-                    stage
+                stages: `array`, array of dictionaries after each transformation stage
     """
     stages = []
     global _config  # TODO needed to evaluate refs, make local
@@ -488,7 +487,7 @@ def _transform(config, dirname=None, run_generator=False, eval_python=False, run
     Args:
         config: `dict`, configuration as a dictionary
         dirname: `str`, root directory for files referenced in `config`
-        run_generator: `boolean`, evaulate generator functions during this pass
+        run_generator: `boolean`, evaluate generator functions during this pass
 
     Returns:
         A `dict`, in place transformation of `config`
@@ -639,7 +638,7 @@ def dict_merge(dct, merge_dct):
         merge_dct: `dict`, dct merged into dct
     """
     for k, v in merge_dct.items():
-        if (k in dct and isinstance(dct[k], dict) and isinstance(merge_dct[k], collections.Mapping)):
+        if (k in dct and isinstance(dct[k], dict) and isinstance(merge_dct[k], collections.abc.Mapping)):
             if '$sample' in dct[k]:  # TODO order dependency issue, need graph traversal to fix properly
                 dct[k] = merge_dct[k]
             else:

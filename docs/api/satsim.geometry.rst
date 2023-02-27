@@ -17,10 +17,26 @@ satsim.geometry.astrometric module
    :undoc-members:
    :show-inheritance:
 
+satsim.geometry.csvsc module
+----------------------------
+
+.. automodule:: satsim.geometry.csvsc
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.geometry.draw module
 ---------------------------
 
 .. automodule:: satsim.geometry.draw
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.ephemeris module
+--------------------------------
+
+.. automodule:: satsim.geometry.ephemeris
    :members:
    :undoc-members:
    :show-inheritance:
