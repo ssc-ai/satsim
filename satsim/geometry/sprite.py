@@ -16,7 +16,7 @@ def load_sprite_from_file(filename, normalize=True, dtype=tf.float32):
     if filename.endswith('.fits'):
 
         hdul = fits.open(filename)
-        img = tf.cast(hdul[0].data, dtype=tf.float64)
+        img = tf.cast(hdul[0].data, dtype=dtype)
 
         if normalize:
             img = tf.cast(img / tf.math.reduce_sum(img), dtype)

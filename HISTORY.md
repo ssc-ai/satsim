@@ -1,6 +1,18 @@
 History
 =======
 
+0.13.0
+---------------------
+
+* Add ephemeris objects that are propagated with the Lagrange interpolator.
+* Add Cesium CZML output. Set sim option `save_czml` to `false` to disable.
+* Add CSV text file star catalog loader. This feature is useful for small catalogs such as Hipparcos and simulating wide FOV sensors.
+* Add multiplier and clipping for radial cosine.
+* Add option to skip image rendering. Set sim option `mode` to `none` to bypass image rendering.
+* Update interfaces for newest version of Skyfield, Poliastro, POPPY, and AstroPy.
+* Fix star renderer issue removing stars in field of view for non-square arrays.
+
+
 0.12.0
 ---------------------
 

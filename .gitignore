@@ -118,5 +118,5 @@ deltat.preds
 # profiler
 lprof0
 *.prof
-examples/*/**/share/images
+examples/*/**/images*
 .satsim_cache

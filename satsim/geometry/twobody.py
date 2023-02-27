@@ -26,7 +26,7 @@ class EarthTwoBodySatellite(VectorFunction):
 
     center = 399
 
-    def __init__(self, position, velocity, epoch, name, method=DEFAULT_METHOD):
+    def __init__(self, position, velocity, epoch, name='EarthTwoBodySatellite', method=DEFAULT_METHOD):
         """ Constructs a Two-body propagator satellite.
 
         Args:
@@ -46,11 +46,11 @@ class EarthTwoBodySatellite(VectorFunction):
         self.name = name
 
         if method == 'vallado':
-            self.method = vallado
+            self.method = vallado.ValladoPropagator()
         elif method == 'farnocchia':
-            self.method = farnocchia
+            self.method = farnocchia.FarnocchiaPropagator()
         else:
-            self.method = cowell
+            self.method = cowell.CowellPropagator()
 
         self.orbit = Orbit.from_vectors(Earth, position, velocity, self.epoch['time'])
         self.target = -500000
@@ -65,15 +65,15 @@ class EarthTwoBodySatellite(VectorFunction):
             rGCRS = np.zeros((3, td.size))
             vGCRS = np.zeros((3, td.size))
             for i in range(td.size):
-                # print('td[i]:', td[i].to(u.s))
                 o = self.orbit.propagate(td[i], method=self.method)
-                # print('o.rv():', o.rv())
-                rGCRS[:, i], vGCRS[:, i] = o.rv()
+                r, v = o.rv()
+                rGCRS[:, i] = r.to(u.km).value
+                vGCRS[:, i] = v.to(u.km / u.s).value
         else:
             o = self.orbit.propagate(td, method=self.method)
             r, v = o.rv()
-            rGCRS = np.array(r)
-            vGCRS = np.array(v)
+            rGCRS = r.to(u.km).value
+            vGCRS = v.to(u.km / u.s).value
 
         rGCRS /= AU_KM
         vGCRS /= AU_KM

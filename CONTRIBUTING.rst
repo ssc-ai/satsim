@@ -9,9 +9,9 @@ Getting Started for Developers
 
 Here's how to set up `satsim` for local development.
 
-1. Clone the `satsim` repo on GitLab::
+1. Clone the `satsim` repo on GitHub::
 
-    $ git clone https://gitlab.pacificds.com/machine-learning/satsim.git
+    $ git clone https://github.com/ssc-ai/satsim.git
 
 2. Set up your local environment. Here are the install instructions for the
    following environments:
@@ -54,13 +54,13 @@ Here's how to set up `satsim` for local development.
     $ python setup.py test -or- py.test -or- make test
     $ tox
 
-5. Commit your changes and push your branch to GitLab::
+5. Commit your changes and push your branch to GitHub::
 
     $ git add .
     $ git commit -m "Your detailed description of your changes."
     $ git push origin name-of-your-bugfix-or-feature
 
-6. Submit a merge request at https://gitlab.pacificds.com/machine-learning/satsim/merge_requests
+6. Submit a pull request at https://github.com/ssc-ai/satsim/pulls
 
 Merge Request Guidelines
 ------------------------
@@ -101,7 +101,7 @@ Other Ways of Contributing
 Report Bugs
 ~~~~~~~~~~~
 
-Report bugs at https://gitlab.pacificds.com/machine-learning/satsim/issues.
+Report bugs at https://github.com/ssc-ai/satsim/issues.
 
 If you are reporting a bug, please include:
 
@@ -123,7 +123,7 @@ HTML output will be in the directory, `satsim/docs/_build/html`.
 Submit Feedback
 ~~~~~~~~~~~~~~~
 
-The best way to send feedback is to file an issue at https://gitlab.pacificds.com/machine-learning/satsim/issues.
+The best way to send feedback is to file an issue at https://github.com/ssc-ai/satsim/issues.
 
 If you are proposing a feature:
 

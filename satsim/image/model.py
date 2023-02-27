@@ -28,7 +28,7 @@ def polygrid2d(height, width, c, low=-1, high=1):
     return np.polynomial.polynomial.polygrid2d(x=rr, y=cc, c=c)
 
 
-def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None):
+def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None, mult=1.0, clip=[0.0, 1.0]):
     """ Generates a cosine wave radially from the center of the image. Typically
     used to simulate optical vignette or irradiance falloff.
 
@@ -42,6 +42,8 @@ def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None
         scale: `float`, if not None set y_scale and x_scale to this.
         power: `float`, the exponent of the cosine. Set to 4 to generate a
             "cosine fourth" irradiance falloff map. default=4
+        mult: `float`, multiply cosine. default=1
+        clip: `array`, clip returned value by minimum and maximum. default=[0.0, 1.0]
 
     Returns:
         An `array`, a two dimensional image.
@@ -53,7 +55,10 @@ def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None
     x = np.linspace(-np.pi * x_scale, np.pi * x_scale, width)
     y = np.linspace(-np.pi * y_scale, np.pi * y_scale, height)
     xx, yy = np.meshgrid(x, y)
-    z = np.cos(np.sqrt(xx ** 2 + yy ** 2)) ** power
+    z = mult * np.cos(np.sqrt(xx ** 2 + yy ** 2)) ** power
+
+    if clip is not None:
+        z = np.clip(z, clip[0], clip[1])
 
     return z
 

@@ -6,7 +6,7 @@ import numpy as np
 def gen_samples_from_bins(bins, density, mult=1.):
     """Generates random samples base on discrete bins. The number of samples of
     each bin is calculated from its density. A density multiplier can be
-    specified in the case that `density` is rate based. Values are uniformally
+    specified in the case that `density` is rate based. Values are uniformly
     sampled between the min and max of each bin.
 
     Examples::
@@ -75,11 +75,11 @@ def lognormal(mu=1.0, sigma=1.0, size=1, mu_mode='median'):
 
     Args:
         mu: `float`, Mean or median value of log normal distribution
-        sigma: `float`, Stardard deviation of the log normal distribution, valid for `mu_mode` == `mean`
+        sigma: `float`, Standard deviation of the log normal distribution, valid for `mu_mode` == `mean`
         size: `int` or `tuple of ints`, Output shape
 
     Returns:
-        A `ndarray` or `scalar, the drawn samples from log-normal distribution
+        A `ndarray` or `scalar`, the drawn samples from log-normal distribution
     """
     if mu_mode == 'mean':
         lmu = np.log(sigma * sigma / np.sqrt(mu * mu + sigma * sigma))

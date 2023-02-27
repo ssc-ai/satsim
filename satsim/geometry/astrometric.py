@@ -134,23 +134,23 @@ def apparent(p, deflection=False, aberration=True):
     in the sky: the deflection that the image will experience if its
     light passes close to large masses in the Solar System, and the
     aberration of light caused by the observer's own velocity.
-    Note: copyied from Skyfield to allow to disable deflection
-    and aberration.
+    Note: This algorithm is copied from skyfield/positionlib.py and
+    modified to disable deflection and aberration calculation.
     """
 
     t = p.t
     target_au = p.position.au.copy()
 
-    observer_data = p.observer_data
+    cb = p.center_barycentric
 
-    if observer_data is None:
-        gcrs_position = None
+    if cb is None:
+        observer_gcrs_au = None
         deflection = False
         aberration = False
     else:
-        gcrs_position = observer_data.gcrs_position
-        bcrs_position = observer_data.bcrs_position
-        bcrs_velocity = observer_data.bcrs_velocity
+        bcrs_position = cb.position.au
+        bcrs_velocity = cb.velocity.au_per_d
+        observer_gcrs_au = cb._observer_gcrs_au
 
     # If a single observer position (3,) is observing an array of
     # targets (3,n), then deflection and aberration will complain
@@ -160,24 +160,27 @@ def apparent(p, deflection=False, aberration=True):
     #     shape = bcrs_position.shape + (1,)
     #     bcrs_position = bcrs_position.reshape(shape)
     #     bcrs_velocity = bcrs_velocity.reshape(shape)
-    #     if gcrs_position is not None:
-    #         gcrs_position = gcrs_position.reshape(shape)
+    #     if observer_gcrs_au is not None:
+    #         observer_gcrs_au = observer_gcrs_au.reshape(shape)
 
-    if gcrs_position is None:
+    if observer_gcrs_au is None:
         include_earth_deflection = np.array((False,))
     else:
-        limb_angle, nadir_angle = compute_limb_angle(target_au, gcrs_position)
+        limb_angle, nadir_angle = compute_limb_angle(
+            target_au, observer_gcrs_au)
         include_earth_deflection = nadir_angle >= 0.8
 
     if deflection:
-        add_deflection(target_au, bcrs_position, observer_data.ephemeris, t, include_earth_deflection)
+        add_deflection(target_au, bcrs_position,
+                       p._ephemeris, t, include_earth_deflection)
 
-    if aberration and p.light_time is not None:
+    if aberration:
         add_aberration(target_au, bcrs_velocity, p.light_time)
 
-    return Apparent(target_au, t=t,
-                    center=p.center, target=p.target,
-                    observer_data=observer_data)
+    apparent = Apparent(target_au, None, t, p.center, p.target)
+    apparent.center_barycentric = p.center_barycentric
+    apparent._observer_gcrs_au = observer_gcrs_au
+    return apparent
 
 
 @lru_cache(maxsize=32)
@@ -196,7 +199,7 @@ def get_los(observer, target, t, deflection=False, aberration=True):
         A `tuple`, containing:
             ra: right ascension in degrees
             dec: declination in degrees
-            d: distance between observerer and target in km
+            d: distance between observer and target in km
             az: azimuth angle in degrees
             el: elevation angle in degrees
             icrf_los: LOS as skyfield ICRF object
@@ -224,7 +227,7 @@ def get_los_azel(observer, az, el, t, deflection=False, aberration=True):
         A `tuple`, containing:
             ra: right ascension in degrees
             dec: declination in degrees
-            d: distance between observera and target in km
+            d: distance between observer and target in km
             az: azimuth angle in degrees
             el: elevation angle in degrees
             icrf_los: LOS as skyfield ICRF object

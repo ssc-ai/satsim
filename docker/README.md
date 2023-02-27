@@ -11,7 +11,7 @@ To create a Docker container, run `make docker` from the root SatSim project fol
 Alternatively, run this command in this folder:
 
 ```
-docker build -t satsim:latest -f ubuntu18.04_cuda10.1_py3.6.dockerfile ..
+docker build -t satsim:latest -f ubuntu20.04_cuda11.2_py3.8.dockerfile ..
 ```
 
 `make dist` and `make docs` must be run from the root SatSim project folder before running `docker build`.

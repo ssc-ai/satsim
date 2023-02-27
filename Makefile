@@ -105,11 +105,11 @@ install: clean ## install the package to the active python3's site-packages
 	@echo  IMPORTANT: You may need to close and restart your shell after running "make install".
 
 docker: docs dist
-	docker build -t satsim:0.12.0 -t satsim:latest -f docker/ubuntu18.04_cuda11.0_py3.6.dockerfile .
+	docker build -t satsim:0.13.0 -t satsim:latest -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
 
 dind:
-	docker run --rm -it -v $(CURDIR):/workspace/ -w /workspace algorithmhub/ahws-ipython3 ./build.sh
-	docker build -t satsim:0.12.0 -t satsim:latest -f docker/ubuntu18.04_cuda11.0_py3.6.dockerfile .
+	docker run --rm -it -v $(CURDIR):/workspace/ -w /workspace python:3.8-bullseye ./build.sh
+	docker build -t satsim:0.13.0 -t satsim:latest -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
 
 uninstall: clean
 	cat .install.log | xargs rm -rf

@@ -1,0 +1,320 @@
+from datetime import timezone
+
+import numpy as np
+
+from astropy.time import Time
+from astropy import units as u
+
+from skyfield.constants import AU_KM
+from skyfield.units import _ltude
+from skyfield.vectorlib import VectorFunction
+
+from satsim import time
+from satsim.geometry.astrometric import load_earth
+
+from czmlpy.core import Document, Packet, Preamble
+from czmlpy.enums import InterpolationAlgorithms, ReferenceFrames
+from czmlpy.properties import (
+    Billboard,
+    Clock,
+    Color,
+    Label,
+    Material,
+    Path,
+    Position,
+    SolidColorMaterial,
+)
+from czmlpy.types import IntervalValue, TimeInterval
+from erfa import gd2gc
+
+
+def save_czml(ssp, obs_cache, filename):
+    """Saves scenario as a Cesium czml file.
+
+    Args:
+        ssp: `dict`, SatSim input configuration.
+        obs_cache: `list`, list of SatSim Skyfield objects.
+        filename: `str`, if not None, save czml output. default=None
+
+    Returns:
+        A `dict`, the CZML output
+    """
+
+    if 'czml_samples' in ssp['sim']:
+        N = ssp['sim']['czml_samples']
+    else:
+        N = 10
+
+    if 'time' in ssp['geometry']:
+        tt = ssp['geometry']['time']
+    else:
+        tt = [2020, 1, 1, 0, 0, 0.0]
+
+    exposure_time = ssp['fpa']['time']['exposure']
+    frame_time = ssp['fpa']['time']['gap'] + exposure_time
+    num_frames = ssp['fpa']['num_frames']
+
+    t0 = time.utc_from_list(tt)
+    t2 = time.utc_from_list(tt, frame_time * num_frames)
+
+    extractor = CZMLExtractor(time.to_astropy(t0), time.to_astropy(t2))
+
+    # extract site data
+    if 'site' in ssp['geometry']:
+        site = ssp['geometry']['site']
+        latitude = _ltude(site['lat'], 'latitude', 'N', 'S') * u.deg
+        longitude = _ltude(site['lon'], 'longitude', 'E', 'W') * u.deg
+        alt = site['alt'] * u.m
+
+        name = site['name'] if 'name' in site else None
+        label_show = False
+
+        if 'czml' in site:
+            label_show = site['czml'].get('path_show', label_show)
+        extractor.add_ground_station([latitude, longitude, alt], label_text=name, label_show=label_show)
+
+    # extract objects data
+    for i, o in enumerate(ssp['geometry']['obs']['list']):
+
+        ts_start_ob = t0
+        ts_end_ob = t2
+        if 'events' in o:
+            if 'create' in o['events']:
+                ts_start_ob = time.utc_from_list_or_scalar(o['events']['create'], default_t=tt)
+            if 'delete' in o['events']:
+                ts_end_ob = time.utc_from_list_or_scalar(o['events']['delete'], default_t=tt)
+
+        if obs_cache[i] is not None:
+            sat = obs_cache[i][0]
+
+            name = o['name'] if 'name' in o else None
+
+            path_show = (ts_start_ob == t0)
+            path_color = [255, 255, 0]
+            billboard_show = True
+            start_interval = time.to_astropy(t0)
+            end_interval = time.to_astropy(t2)
+            label_show = False
+
+            if 'czml' in o:
+                label_show = o['czml'].get('label_show', label_show)
+                path_show = o['czml'].get('path_show', path_show)
+                path_color = o['czml'].get('path_color', path_color)
+                billboard_show = o['czml'].get('billboard_show', billboard_show)
+                if 'start_interval' in o['czml']:
+                    start_interval = time.to_astropy(time.utc_from_list_or_scalar(o['czml']['start_interval']))
+                if 'end_interval' in o['czml']:
+                    end_interval = time.to_astropy(time.utc_from_list_or_scalar(o['czml']['end_interval']))
+
+            extractor.add_object(sat, N=N, label_text=name, label_show=label_show,
+                                 start_interval=start_interval, end_interval=end_interval,
+                                 start_available=time.to_astropy(ts_start_ob), end_available=time.to_astropy(ts_end_ob),
+                                 path_show=path_show, id_name=name, billboard_show=billboard_show, path_color=path_color)
+
+    # convert document to json
+    j = extractor.get_document().dumps()
+    if filename is not None:
+        with open(filename, "w") as outfile:
+            outfile.write(j)
+
+    return j
+
+
+PIC_SATELLITE = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAX"
+    "NSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAADJSURBVD"
+    "hPnZHRDcMgEEMZjVEYpaNklIzSEfLfD4qNnXAJSFWfhO7w2Zc0Tf9QG2rXrEzSUeZLOGm47W"
+    "oH95x3Hl3jEgilvDgsOQUTqsNl68ezEwn1vae6lceSEEYvvWNT/Rxc4CXQNGadho1NXoJ+9i"
+    "aqc2xi2xbt23PJCDIB6TQjOC6Bho/sDy3fBQT8PrVhibU7yBFcEPaRxOoeTwbwByCOYf9VGp"
+    "1BYI1BA+EeHhmfzKbBoJEQwn1yzUZtyspIQUha85MpkNIXB7GizqDEECsAAAAASUVORK5CYI"
+    "I="
+)
+PIC_GROUNDSTATION = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAX"
+    "NSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACvSURBVD"
+    "hPrZDRDcMgDAU9GqN0lIzijw6SUbJJygUeNQgSqepJTyHG91LVVpwDdfxM3T9TSl1EXZvDwi"
+    "i471fivK73cBFFQNTT/d2KoGpfGOpSIkhUpgUMxq9DFEsWv4IXhlyCnhBFnZcFEEuYqbiUlN"
+    "wWgMTdrZ3JbQFoEVG53rd8ztG9aPJMnBUQf/VFraBJeWnLS0RfjbKyLJA8FkT5seDYS1Qwyv"
+    "8t0B/5C2ZmH2/eTGNNBgMmAAAAAElFTkSuQmCC"
+)
+
+
+class CZMLExtractor:
+    """A class for extracting SatSim data to Cesium"""
+
+    def __init__(self, start_epoch, end_epoch, multiplier=60):
+        """
+        Orbital constructor
+
+        Args:
+            start_epoch: `astropy.time.core.Time`, Starting epoch
+            end_epoch: `astropy.time.core.Time`, Ending epoch
+        """
+        self.packets = []
+        self.num_objects = 0
+        self.num_gs = 0
+
+        self.start_epoch = Time(start_epoch, format="isot")
+        self.end_epoch = Time(end_epoch, format="isot")
+
+        pckt = Preamble(
+            name="document_packet",
+            clock=IntervalValue(
+                start=self.start_epoch,
+                end=self.end_epoch,
+                value=Clock(
+                    currentTime=self.start_epoch.datetime.replace(tzinfo=timezone.utc),
+                    multiplier=multiplier,
+                ),
+            ),
+        )
+        self.packets.append(pckt)
+
+    def add_ground_station(
+        self,
+        pos,
+        id_name=None,
+        id_description=None,
+        label_fill_color=[255, 255, 0, 255],
+        label_outline_color=[255, 255, 0, 255],
+        label_font="16pt Lucida Console",
+        label_text=None,
+        label_show=False
+    ):
+        """
+        Adds a ground station
+
+        Args:
+            pos: `list [~astropy.units]`, coordinates of ground station (i.e. latitude, longitude, altitude)
+            id_description: `str`, Set ground station description
+            label_fill_color: `list (int)`, Fill Color in rgba format
+            label_outline_color: `list (int)`, Outline Color in rgba format
+            label_font: `str`, Set label font style and size (CSS syntax)
+            label_text: `str`, Set label text
+            label_show: `bool`, Indicates whether the label is visible
+        """
+        lat, lon, alt = pos
+        pos = list(gd2gc(1, lon.to_value(u.rad), lat.to_value(u.rad), alt.to_value(u.m)))
+
+        pckt = Packet(
+            id="GS" + str(self.num_gs),
+            name=id_name,
+            description=id_description,
+            availability=TimeInterval(start=self.start_epoch, end=self.end_epoch),
+            position=Position(cartesian=pos),
+            label=Label(
+                show=label_show,
+                text=label_text,
+                font=label_font,
+                fillColor=Color(rgba=label_fill_color),
+                outlineColor=Color(rgba=label_outline_color),
+            ),
+            billboard=Billboard(image=PIC_GROUNDSTATION, show=True),
+        )
+
+        self.packets.append(pckt)
+        self.num_gs += 1
+
+    def add_object(
+        self,
+        sat,
+        N=10,
+        id_name=None,
+        id_description=None,
+        path_width=None,
+        path_show=None,
+        path_color=[255, 255, 0],
+        label_fill_color=[255, 255, 0, 255],
+        label_outline_color=[255, 255, 0, 255],
+        label_font="16pt Lucida Console",
+        label_text=None,
+        label_show=False,
+        start_interval=None,
+        end_interval=None,
+        start_available=None,
+        end_available=None,
+        billboard_show=True
+    ):
+        """
+        Adds a SatSim Skyfield object
+
+        Args:
+            sat: `object`, SatSim Skyfield object
+            N: `int`, Number of sample points
+            id_name: `str`, Set orbit name
+            id_description: `str`, Set orbit description
+            path_width: `int`, Path width
+            path_show: `bool`, Indicates whether the path is visible
+            path_color: `list (int)`, Rgba path color
+            label_fill_color: `list (int)`, Fill Color in rgba format
+            label_outline_color: `list (int)`, Outline Color in rgba format
+            label_font: `str`, Set label font style and size (CSS syntax)
+            label_text: `str`, Set label text
+            label_show: `bool`, Indicates whether the label is visible
+        """
+
+        # ignore non-skyfield objects
+        if not isinstance(sat, VectorFunction):
+            return
+
+        sat = sat - load_earth()  # adjust from barycenter to earth centered
+
+        cart_cords = []
+
+        tt = time.linspace(time.from_astropy(start_interval), time.from_astropy(end_interval), N)
+        ss = np.linspace(0, (end_interval - start_interval).to(u.second).value, N)
+
+        for ts, sec in zip(tt, ss):
+            position, _, _, _ = sat._at(ts)
+            position = position * AU_KM * 1000
+            cart_cords += [sec, position[0], position[1], position[2]]
+
+        cartesian_cords = cart_cords
+
+        start_epoch = Time(start_interval, format="isot")
+
+        path = None
+        if path_show:
+            path = Path(
+                show=None,
+                width=path_width,
+                material=Material(solidColor=SolidColorMaterial(color=Color.from_list(path_color))),
+                resolution=120,
+            )
+
+        pckt = Packet(
+            id=self.num_objects,
+            name=id_name,
+            description=id_description,
+            availability=TimeInterval(start=start_available, end=end_available),
+            position=Position(
+                interpolationDegree=3,
+                interpolationAlgorithm=InterpolationAlgorithms.LAGRANGE,
+                referenceFrame=ReferenceFrames.INERTIAL,
+                cartesian=cartesian_cords,
+                # Use explicit UTC timezone, rather than the default, which is a local timezone.
+                epoch=start_epoch.datetime.replace(tzinfo=timezone.utc),
+            ),
+            path=path,
+            label=Label(
+                text=label_text,
+                font=label_font,
+                show=label_show,
+                fillColor=Color(rgba=label_fill_color),
+                outlineColor=Color(rgba=label_outline_color),
+            ),
+            billboard=Billboard(image=PIC_SATELLITE, show=billboard_show),
+        )
+
+        self.packets.append(pckt)
+
+        self.num_objects += 1
+
+    def get_document(self):
+        """
+        Retrieves CZML document.
+
+        Returns:
+            A `Document`, the CZML document.
+        """
+        return Document(self.packets)
