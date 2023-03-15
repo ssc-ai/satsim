@@ -1,7 +1,7 @@
 from __future__ import division, print_function, absolute_import
 
 from os import listdir
-from os.path import isfile, join, splitext
+from os.path import isfile, join, splitext, exists
 
 import numpy as np
 import matplotlib.image as mpimg
@@ -56,8 +56,10 @@ def save_apng(dirname, filename):
         dirname: `string`, directory containing image files to combine.
         filename: `string`, file name of the animated PNG.
     """
-    from apng import APNG
+    if exists(dirname):
 
-    files = [join(dirname, f) for f in sorted(listdir(dirname)) if isfile(join(dirname, f)) and (splitext(f)[1] == '.png' or splitext(f)[1] == '.jpg')]
+        from apng import APNG
 
-    APNG.from_files(files, delay=100).save(join(dirname, filename))
+        files = [join(dirname, f) for f in sorted(listdir(dirname)) if isfile(join(dirname, f)) and (splitext(f)[1] == '.png' or splitext(f)[1] == '.jpg')]
+
+        APNG.from_files(files, delay=100).save(join(dirname, filename))
