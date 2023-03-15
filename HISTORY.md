@@ -1,6 +1,14 @@
 History
 =======
 
+0.13.1
+---------------------
+
+* Add argument to set folder name in `gen_multi`.
+* Add environment variable, `SATSIM_SKYFIELD_LOAD_DIR`, to specify location of Skyfield ephemeris files.
+* Fix incorrect CZML output when image renderer is off.
+
+
 0.13.0
 ---------------------
 

@@ -40,7 +40,7 @@ from satsim import time
 logger = logging.getLogger(__name__)
 
 
-def gen_multi(ssp, eager=True, output_dir='./', input_dir='./', device=None, memory=None, pid=0, output_debug=False):
+def gen_multi(ssp, eager=True, output_dir='./', input_dir='./', device=None, memory=None, pid=0, output_debug=False, folder_name=None):
     """Generates multiple sets of images. Number of sets is based on the
     parameters `ssp['sim']['samples']`.
 
@@ -64,6 +64,7 @@ def gen_multi(ssp, eager=True, output_dir='./', input_dir='./', device=None, mem
         device: `array`, array of GPU device IDs to enable. If `None`, enable all.
         pid: `int`, an ID to associate this instance to.
         output_debug: `boolean`, output intermediate debug files.
+        folder_name: `str`, Optional name for folder to save files to.
     """
     if(eager):
         configure_eager()
@@ -87,7 +88,7 @@ def gen_multi(ssp, eager=True, output_dir='./', input_dir='./', device=None, mem
         tssp, issp = transform(copy.deepcopy(ssp), input_dir, with_debug=True)
 
         # run the transformed parameters
-        dir_name = gen_images(tssp, eager, output_dir, set_num, queue=queue, output_debug=output_debug)
+        dir_name = gen_images(tssp, eager, output_dir, set_num, queue=queue, output_debug=output_debug, set_name=folder_name)
 
         # save intermediate transforms
         save_debug(issp, dir_name)
@@ -132,6 +133,9 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
     if set_name is None:
         dir_name = os.path.join(output_dir, dt.isoformat().replace(':','-'))
         set_name = 'sat_{:05d}'.format(sample_num)
+
+    else:
+        dir_name = os.path.join(output_dir, set_name)
 
     # make output dirs
     os.makedirs(dir_name, exist_ok=True)
@@ -181,7 +185,6 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     return None
                 queue.task(f, {}, tag=dir_name)
             logger.debug('Render mode off. Skipping frame generation.')
-            break
 
     # write movie
     def wait_and_run():
@@ -650,6 +653,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                             ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                             obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
 
+                    # skip rest if not rendering images
+                    if ssp['sim']['mode'] == 'none':
+                        continue
+
                     o_offset = [0.0, 0.0]
                     if 'offset' in o:
                         o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
@@ -740,6 +747,16 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 t_start_star = t_start
                 t_end_star = t_end
 
+                # if image rendering is disabled, then propagate objects and return
+                if ssp['sim']['mode'] == 'none':
+                    r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = gen_objects(obs, t_start, t_end)
+                    logger.debug('Number of objects {}.'.format(len(obs_os_pix)))
+
+                    if with_meta:
+                        yield None, frame_num, None, None, None, None, None, None, None, None, obs_cache
+                    else:
+                        yield None
+
                 # refresh catalog stars
                 # TODO should save stars and transform to FPA again on every frame
                 if (star_mode == 'sstr7' or star_mode == 'csv') and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
@@ -773,13 +790,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 r_obs_os = tf.cast(r_obs_os, tf.float32)
                 c_obs_os = tf.cast(c_obs_os, tf.float32)
                 pe_obs_os = tf.cast(pe_obs_os, tf.float32)
-
-                # TODO should refactor this
-                if ssp['sim']['mode'] == 'none':
-                    if with_meta:
-                        yield None, 0, None, None, None, None, None, None, None, None, obs_cache
-                    else:
-                        yield None
 
                 # augment TODO abstract this
                 if pydash.objects.has(ssp, 'augment.fpa.psf'):

@@ -1,14 +1,22 @@
 """Tests for `satsim.geometry.astrometric` package."""
+import os
 from functools import lru_cache
 
 import numpy as np
-from skyfield.api import Topos, load, Star, Angle
+from pygc import great_circle
+from skyfield.api import Topos, Star, Angle
 from skyfield.relativity import add_aberration, add_deflection
 from skyfield.earthlib import compute_limb_angle
 from skyfield.positionlib import Apparent
-from pygc import great_circle
+
+if 'SATSIM_SKYFIELD_LOAD_DIR' in os.environ:
+    from skyfield.api import Loader
+    load = Loader(os.environ['SATSIM_SKYFIELD_LOAD_DIR'])
+else:
+    from skyfield.api import load
 
 from satsim.geometry.wcs import get_min_max_ra_dec, get_wcs
+
 
 SATSIM_EARTH = None
 SATSIM_MOON = None
