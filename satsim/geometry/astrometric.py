@@ -15,6 +15,11 @@ if 'SATSIM_SKYFIELD_LOAD_DIR' in os.environ:
 else:
     from skyfield.api import load
 
+from astropy.coordinates import SkyCoord, ICRS, ITRS
+from astropy.time import Time
+from astropy.coordinates import cartesian_to_spherical
+from astropy import units as u
+
 from satsim.geometry.wcs import get_min_max_ra_dec, get_wcs
 
 
@@ -182,7 +187,7 @@ def apparent(p, deflection=False, aberration=True):
         add_deflection(target_au, bcrs_position,
                        p._ephemeris, t, include_earth_deflection)
 
-    if aberration:
+    if aberration and p.light_time is not None:
         add_aberration(target_au, bcrs_velocity, p.light_time)
 
     apparent = Apparent(target_au, None, t, p.center, p.target)
@@ -555,3 +560,25 @@ def lambertian_sphere_to_mv(albedo, distance, radius, phase_angle):
     mvVector = mv_sun - 2.5 * np.log10(intensity)
 
     return mvVector
+
+
+def eci_to_ecr(time, ra, dec, roll=0):
+    """Covert an Earth centered fixed sky coordinates to Earth centered rotating.
+
+    Args:
+        ra: `float`, right ascension in degrees
+        dec: `float`, declination in degrees
+        roll: `float`, field rotation (ignored)
+
+    Returns:
+        A `float`, ra, dec and roll in degrees
+    """
+    sc = SkyCoord(ra=ra, dec=dec, unit='deg', frame=ICRS)
+    sc2 = sc.transform_to(ITRS(obstime=Time(time)))
+    sc3 = SkyCoord(sc2)
+
+    _, dec, ra = cartesian_to_spherical(sc3.x, sc3.y, sc3.z)
+    dec = dec + 270 * u.deg
+    ra = -ra
+
+    return ra, dec, roll

@@ -152,7 +152,9 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
         y_ifov,
         x_ifov)
 
+    astrometrics_list = []
     for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
+        astrometrics_list.append(astrometrics)
         if fpa_digital is not None:
             snr = signal_to_noise_ratio(fpa_conv_targ, fpa_conv_star + bg_tf + dc_tf, rn_tf)
             if num_shot_noise_samples is not None:
@@ -169,7 +171,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     'time_stamp': dt,
                     'ssp': ssp_orig,
                     'show_obs_boxes': ssp['sim']['show_obs_boxes'],
-                    'astrometrics': astrometrics.copy(),
+                    'astrometrics': astrometrics,
                     'save_pickle': ssp['sim']['save_pickle'],
                     'dtype': a2d_dtype,
                     'save_jpeg': ssp['sim']['save_jpeg'],
@@ -197,7 +199,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     save_apng(dirname=os.path.join(dir_name,'AnnotatedImages'), filename='movie.png')
                 if ssp['sim']['save_czml']:
                     logger.debug('Saving CZML.')
-                    save_czml(ssp, obs_cache, os.path.join(dir_name,'satsim.czml'))
+                    save_czml(ssp, obs_cache, astrometrics_list, os.path.join(dir_name,'satsim.czml'))
                 return
 
     if queue is not None:
@@ -487,15 +489,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
             astrometrics['ra'] = mean_degrees(star_ra0, star_ra1)
             astrometrics['dec'] = (star_dec0 + star_dec1) / 2
+            astrometrics['range'] = (dis0 + dis1) / 2
+            astrometrics['roll'] = star_rot
             astrometrics['ra_rate'] = diff_degrees(star_ra1, star_ra0) / exposure_time * 3600
             astrometrics['dec_rate'] = (star_dec1 - star_dec0) / exposure_time * 3600
             astrometrics['az'] = mean_degrees(az0, az1)
             astrometrics['el'] = (el0 + el1) / 2
-            astrometrics['time'] = t_start.utc_datetime()
+            astrometrics['time'] = time.mid(t_start, t_end).utc_datetime()
             astrometrics['x_ifov'] = x_ifov
             astrometrics['y_ifov'] = y_ifov
+            astrometrics['x_fov'] = x_fov
+            astrometrics['y_fov'] = y_fov
 
-            logger.debug('Boresight RA, Dec, Az, El: {}, {}, {}, {}.'.format(astrometrics['ra'], astrometrics['dec'], astrometrics['az'], astrometrics['el']))
+            logger.debug('Boresight RA, Dec, Roll, Az, El: {}, {}, {}, {}, {}.'.format(astrometrics['ra'], astrometrics['dec'], astrometrics['roll'], astrometrics['az'], astrometrics['el']))
 
             return star_ra0, star_dec0, star_tran_os, star_rot_rate
 
@@ -560,18 +566,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             pe_stars_os = []
 
         # gen psf
-        if not isinstance(ssp['fpa']['psf'], dict):  # loaded from config
-            psf_os = ssp['fpa']['psf']
-            psf_os = tf.cast(psf_os, tf.float32)
-        elif ssp['fpa']['psf']['mode'] == 'gaussian':
-            eod = ssp['fpa']['psf']['eod']
-            sigma = eod_to_sigma(eod, s_osf)
-            psf_os = gen_gaussian(h_sub_pad_os, w_sub_pad_os, sigma)
-            save_cache(ssp['fpa']['psf'], psf_os)
-        elif ssp['fpa']['psf']['mode'] == 'poppy':
-            psf_os = gen_from_poppy_configuration(h_sub_pad_os / s_osf, w_sub_pad_os / s_osf, y_ifov, x_ifov, s_osf, ssp['fpa']['psf'])
-            save_cache(ssp['fpa']['psf'], psf_os)
-            psf_os = tf.cast(psf_os, tf.float32)
+        if ssp['sim']['mode'] != 'none':
+            if not isinstance(ssp['fpa']['psf'], dict):  # loaded from config
+                psf_os = ssp['fpa']['psf']
+                psf_os = tf.cast(psf_os, tf.float32)
+            elif ssp['fpa']['psf']['mode'] == 'gaussian':
+                eod = ssp['fpa']['psf']['eod']
+                sigma = eod_to_sigma(eod, s_osf)
+                psf_os = gen_gaussian(h_sub_pad_os, w_sub_pad_os, sigma)
+                save_cache(ssp['fpa']['psf'], psf_os)
+            elif ssp['fpa']['psf']['mode'] == 'poppy':
+                psf_os = gen_from_poppy_configuration(h_sub_pad_os / s_osf, w_sub_pad_os / s_osf, y_ifov, x_ifov, s_osf, ssp['fpa']['psf'])
+                save_cache(ssp['fpa']['psf'], psf_os)
+                psf_os = tf.cast(psf_os, tf.float32)
 
         if pydash.objects.has(ssp, 'augment.background.stray'):
             bg = ssp['augment']['background']['stray'](bg)
@@ -750,12 +757,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 # if image rendering is disabled, then propagate objects and return
                 if ssp['sim']['mode'] == 'none':
                     r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = gen_objects(obs, t_start, t_end)
-                    logger.debug('Number of objects {}.'.format(len(obs_os_pix)))
-
+                    if track_mode is not None:
+                        star_ra, star_dec, star_tran_os, star_rot_rate = calculate_star_position_and_motion(ts_start, ts_end, star_rot, track_mode)
                     if with_meta:
-                        yield None, frame_num, None, None, None, None, None, None, None, None, obs_cache
+                        yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache
                     else:
                         yield None
+                    continue
 
                 # refresh catalog stars
                 # TODO should save stars and transform to FPA again on every frame
@@ -850,6 +858,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         pickle.dump([r_stars_os.numpy(), c_stars_os.numpy(), pe_stars_os.numpy(), t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os], picklefile)
 
                 if with_meta:
-                    yield fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache
+                    yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache
                 else:
                     yield fpa_digital

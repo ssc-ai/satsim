@@ -21,6 +21,7 @@ Subpackages
    satsim.pipeline
    satsim.time
    satsim.util
+   satsim.vecmath
 
 Submodules
 ----------
