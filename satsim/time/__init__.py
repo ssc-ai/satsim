@@ -142,6 +142,7 @@ def linspace(t0, t1, num=50):
         np.linspace(frac0, frac1, num),
     )
 
+
 def delta_sec(t0, t1):
     """ Subtract t0 and t1. (t0 - t1)
 
@@ -149,3 +150,18 @@ def delta_sec(t0, t1):
         A `float` in seconds.
     """
     return (t0 - t1) * 86400
+
+
+def mid(t0, t1):
+    """ Return the mid of two times.
+
+    Args:
+        t0: `Time`, start Skyfield `Time`
+        t1: `Time`, end Skyfield `Time`
+
+    Returns:
+        A `Time`, mid Skyfield `Time`
+    """
+    d = t1 - t0
+
+    return t0 + d * 0.5

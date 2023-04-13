@@ -1,6 +1,14 @@
 History
 =======
 
+0.14.0
+---------------------
+
+Add vector math library.
+Add CZML output for sensor visualization.
+Fix objects not updating properly when image renderer is off.
+
+
 0.13.1
 ---------------------
 

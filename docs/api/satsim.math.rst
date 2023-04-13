@@ -17,6 +17,14 @@ satsim.math.angle module
    :undoc-members:
    :show-inheritance:
 
+satsim.math.const module
+------------------------
+
+.. automodule:: satsim.math.const
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.math.conv module
 -----------------------
 

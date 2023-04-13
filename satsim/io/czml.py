@@ -10,10 +10,11 @@ from skyfield.units import _ltude
 from skyfield.vectorlib import VectorFunction
 
 from satsim import time
-from satsim.geometry.astrometric import load_earth
+from satsim.geometry.astrometric import load_earth, eci_to_ecr
+from satsim.vecmath import Quaternion
 
 from czmlpy.core import Document, Packet, Preamble
-from czmlpy.enums import InterpolationAlgorithms, ReferenceFrames
+from czmlpy.enums import InterpolationAlgorithms, ReferenceFrames, ExtrapolationTypes
 from czmlpy.properties import (
     Billboard,
     Clock,
@@ -23,12 +24,15 @@ from czmlpy.properties import (
     Path,
     Position,
     SolidColorMaterial,
+    RectangularSensor,
+    Orientation,
+    Double,
 )
 from czmlpy.types import IntervalValue, TimeInterval
 from erfa import gd2gc
 
 
-def save_czml(ssp, obs_cache, filename):
+def save_czml(ssp, obs_cache, astrometrics, filename):
     """Saves scenario as a Cesium czml file.
 
     Args:
@@ -71,7 +75,16 @@ def save_czml(ssp, obs_cache, filename):
 
         if 'czml' in site:
             label_show = site['czml'].get('path_show', label_show)
-        extractor.add_ground_station([latitude, longitude, alt], label_text=name, label_show=label_show)
+
+        sensor = {
+            'y_fov': astrometrics[0]['y_fov'],
+            'x_fov': astrometrics[0]['x_fov'],
+            'time': [x['time'] for x in astrometrics],
+            'quat': [list(_equatorial_to_ecr_quaternion(x['ra'], x['dec'], 0.0, x['time'])) for x in astrometrics],
+            'range': [x['range'] for x in astrometrics],
+        }
+
+        extractor.add_ground_station([latitude, longitude, alt], sensor, label_text=name, label_show=label_show)
 
     # extract objects data
     for i, o in enumerate(ssp['geometry']['obs']['list']):
@@ -139,6 +152,21 @@ PIC_GROUNDSTATION = (
 )
 
 
+def _equatorial_to_ecr_quaternion(ra, dec, roll=0.0, time=None):
+    """ Converts ECI RA/Dec to ECR Quaternion """
+    ra, dec, roll = eci_to_ecr(time, ra, dec, roll)
+
+    hpr = {
+        'pitch': dec.to(u.rad).value,
+        'heading': ra.to(u.rad).value,
+        'roll': roll
+    }
+
+    q = Quaternion.fromHeadingPitchRoll(hpr)
+
+    return [q.x, q.y, q.z, q.w]
+
+
 class CZMLExtractor:
     """A class for extracting SatSim data to Cesium"""
 
@@ -173,6 +201,7 @@ class CZMLExtractor:
     def add_ground_station(
         self,
         pos,
+        sensor,
         id_name=None,
         id_description=None,
         label_fill_color=[255, 255, 0, 255],
@@ -196,24 +225,64 @@ class CZMLExtractor:
         lat, lon, alt = pos
         pos = list(gd2gc(1, lon.to_value(u.rad), lat.to_value(u.rad), alt.to_value(u.m)))
 
+        gs_id = "GS" + str(self.num_gs)
         pckt = Packet(
-            id="GS" + str(self.num_gs),
+            id=gs_id,
             name=id_name,
             description=id_description,
             availability=TimeInterval(start=self.start_epoch, end=self.end_epoch),
             position=Position(cartesian=pos),
             label=Label(
-                show=label_show,
-                text=label_text,
-                font=label_font,
-                fillColor=Color(rgba=label_fill_color),
-                outlineColor=Color(rgba=label_outline_color),
+                show=True,
             ),
             billboard=Billboard(image=PIC_GROUNDSTATION, show=True),
         )
 
         self.packets.append(pckt)
         self.num_gs += 1
+
+        N = len(sensor['quat'])
+        quat = []
+        radius = []
+        for i, t, q, r in zip(range(N), sensor['time'], sensor['quat'], sensor['range']):
+            s = (Time(t) - self.start_epoch).to(u.second).value
+            quat += [s, q[0], q[1], q[2], q[3]]
+            radius += [s, r * 1000]
+
+        # test add sensor
+        pckt = Packet(
+            id=gs_id + "_FOV",
+            parent=gs_id,
+            position=Position(reference=gs_id + "#position"),
+            orientation=Orientation(
+                unitQuaternion=quat,
+                interpolationDegree=1,
+                interpolationAlgorithm=InterpolationAlgorithms.LINEAR,
+                epoch=self.start_epoch.datetime.replace(tzinfo=timezone.utc),
+                forwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE,
+                backwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE
+            ),
+            agi_rectangularSensor=RectangularSensor(
+                show=True,
+                showIntersection=False,
+                intersectionColor=Color(rgba=[255, 255, 255, 255]),
+                intersectionWidth=2,
+                portionToDisplay="COMPLETE",
+                lateralSurfaceMaterial=Material(solidColor=SolidColorMaterial(color=Color(rgba=[255, 255, 0, 128]))),
+                domeSurfaceMaterial=Material(solidColor=SolidColorMaterial(color=Color(rgba=[255, 255, 0, 128]))),
+                xHalfAngle=np.radians(sensor['x_fov'] / 2),
+                yHalfAngle=np.radians(sensor['y_fov'] / 2),
+                radius=Double(
+                    number=radius,
+                    interpolationDegree=1,
+                    interpolationAlgorithm=InterpolationAlgorithms.LINEAR,
+                    epoch=self.start_epoch.datetime.replace(tzinfo=timezone.utc),
+                    forwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE,
+                    backwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE
+                )
+            )
+        )
+        self.packets.append(pckt)
 
     def add_object(
         self,
