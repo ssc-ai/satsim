@@ -57,8 +57,9 @@ def add_read_noise(fpa, rn, en=0):
 
     Returns:
         A `Tensor`, the 2D tensor with read noise applied.
+        A `Tensor`, the 2D tensor read noise.
     """
     rn = tf.cast(rn, tf.float32)
     en = tf.cast(rn, tf.float32)
     noise = tf.random.normal(tf.shape(fpa)) * tf.math.sqrt(rn * rn + en * en)
-    return fpa + noise
+    return fpa + noise, noise

@@ -1,12 +1,20 @@
 History
 =======
 
+0.15.0
+---------------------
+
+* Add support to save ground truth image data to the Annotations directory. Set sim option `save_ground_truth` to `true`.
+* Add support for running on CPU with no GPU acceleration.
+* Add CZML options for sensor visualization and object billboard image.
+
+
 0.14.0
 ---------------------
 
-Add vector math library.
-Add CZML output for sensor visualization.
-Fix objects not updating properly when image renderer is off.
+* Add vector math library.
+* Add CZML output for sensor visualization.
+* Fix objects not updating properly when image renderer is off.
 
 
 0.13.1

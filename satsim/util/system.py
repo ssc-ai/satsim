@@ -5,6 +5,7 @@ import tensorflow as tf
 import logging
 
 logger = logging.getLogger(__name__)
+IS_CPU = len(tf.config.list_physical_devices('GPU')) == 0
 
 
 def get_semantic_version(module):
@@ -65,6 +66,9 @@ def configure_multi_gpu(gpu_ids, memory=None):
 
     logger.debug('Visible gpus: {}'.format(gpus))
 
+    if len(gpus) == 0:
+        return gpus
+
     tf.config.experimental.set_visible_devices([gpus[i] for i in gpu_ids], 'GPU')
 
     logger.debug('Configuring GPU device {} with {} MB'.format(gpu_ids, memory))
@@ -81,3 +85,8 @@ def configure_multi_gpu(gpu_ids, memory=None):
     logger.debug('Logical gpus: {}'.format(gpus))
 
     return gpus
+
+
+def is_tensorflow_running_on_cpu():
+    """Returns True if TensorFlow is running on the CPU. """
+    return IS_CPU

@@ -8,6 +8,7 @@ import pickle
 import json
 import math
 from time import sleep
+from collections import OrderedDict
 
 import pydash
 import tensorflow as tf
@@ -153,7 +154,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
         x_ifov)
 
     astrometrics_list = []
-    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
+    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
         astrometrics_list.append(astrometrics)
         if fpa_digital is not None:
             snr = signal_to_noise_ratio(fpa_conv_targ, fpa_conv_star + bg_tf + dc_tf, rn_tf)
@@ -175,6 +176,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     'save_pickle': ssp['sim']['save_pickle'],
                     'dtype': a2d_dtype,
                     'save_jpeg': ssp['sim']['save_jpeg'],
+                    'ground_truth': ground_truth,
                 }, tag=dir_name)
             if output_debug:
                 with open(os.path.join(dir_debug, 'metadata_{}.json'.format(frame_num)), 'w') as jsonfile:
@@ -377,6 +379,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'save_czml' not in ssp['sim']:
         ssp['sim']['save_czml'] = True
+
+    if 'save_ground_truth' not in ssp['sim']:
+        ssp['sim']['save_ground_truth'] = False
 
     if 'mode' not in ssp['sim']:
         ssp['sim']['mode'] = 'fftconv2p'
@@ -760,7 +765,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     if track_mode is not None:
                         star_ra, star_dec, star_tran_os, star_rot_rate = calculate_star_position_and_motion(ts_start, ts_end, star_rot, track_mode)
                     if with_meta:
-                        yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache
+                        yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None
                     else:
                         yield None
                     continue
@@ -818,7 +823,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     fpa_conv_noise = add_photon_noise(fpa_conv, ssp['sim']['num_shot_noise_samples'])
                 else:
                     fpa_conv_noise = fpa_conv
-                fpa = add_read_noise(fpa_conv_noise, rn, en)
+                fpa, rn_gt = add_read_noise(fpa_conv_noise, rn, en)
 
                 # analog to digital
                 fpa_digital = analog_to_digital(fpa + bias_tf, a2d_gain, a2d_fwc, a2d_bias, dtype=a2d_dtype)
@@ -831,6 +836,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         fpa_digital = ssp['augment']['image']['post'](fpa_digital)
                     else:
                         fpa_digital = fpa_digital + ssp['augment']['image']['post']
+
+                if ssp['sim']['save_ground_truth']:
+                    ground_truth = OrderedDict()
+                    ground_truth['target_pe'] = fpa_conv_targ.numpy()
+                    ground_truth['star_pe'] = fpa_conv_star.numpy()
+                    ground_truth['background_pe'] = bg_tf.numpy()
+                    ground_truth['dark_current_pe'] = dc_tf.numpy()
+                    ground_truth['photon_noise_pe'] = (fpa_conv_noise - fpa_conv).numpy()
+                    ground_truth['read_noise_pe'] = rn_gt.numpy()
+                    ground_truth['gain'] = gain_tf.numpy()
+                    ground_truth['bias_pe'] = bias_tf.numpy()
+                else:
+                    ground_truth = None
 
                 if output_debug:
                     if fpa_os_w_targets is not None:
@@ -858,6 +876,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         pickle.dump([r_stars_os.numpy(), c_stars_os.numpy(), pe_stars_os.numpy(), t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os], picklefile)
 
                 if with_meta:
-                    yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache
+                    yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth
                 else:
                     yield fpa_digital

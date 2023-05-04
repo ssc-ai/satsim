@@ -71,10 +71,14 @@ def save_czml(ssp, obs_cache, astrometrics, filename):
         alt = site['alt'] * u.m
 
         name = site['name'] if 'name' in site else None
-        label_show = False
 
-        if 'czml' in site:
-            label_show = site['czml'].get('path_show', label_show)
+        # czml
+        czml_config = site['czml'] if 'czml' in site else {}
+        label_show = czml_config.get('label_show', False)
+        cone_show = czml_config.get('cone_show', True)
+        cone_color = czml_config.get('cone_color', [255, 255, 0, 64])
+        billboard_show = czml_config.get('billboard_show', True)
+        billboard_image = czml_config.get('billboard_image', PIC_GROUNDSTATION)
 
         sensor = {
             'y_fov': astrometrics[0]['y_fov'],
@@ -84,7 +88,9 @@ def save_czml(ssp, obs_cache, astrometrics, filename):
             'range': [x['range'] for x in astrometrics],
         }
 
-        extractor.add_ground_station([latitude, longitude, alt], sensor, label_text=name, label_show=label_show)
+        extractor.add_ground_station([latitude, longitude, alt], sensor, label_text=name, label_show=label_show,
+                                     cone_show=cone_show, cone_color=cone_color, billboard_show=billboard_show,
+                                     billboard_image=billboard_image)
 
     # extract objects data
     for i, o in enumerate(ssp['geometry']['obs']['list']):
@@ -102,27 +108,24 @@ def save_czml(ssp, obs_cache, astrometrics, filename):
 
             name = o['name'] if 'name' in o else None
 
-            path_show = (ts_start_ob == t0)
-            path_color = [255, 255, 0]
-            billboard_show = True
             start_interval = time.to_astropy(t0)
             end_interval = time.to_astropy(t2)
-            label_show = False
 
-            if 'czml' in o:
-                label_show = o['czml'].get('label_show', label_show)
-                path_show = o['czml'].get('path_show', path_show)
-                path_color = o['czml'].get('path_color', path_color)
-                billboard_show = o['czml'].get('billboard_show', billboard_show)
-                if 'start_interval' in o['czml']:
-                    start_interval = time.to_astropy(time.utc_from_list_or_scalar(o['czml']['start_interval']))
-                if 'end_interval' in o['czml']:
-                    end_interval = time.to_astropy(time.utc_from_list_or_scalar(o['czml']['end_interval']))
+            # czml
+            czml_config = o['czml'] if 'czml' in o else {}
+            label_show = czml_config.get('label_show', False)
+            path_show = czml_config.get('path_show', (ts_start_ob == t0))
+            path_color = czml_config.get('path_color', [255, 255, 0])
+            billboard_show = czml_config.get('billboard_show', True)
+            billboard_image = czml_config.get('billboard_image', PIC_SATELLITE)
 
-            extractor.add_object(sat, N=N, label_text=name, label_show=label_show,
-                                 start_interval=start_interval, end_interval=end_interval,
+            start_interval = time.to_astropy(time.utc_from_list_or_scalar(o['czml']['start_interval'])) if 'start_interval' in czml_config else time.to_astropy(t0)
+            end_interval = time.to_astropy(time.utc_from_list_or_scalar(o['czml']['end_interval'])) if 'end_interval' in czml_config else time.to_astropy(t2)
+
+            extractor.add_object(sat, N=N, label_text=name, start_interval=start_interval, end_interval=end_interval,
                                  start_available=time.to_astropy(ts_start_ob), end_available=time.to_astropy(ts_end_ob),
-                                 path_show=path_show, id_name=name, billboard_show=billboard_show, path_color=path_color)
+                                 label_show=label_show, path_show=path_show, path_color=path_color, billboard_show=billboard_show,
+                                 billboard_image=billboard_image)
 
     # convert document to json
     j = extractor.get_document().dumps()
@@ -208,7 +211,11 @@ class CZMLExtractor:
         label_outline_color=[255, 255, 0, 255],
         label_font="16pt Lucida Console",
         label_text=None,
-        label_show=False
+        label_show=False,
+        billboard_show=True,
+        billboard_image=PIC_GROUNDSTATION,
+        cone_color=[255, 255, 0, 64],
+        cone_show=True,
     ):
         """
         Adds a ground station
@@ -235,7 +242,7 @@ class CZMLExtractor:
             label=Label(
                 show=True,
             ),
-            billboard=Billboard(image=PIC_GROUNDSTATION, show=True),
+            billboard=Billboard(image=billboard_image, show=True),
         )
 
         self.packets.append(pckt)
@@ -263,13 +270,13 @@ class CZMLExtractor:
                 backwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE
             ),
             agi_rectangularSensor=RectangularSensor(
-                show=True,
+                show=cone_show,
                 showIntersection=False,
                 intersectionColor=Color(rgba=[255, 255, 255, 255]),
                 intersectionWidth=2,
                 portionToDisplay="COMPLETE",
-                lateralSurfaceMaterial=Material(solidColor=SolidColorMaterial(color=Color(rgba=[255, 255, 0, 128]))),
-                domeSurfaceMaterial=Material(solidColor=SolidColorMaterial(color=Color(rgba=[255, 255, 0, 128]))),
+                lateralSurfaceMaterial=Material(solidColor=SolidColorMaterial(color=Color(rgba=cone_color))),
+                domeSurfaceMaterial=Material(solidColor=SolidColorMaterial(color=Color(rgba=cone_color))),
                 xHalfAngle=np.radians(sensor['x_fov'] / 2),
                 yHalfAngle=np.radians(sensor['y_fov'] / 2),
                 radius=Double(
@@ -302,7 +309,8 @@ class CZMLExtractor:
         end_interval=None,
         start_available=None,
         end_available=None,
-        billboard_show=True
+        billboard_show=True,
+        billboard_image=PIC_SATELLITE,
     ):
         """
         Adds a SatSim Skyfield object
@@ -372,7 +380,7 @@ class CZMLExtractor:
                 fillColor=Color(rgba=label_fill_color),
                 outlineColor=Color(rgba=label_outline_color),
             ),
-            billboard=Billboard(image=PIC_SATELLITE, show=billboard_show),
+            billboard=Billboard(image=billboard_image, show=billboard_show),
         )
 
         self.packets.append(pckt)
