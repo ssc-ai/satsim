@@ -4,7 +4,7 @@ import tensorflow as tf
 import numpy as np
 
 from satsim.geometry.transform import rotate_and_translate
-from satsim.util import get_semantic_version
+from satsim.util import get_semantic_version, is_tensorflow_running_on_cpu
 from satsim.math import fftconv2p
 
 
@@ -253,19 +253,18 @@ def add_counts(fpa, r, c, cnt, r_offset=0, c_offset=0):
     Returns:
         A `Tensor`, a reference to the modified input `fpa` image
     """
-    r = tf.cast(r, tf.int32)
-    c = tf.cast(c, tf.int32)
+    r = tf.cast(r, tf.int32) + tf.cast(r_offset, tf.int32)
+    c = tf.cast(c, tf.int32) + tf.cast(c_offset, tf.int32)
 
-    # TODO no bounds checking in TF-GPU if fpa is int32 type
-    # h,w = fpa.get_shape().as_list()
-    # valid = (r >= 0) & (r < h) & (c >= 0) & (c < w)
-    # r = tf.boolean_mask(r, valid)
-    # c = tf.boolean_mask(c, valid)
-    # cnt = tf.boolean_mask(tf.convert_to_tensor(cnt, dtype=fpa.dtype), valid)
+    # fix for no bounds checking if fpa is int32 or if running CPU
+    if is_tensorflow_running_on_cpu() or fpa.dtype == 'int32':
+        h, w = fpa.get_shape().as_list()
+        valid = (r >= 0) & (r < h) & (c >= 0) & (c < w)
+        r = tf.boolean_mask(r, valid)
+        c = tf.boolean_mask(c, valid)
+        cnt = tf.boolean_mask(tf.convert_to_tensor(cnt, dtype=fpa.dtype), valid)
 
-    # r_offset = r_offset
-    # c_offset = c_offset
-    rc = tf.stack([r + r_offset, c + c_offset], axis=1)
+    rc = tf.stack([r, c], axis=1)
     return tf.compat.v1.tensor_scatter_nd_add(fpa, rc, cnt)
 
 

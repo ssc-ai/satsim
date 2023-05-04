@@ -17,7 +17,7 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
         filename: `string`, the FITS filename.
         fpa: `np.array`, input image as a 2D numpy array.
         exposure_time: `float`, exposure time for header.
-        dt_start: `datatime`, datetime of start of exposure.
+        dt_start: `datetime`, datetime of start of exposure.
         header: `dict`, placeholder, not implemented
         overwrite: `boolean`, if True overwrite file if it exists
         dtype: `string`, 'int16', 'uint16', 'int32', 'uint32', or 'float32'. default: 'int16'

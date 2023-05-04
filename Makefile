@@ -70,6 +70,12 @@ coverage: ## check code coverage quickly with the default python3
 	coverage html
 	$(BROWSER) htmlcov/index.html
 
+cpucoverage: ## check code coverage quickly with the default python3
+	CUDA_VISIBLE_DEVICES="" && coverage run --source satsim -m pytest
+	coverage report -m
+	coverage html
+	$(BROWSER) htmlcov/index.html
+
 docs: ## generate Sphinx HTML documentation, including API docs
 	rm -f docs/satsim.rst
 	rm -f docs/modules.rst
@@ -105,11 +111,11 @@ install: clean ## install the package to the active python3's site-packages
 	@echo  IMPORTANT: You may need to close and restart your shell after running "make install".
 
 docker: docs dist
-	docker build -t satsim:0.14.0 -t satsim:latest -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
+	docker build -t satsim:0.15.0 -t satsim:latest -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
 
 dind:
 	docker run --rm -it -v $(CURDIR):/workspace/ -w /workspace python:3.8-bullseye ./build.sh
-	docker build -t satsim:0.14.0 -t satsim:latest -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
+	docker build -t satsim:0.15.0 -t satsim:latest -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
 
 uninstall: clean
 	cat .install.log | xargs rm -rf
