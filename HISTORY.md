@@ -1,6 +1,13 @@
 History
 =======
 
+0.15.1
+---------------------
+
+* Remove clipping of negative values in ground truth files by default.
+* Fix missing dependencies for ground truth file generation.
+
+
 0.15.0
 ---------------------
 
