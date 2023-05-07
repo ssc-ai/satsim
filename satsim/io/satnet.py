@@ -157,7 +157,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
     return data
 
 
-def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_time, time_stamp, ssp, show_obs_boxes=True, astrometrics=None, save_pickle=False, dtype='uint16', save_jpeg=True, ground_truth=None, ground_truth_min=0):
+def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_time, time_stamp, ssp, show_obs_boxes=True, astrometrics=None, save_pickle=False, dtype='uint16', save_jpeg=True, ground_truth=None, ground_truth_min=None):
     """Write image and annotation files compatible with SatNet. In addition,
     writes annotated images and SatSim configuration file for reference.
 
@@ -218,7 +218,8 @@ def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_
         ground_truth = np.stack(list(map(f, ground_truth.values())))
 
         # clip values
-        ground_truth[ground_truth < ground_truth_min] = 0
+        if ground_truth_min is not None:
+            ground_truth[ground_truth < ground_truth_min] = 0
 
         tifffile.imwrite(os.path.join(annotation_dir, '{}.tiff'.format(file_name)), np.stack(ground_truth), dtype='float32', bigtiff=True, compression='lzw',
                          metadata={'ImageDescription': keys})

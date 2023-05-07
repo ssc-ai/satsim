@@ -34,6 +34,8 @@ requirements = [
     'numba~=0.56.0',
     'pooch~=1.6.0',
     'czmlpy~=0.9.0',
+    'tifffile==2023.4.12',
+    'imagecodecs==2023.3.16',
 ]
 
 setup_requirements = ['pytest-runner', ]
@@ -67,6 +69,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/ssc-ai/satsim',
-    version='0.15.0',
+    version='0.15.1',
     zip_safe=False,
 )
