@@ -46,11 +46,11 @@ def augment_satnet_with_satsim(dataset, augment_satsim_params, prob=0.5, rn=0, m
         sspc['augment']['image']['post'] = tf.squeeze(image)
 
         ig = image_generator(sspc, with_meta=True)
-        fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth = ig.__next__()
+        fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix = ig.__next__()
 
         anno = init_annotation('.', 0, h, w, y_fov, x_fov)
         snr = signal_to_noise_ratio(fpa_conv_targ, tf.squeeze(image) * a2d_gain, rn)
-        set_frame_annotation(anno, ['null'], h * s_osf, w * s_osf, obs_os_pix, snr=snr)
+        set_frame_annotation(anno, ['null'], h * s_osf, w * s_osf, obs_os_pix, snr=snr, star_os_pix=star_os_pix)
 
         unbboxs = tf.unstack(bboxs)
         for ii in range(len(unbboxs)):

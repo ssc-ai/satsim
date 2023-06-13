@@ -9,7 +9,7 @@ import matplotlib.image as mpimg
 from skimage.draw import rectangle_perimeter
 
 
-def save(filename, fpa, vauto=False, vmin=None, vmax=None, cmap='gray', annotation=None, pad=5, show_obs_boxes=True):
+def save(filename, fpa, vauto=False, vmin=None, vmax=None, cmap='gray', annotation=None, pad=5, show_obs_boxes=True, show_star_boxes=False):
     """Save an array as an image file.
 
     Args:
@@ -37,13 +37,14 @@ def save(filename, fpa, vauto=False, vmin=None, vmax=None, cmap='gray', annotati
 
     fpa_np = fpa
 
-    if annotation is not None and show_obs_boxes is True:
+    if annotation is not None and (show_obs_boxes is True or show_star_boxes is True):
         (h, w) = fpa_np.shape
         for a in annotation:
-            start = (a['y_min'] * h - pad, a['x_min'] * w - pad)
-            end = (a['y_max'] * h + pad, a['x_max'] * w + pad)
-            rr, cc = rectangle_perimeter(start, end=end, shape=fpa_np.shape)
-            fpa_np[rr,cc] = 100000000
+            if (show_obs_boxes and a['class_name'] == 'Satellite') or (show_star_boxes and a['class_name'] == 'Star'):
+                start = (a['y_min'] * h - pad, a['x_min'] * w - pad)
+                end = (a['y_max'] * h + pad, a['x_max'] * w + pad)
+                rr, cc = rectangle_perimeter(start, end=end, shape=fpa_np.shape)
+                fpa_np[rr,cc] = 100000000
 
     mpimg.imsave(filename, fpa_np, vmin=min_val, vmax=max_val, cmap=cmap)
 
