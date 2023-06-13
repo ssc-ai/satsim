@@ -1,6 +1,13 @@
 History
 =======
 
+0.16.0
+---------------------
+
+* Add option to annotate stars. Set sim option `star_annotation_threshold` to the minimum star brightness magnitude or `false` to disable. Disabled by default.
+* Add option to show annotated stars in annotated images. Set sim option `show_star_boxes` to `true` to enable.
+
+
 0.15.1
 ---------------------
 

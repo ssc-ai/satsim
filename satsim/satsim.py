@@ -9,6 +9,7 @@ import json
 import math
 from time import sleep
 from collections import OrderedDict
+import numbers
 
 import pydash
 import tensorflow as tf
@@ -154,13 +155,13 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
         x_ifov)
 
     astrometrics_list = []
-    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
+    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
         astrometrics_list.append(astrometrics)
         if fpa_digital is not None:
             snr = signal_to_noise_ratio(fpa_conv_targ, fpa_conv_star + bg_tf + dc_tf, rn_tf)
             if num_shot_noise_samples is not None:
                 snr = snr * np.sqrt(num_shot_noise_samples)
-            meta_data = set_frame_annotation(meta_data, frame_num, h_fpa_os, w_fpa_os, obs_os_pix, [20 * s_osf, 20 * s_osf], snr=snr)
+            meta_data = set_frame_annotation(meta_data, frame_num, h_fpa_os, w_fpa_os, obs_os_pix, [20 * s_osf, 20 * s_osf], snr=snr, star_os_pix=star_os_pix)
             if queue is not None:
                 queue.task(write_frame, {
                     'dir_name': dir_name,
@@ -172,6 +173,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     'time_stamp': dt,
                     'ssp': ssp_orig,
                     'show_obs_boxes': ssp['sim']['show_obs_boxes'],
+                    'show_star_boxes': ssp['sim']['show_star_boxes'],
                     'astrometrics': astrometrics,
                     'save_pickle': ssp['sim']['save_pickle'],
                     'dtype': a2d_dtype,
@@ -353,6 +355,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     if 'show_obs_boxes' not in ssp['sim']:
         ssp['sim']['show_obs_boxes'] = True
 
+    if 'show_star_boxes' not in ssp['sim']:
+        ssp['sim']['show_star_boxes'] = False
+
     if 'enable_shot_noise' not in ssp['sim']:
         ssp['sim']['enable_shot_noise'] = True
 
@@ -382,6 +387,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'save_ground_truth' not in ssp['sim']:
         ssp['sim']['save_ground_truth'] = False
+
+    if 'star_annotation_threshold' not in ssp['sim']:
+        ssp['sim']['star_annotation_threshold'] = False
 
     if 'mode' not in ssp['sim']:
         ssp['sim']['mode'] = 'fftconv2p'
@@ -566,6 +574,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         # gen stars
         if star_mode == 'bins':
             r_stars_os, c_stars_os, pe_stars_os = gen_random_points(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_pe, star_dn, pad_mult=star_pad)
+            m_stars_os = None
         else:
             r_stars_os, c_stars_os, m_stars_os = [], [], []
             pe_stars_os = []
@@ -765,7 +774,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     if track_mode is not None:
                         star_ra, star_dec, star_tran_os, star_rot_rate = calculate_star_position_and_motion(ts_start, ts_end, star_rot, track_mode)
                     if with_meta:
-                        yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None
+                        yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None, None
                     else:
                         yield None
                     continue
@@ -837,6 +846,26 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     else:
                         fpa_digital = fpa_digital + ssp['augment']['image']['post']
 
+                if ssp['sim']['star_annotation_threshold'] is not False:
+                    pes_stars_os = pe_stars_os / exposure_time
+                    star_os_pix = {
+                        'h': h_fpa_os,
+                        'w': w_fpa_os,
+                        'h_pad': h_pad_os_div2,
+                        'w_pad': w_pad_os_div2,
+                        'rr': r_stars_os,
+                        'cc': c_stars_os,
+                        'pe': pes_stars_os,
+                        'mv': m_stars_os if m_stars_os is not None else pe_to_mv(zeropoint, pes_stars_os),
+                        't_start': t_start_star,
+                        't_end': t_end_star,
+                        'rot': star_rot_rate,
+                        'tran': star_tran_os,
+                        'min_mv': ssp['sim']['star_annotation_threshold'] if isinstance(ssp['sim']['star_annotation_threshold'], numbers.Number) else 15
+                    }
+                else:
+                    star_os_pix = None
+
                 if ssp['sim']['save_ground_truth']:
                     ground_truth = OrderedDict()
                     ground_truth['target_pe'] = fpa_conv_targ.numpy()
@@ -876,6 +905,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         pickle.dump([r_stars_os.numpy(), c_stars_os.numpy(), pe_stars_os.numpy(), t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os], picklefile)
 
                 if with_meta:
-                    yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth
+                    yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth, star_os_pix
                 else:
                     yield fpa_digital
