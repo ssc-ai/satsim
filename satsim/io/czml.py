@@ -68,7 +68,7 @@ def save_czml(ssp, obs_cache, astrometrics, filename):
         site = ssp['geometry']['site']
         latitude = _ltude(site['lat'], 'latitude', 'N', 'S') * u.deg
         longitude = _ltude(site['lon'], 'longitude', 'E', 'W') * u.deg
-        alt = site['alt'] * u.m
+        alt = site['alt'] * u.km
 
         name = site['name'] if 'name' in site else None
 
@@ -117,12 +117,12 @@ def save_czml(ssp, obs_cache, astrometrics, filename):
             path_show = czml_config.get('path_show', (ts_start_ob == t0))
             path_color = czml_config.get('path_color', [255, 255, 0])
             billboard_show = czml_config.get('billboard_show', True)
-            billboard_image = czml_config.get('billboard_image', PIC_SATELLITE)
+            billboard_image = czml_config.get('billboard_image', PIC_OBSERVATION if o['mode'] == 'observation' else PIC_SATELLITE)
 
             start_interval = time.to_astropy(time.utc_from_list_or_scalar(o['czml']['start_interval'])) if 'start_interval' in czml_config else time.to_astropy(t0)
             end_interval = time.to_astropy(time.utc_from_list_or_scalar(o['czml']['end_interval'])) if 'end_interval' in czml_config else time.to_astropy(t2)
 
-            extractor.add_object(sat, N=N, label_text=name, start_interval=start_interval, end_interval=end_interval,
+            extractor.add_object(sat, N=N, id_name=name, label_text=name, start_interval=start_interval, end_interval=end_interval,
                                  start_available=time.to_astropy(ts_start_ob), end_available=time.to_astropy(ts_end_ob),
                                  label_show=label_show, path_show=path_show, path_color=path_color, billboard_show=billboard_show,
                                  billboard_image=billboard_image)
@@ -152,6 +152,23 @@ PIC_GROUNDSTATION = (
     "i471fivK73cBFFQNTT/d2KoGpfGOpSIkhUpgUMxq9DFEsWv4IXhlyCnhBFnZcFEEuYqbiUlN"
     "wWgMTdrZ3JbQFoEVG53rd8ztG9aPJMnBUQf/VFraBJeWnLS0RfjbKyLJA8FkT5seDYS1Qwyv"
     "8t0B/5C2ZmH2/eTGNNBgMmAAAAAElFTkSuQmCC"
+)
+PIC_OBSERVATION = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACX"
+    "BIWXMAAA7DAAAOwwHHb6hkAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48Gg"
+    "AAAqFJREFUSIm1lbtPFFEUxn/nBnbvrmijBVCIUTEx0ZBAgz3GSixYNsbY8g/4YhMbQixopM"
+    "ZHCcTMzBZCBwUtiSIFJJsYjY9CiLHzNeyGeyxmcFkdZnUTvvLc73zfOfdxLhwypCmjbHtwOo"
+    "zIhfZ2HQSo1WQV1U2MLDASfmjNwMsPgJtCGIojW5ms6wCo7phvQFccX8aYEiM/XiXJmL8iih"
+    "DYB4h7gXARlXsopxkNu3t6a2s9vbU1RsNuDGdAxoE+nHuJbyfRZjsygcG38/hW8e0MHh37l3"
+    "srstJbkZXGTunAt4/xrRLYuXSTwD7At4qXu5u0fK7C2LkKY4m5fm48LmwyWdzLD+Bbh29n0p"
+    "pMRdTJLuV8/15o3xm4KeAzGt5p2SAT3ga+4NxUo0HZ9iAMofKQIt9aNrjGV5BpYAgvd7Ju4H"
+    "Q4YmiQKhDYMQKbfAZ72HUBIOCG6wYiF4BPFMN3qcnKDZQbqZzrO2+B7ViTNoD2dr0koh2nKr"
+    "IcK3mvz/OkoXJHEegDwLPLGDwK4W9OdLukCPD+jcujMlilfshNn8j/QN2faoF9hG8/Nc307Q"
+    "q+XfkH3tbedY86UN0Euijb06mJwjzCfCrHy54FOhHdqBsYWQAUJ4XU5EL4ZP++J8MUIi2zGN"
+    "W0B98uAX1kwrPRfW4Bsxwja98A64yGV+odABhTAk5QtQ9bEgewdho4jphSMsG3k9HAyo0nLa"
+    "cOOy9XiofdxMEVRH/BXEx8zHOO7l9OHNezHCOwTw8a120NZEHR8CaBfQvcp2qv4cs0uy6IX2"
+    "gdz7JnMGYU0VsoxxEmGQknELRR8iCU8/3xVLwcR7YzWXdEgdqO+Q50xvElxJQo/FhPkmn+fr"
+    "3cSYy7isrFTDb69Ks7soroBs4sUvz5sanGYeIXrs/2tlFecHUAAAAASUVORK5CYII="
 )
 
 

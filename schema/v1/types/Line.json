@@ -1,0 +1,47 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Line.json",
+    "title": "Line",
+    "description": "A line object.",
+    "allOf": [
+        { "$ref": "Object.json" },
+        {
+            "properties": {
+                "mode": {
+                    "description": "Specify the object type to a Line type.",
+                    "type": "string",
+                    "enum": [ "line" ]
+                },
+                "origin": {
+                    "description": "The origin of the line on the array in [row, col] in normalized coordinates (0-1).",
+                    "type": "array"
+                },
+                "velocity": {
+                    "description": "The velocity of the line in pixels per seconds in [row, col] order.",
+                    "type": "array"
+                },
+                "epoch": {
+                    "description": "The epoch time offset in seconds. Zero sets the start of the line at the start of exposure time.",
+                    "$ref": "TimeDelta.json",
+                    "default": 0
+                }
+            },
+            "required": [ "mode", "origin", "velocity" ]
+        }
+    ],
+    "examples": [
+        {
+            "mode": "line",
+            "origin": [
+                { "$sample": "random.uniform", "low": 0.1, "high": 0.9 },
+                { "$sample": "random.uniform", "low": 0.1, "high": 0.9 }
+            ],
+            "velocity": [
+                { "$sample": "random.uniform", "low": -0.5, "high": 0.5 },
+                { "$sample": "random.uniform", "low": -0.5, "high": 0.5 }
+            ],
+            "mv": 
+                { "$sample": "random.uniform", "low": 5.0, "high": 20.0 }
+        }        
+    ]
+}

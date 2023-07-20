@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/TimeDelta.json",
+    "title": "TimeDelta",
+    "description": "Time format as an array of 6 numbers: [year, month, day, hour, minute, second] or delta seconds from simulation time.",
+    "oneOf": [
+        { "$ref": "Time.json" },
+        {
+            "type": "number",
+            "description": "Delta seconds from start of exposure time."
+        }
+    ]
+}

@@ -1,0 +1,45 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Observation.json",
+    "title": "Observation",
+    "description": "Creates an angles only observation object. Range is determined by track object.",
+    "allOf": [
+        { "$ref": "Object.json" },
+        {
+            "properties": {
+                "mode": {
+                    "description": "Specify the object type to a observation.",
+                    "type": "string",
+                    "enum": ["observation"]
+                },
+                "ra": {
+                    "description": "Right ascension of the observation in degrees.",
+                    "type": "number"
+                },
+                "dec": {
+                    "description": "Declination of the observation in degrees.",
+                    "type": "number"
+                },
+                "time": {
+                    "description": "Time of the observation.",
+                    "$ref": "Time.json"
+                },
+                "range": {
+                    "description": "Range of the observation in km.",
+                    "type": "number"
+                }
+            },
+            "required": ["mode", "ra", "dec", "time"]
+        }
+    ],
+    "examples": [
+        {
+            "mode": "observation",
+            "name": "obs1",
+            "ra": 212.1945150081457,
+            "dec": 31.783670282807904,
+            "time": [2023, 6, 20, 3, 41, 7.77],
+            "mv": 5.0
+        }
+    ]
+}

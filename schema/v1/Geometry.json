@@ -1,0 +1,274 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/Geometry.json",
+    "title": "Geometry",
+    "description": "Describes the scene geometry.",
+    "type": "object",
+    "properties": {
+        "time": {
+            "description": "Start time of simulation and exposure.",
+            "$ref": "types/Time.json"
+        },
+        "site": {
+            "description": "The observing site.",
+            "type": "object",
+            "properties": {
+                "lat": {
+                    "description": "The latitude of the site.",
+                    "type": "string",
+                    "examples": [
+                        "20.746111 N"
+                    ]
+                },
+                "lon": {
+                    "description": "The longitude of the site.",
+                    "type": "string",
+                    "examples": [
+                        "156.256111 W"
+                    ]
+                },
+                "alt": {
+                    "description": "The altitude of the site in km.",
+                    "$ref": "types/Float.json"
+                },
+                "gimbal": {
+                    "mode": {
+                        "description": "The gimbal mode.",
+                        "type": "string",
+                        "enum": ["wcs"]
+                    },
+                    "rotation": {
+                        "description": "The field rotation of the gimbal.",
+                        "$ref": "types/Float.json"
+                    }
+                },
+                "track": {
+                    "oneOf": [
+                        {
+                            "description": "Track a TLE SGP4 orbit.",
+                            "properties": {
+                                "mode": {
+                                    "description": "The track mode.",
+                                    "type": "string",
+                                    "enum": ["rate", "sidereal"]
+                                },
+                                "tle": {
+                                    "description": "The TLE SGP4 orbit as an array.",
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "tle1": {
+                                    "description": "The first line of the TLE SGP4 orbit.",
+                                    "type": "string"
+                                },
+                                "tle2": {
+                                    "description": "The second line of the TLE SGP4 orbit.",
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["mode"]
+                        },
+                        {
+                            "description": "Track a two body state vector.",
+                            "properties": {
+                                "mode": {
+                                    "description": "The track mode.",
+                                    "type": "string",
+                                    "enum": ["rate", "sidereal"]
+                                },
+                                "position": {
+                                    "description": "The ECI position of the two body orbit in km.",
+                                    "type": "array"
+                                },
+                                "velocity": {
+                                    "description": "The ECI velocity of the two body orbit in km/sec.",
+                                    "type": "array"
+                                },
+                                "epoch": {
+                                    "description": "The epoch of the two body orbit.",
+                                    "$ref": "types/TimeDelta.json"
+                                }
+                            },
+                            "required": ["mode", "position", "velocity", "epoch"]
+                        },
+                        {
+                            "description": "Fixed gimbal.",
+                            "properties": {
+                                "mode": {
+                                    "description": "The track mode.",
+                                    "type": "string",
+                                    "enum": ["fixed"]
+                                },
+                                "az": {
+                                    "description": "The start and stop azimuth of the fixed observer.",
+                                    "oneOf": [
+                                        {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "types/Float.json"
+                                            }
+                                        },
+                                        {
+                                            "$ref": "types/Float.json"
+                                        }
+                                    ]
+                                },
+                                "el": {
+                                    "description": "The start and stop elevation of the fixed observer.",
+                                    "oneOf": [
+                                        {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "types/Float.json"
+                                            }
+                                        },
+                                        {
+                                            "$ref": "types/Float.json"
+                                        }
+                                    ]
+                                }
+                            },
+                            "required": ["mode", "az", "el"]
+                        }
+                    ]
+                },                
+                "czml": {
+                    "description": "CZML output options.",
+                    "type": "object",
+                    "properties": {
+                        "label_show": {
+                            "description": "Show the name of object.",
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "cone_show": {
+                            "description": "Show view cone.",
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "cone_color": {
+                            "description": "Color of the view cone as [R, G, B, A].",
+                            "type": "array",
+                            "default": [255, 255, 0, 64]
+                        },
+                        "billboard_show": {
+                            "description": "Show billboard of object.",
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "billboard_image": {
+                            "description": "Base64 image of the billboard.",
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "stars": {
+            "properties": {
+                "mode": {
+                    "description": "The star mode.",
+                    "type": "string",
+                    "enum": ["sstr7", "csv", "bins", "none"]
+                },
+                "path": {
+                    "description": "The path to the star catalog is `mode` is `sstr7` or `csv`.",
+                    "type": "string"
+                },
+                "motion": {
+                    "description": "Injects artificial star motion.",
+                    "properties": {
+                        "mode": {
+                            "description": "The star motion mode. If `none`, use site geometry",
+                            "type": "string",
+                            "enum": ["affine", "affine-polar", "none"]
+                        },
+                        "rotation": {
+                            "description": "The star rotation in degrees from center of image.",
+                            "$ref": "types/Float.json"
+                        },
+                        "translation": {
+                            "description": "The star translation in pix/sec x and y in the FPA of mode is `affine`, or in degrees theta and pix/sec magnitude if mode is `affine-polar`.",
+                            "type": "array",
+                            "items": {
+                                "$ref": "types/Float.json"
+                            }
+                        }
+                    }
+                },
+                "mv": {
+                    "description": "The star brightness density bins if mode is `bins`.",
+                    "properties": {
+                        "bins": {
+                            "description": "The star brightness density bin boundaries.",
+                            "type": "array",
+                            "items": {
+                                "type": "number"
+                            }
+                        },
+                        "density": {
+                            "description": "The star brightness density for each bin.",
+                            "$ref": "types/Array.json"
+                        }
+                    }
+                }
+            },
+            "required": ["mode"],
+            "examples": [
+                {
+                    "mode": "sstr7",
+                    "path": "/workspace/share/sstrc7",
+                    "motion": { "mode": "none" }
+                },
+                {
+                    "mode": "bins",
+                    "mv": {
+                        "$import": "../common/sky_density_bins.json"
+                    },
+                    "motion": {
+                        "mode": "affine-polar",
+                        "rotation":
+                            { "$sample": "random.uniform", "low": -0.001, "high": 0.001 },
+                        "translation": [
+                            { "$sample": "random.uniform", "low": 0, "high": 360 },
+                            { "$sample": "random.uniform", "low": 5.0, "high": 15.0 }
+                        ]
+                    }
+                }
+            ]
+        },
+        "obs": {
+            "oneOf": [
+                { "$ref": "generators/Generator.json" },
+                {
+                    "title": "List",
+                    "properties": {
+                        "mode": {
+                            "description": "The obs simulation mode.",
+                            "type": "string",
+                            "enum": ["list"]
+                        },
+                        "list": {
+                            "type": ["array", "object"],
+                            "items": {
+                                "anyOf": [
+                                    { "$ref": "types/Line.json" },
+                                    { "$ref": "types/LinePolar.json" },
+                                    { "$ref": "types/Tle.json" },
+                                    { "$ref": "types/StateVector.json" },
+                                    { "$ref": "types/GreatCircle.json" },
+                                    { "$ref": "types/Observation.json" },
+                                    { "$ref": "types/Ephemeris.json" }
+                                ]
+                            }
+                        }
+                    },
+                    "required": ["mode", "list"]
+                }
+            ]
+        }
+    },
+    "required": ["obs", "stars"]
+}

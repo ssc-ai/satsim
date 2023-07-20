@@ -1,0 +1,45 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/generators/Sample.json",
+    "title": "Sample",
+    "description": "The base schema for a property that can be randomly sampled.",
+    "type": "object",
+    "properties": {
+        "$sample": {
+            "description": "The numpy random sample function name.",
+            "type": "string"
+        }
+    },
+    "required": ["$sample"],
+    "examples": [
+        { "$sample": "random.uniform", "low": -0.001, "high": 0.001 },
+        { "$sample": "random.randint", "low": 0, "high": 15 },
+        { "$sample": "random.normal", "loc": 0, "scale": 0.001 },
+        {
+            "$sample": "random.list",
+            "length":
+                { "$sample": "random.randint", "low": 0, "high": 15 },
+            "value": {
+                "mode": "line-polar",
+                "origin": [
+                    { "$sample": "random.uniform", "low": 0.05, "high": 0.95 },
+                    { "$sample": "random.uniform", "low": 0.05, "high": 0.95 }
+                ],
+                "velocity": [
+                    { "$sample": "random.uniform", "low": 0, "high": 360 },
+                    { "$sample": "random.uniform", "low": 0, "high": 0.35 }
+                ],
+                "mv":
+                    { "$sample": "random.uniform", "low": 9.0, "high": 20.0 }
+            }
+        },
+        {
+            "$sample": "random.choice",
+            "choices": [
+                { "exposure": 1.0, "gap": 2.5 },
+                { "exposure": 3.0, "gap": 2.5 },
+                { "exposure": 5.0, "gap": 2.5 }
+            ]
+        }        
+    ]
+}

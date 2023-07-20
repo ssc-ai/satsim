@@ -1,0 +1,74 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/generators/Pipeline.json",
+    "title": "Pipeline",
+    "description": "The base schema for a property that runs multiple python functions to generate compatible data.",
+    "type": "object",
+    "properties": {
+        "$pipeline": {
+            "description": "A list of functions to call.",
+            "type": "array",
+            "items": {
+                "properties": {
+                    "module": {
+                        "description": "The module to import.",
+                        "type": "string"
+                    },
+                    "function": {
+                        "description": "The function to call.",
+                        "type": "string"
+                    },
+                    "kwargs": {
+                        "description": "The keyword arguments to pass to the function.",
+                        "type": "object"
+                    }
+                },
+                "required": ["module", "function", "kwargs"]
+            }
+        }
+    },
+    "required": ["$pipeline"],
+    "examples": [
+        {
+            "$pipeline": [
+                {
+                    "module": "satsim.pipeline",
+                    "function": "poly",
+                    "kwargs": {
+                        "coef": [0, 1]
+                    }
+                },
+                {
+                    "module": "satsim.pipeline",
+                    "function": "sin",
+                    "kwargs": {
+                        "freq": { "$sample": "random.uniform", "low": 0.1, "high": 5.0 }
+                    }
+                },
+                {
+                    "module": "satsim.pipeline",
+                    "function": "poly",
+                    "kwargs": {
+                        "coef": [1.5, 12]
+                    }
+                },
+                {
+                    "module": "satsim.pipeline",
+                    "function": "glint",
+                    "kwargs": {
+                        "period": { "$sample": "random.uniform", "low": 0.1, "high": 5.0 },
+                        "magnitude": 7
+                    }
+                },
+                {
+                    "module": "satsim.pipeline",
+                    "function": "glint",
+                    "kwargs": {
+                        "period": { "$sample": "random.uniform", "low": 3.0, "high": 10.0 },
+                        "magnitude": 1
+                    }
+                }
+            ]
+        }           
+    ]
+}

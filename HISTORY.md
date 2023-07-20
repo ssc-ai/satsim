@@ -1,6 +1,15 @@
 History
 =======
 
+0.17.0
+---------------------
+
+* Add JSON schema definitions. See `schema/v1/Document.json` for root schema file.
+* Add observation object type.
+* Add support for cropped sensors.
+* Add altitude to site object. Set site `alt` parameter in km. Default is 0.
+
+
 0.16.0
 ---------------------
 

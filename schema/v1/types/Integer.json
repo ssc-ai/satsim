@@ -1,0 +1,17 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Integer.json",
+    "title": "Integer",
+    "description": "An integer that can be static, randomly sampled, or generated.",
+    "type": ["integer", "object"],
+    "anyOf": [
+        {
+            "description": "A static integer. Will be broadcasted to all elements if target type is an array.",
+            "type": "integer"
+        },
+        { "$ref": "../generators/Sample.json" },
+        { "$ref": "../generators/Function.json" },
+        { "$ref": "../generators/Compound.json" },
+        { "$ref": "../generators/Pipeline.json" }
+    ]
+}

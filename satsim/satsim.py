@@ -19,7 +19,7 @@ from astropy import units as u
 from satsim.math import signal_to_noise_ratio, mean_degrees, diff_degrees, interp_degrees
 from satsim.geometry.transform import rotate_and_translate, apply_wrap_around
 from satsim.geometry.sprite import load_sprite_from_file
-from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch
+from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch, crop
 from satsim.image.psf import gen_gaussian, eod_to_sigma, gen_from_poppy_configuration
 from satsim.image.noise import add_photon_noise, add_read_noise
 from satsim.image.render import render_piecewise, render_full
@@ -31,6 +31,7 @@ from satsim.geometry.sgp4 import create_sgp4
 from satsim.geometry.ephemeris import create_ephemeris_object
 from satsim.geometry.astrometric import create_topocentric, gen_track, get_los, get_los_azel, GreatCircle
 from satsim.geometry.twobody import create_twobody
+from satsim.geometry.observation import create_observation
 from satsim.io.satnet import write_frame, set_frame_annotation, init_annotation
 from satsim.io.image import save_apng
 from satsim.io.czml import save_czml
@@ -129,7 +130,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
     """
     ssp_orig = copy.deepcopy(ssp)
 
-    (num_frames, exposure_time, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype) = _parse_sensor_params(ssp)
+    (num_frames, exposure_time, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width) = _parse_sensor_params(ssp)
 
     dt = datetime.now()
     if set_name is None:
@@ -149,8 +150,8 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
     meta_data = init_annotation(
         'dir.name',
         ['{}.{:04d}.json'.format(set_name,x) for x in range(num_frames)],
-        ssp['fpa']['height'],
-        ssp['fpa']['width'],
+        height,
+        width,
         y_ifov,
         x_ifov)
 
@@ -220,8 +221,17 @@ def _parse_sensor_params(ssp):
     y_ifov = ssp['fpa']['y_fov'] / ssp['fpa']['height']
     x_ifov = ssp['fpa']['x_fov'] / ssp['fpa']['width']
 
-    h_fpa_os = ssp['fpa']['height'] * s_osf
-    w_fpa_os = ssp['fpa']['width'] * s_osf
+    if 'crop' in ssp['fpa']:
+        cp = ssp['fpa']['crop']
+        h_fpa_os = cp['height'] * s_osf
+        w_fpa_os = cp['width'] * s_osf
+        height = cp['height']
+        width = cp['width']
+    else:
+        h_fpa_os = ssp['fpa']['height'] * s_osf
+        w_fpa_os = ssp['fpa']['width'] * s_osf
+        height = ssp['fpa']['height']
+        width = ssp['fpa']['width']
 
     exposure_time = ssp['fpa']['time']['exposure']
 
@@ -232,7 +242,7 @@ def _parse_sensor_params(ssp):
     else:
         a2d_dtype = 'uint16'
 
-    return num_frames, exposure_time, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype
+    return num_frames, exposure_time, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width
 
 
 def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug', with_meta=False, eager=True, num_sets=0):
@@ -524,10 +534,11 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             # note: stars will track horizontally where zenith is pointed up. focal plane rotation is simulated with the `rotation` variable
             star_rot = ssp['geometry']['site']['gimbal']['rotation']
             track_mode = ssp['geometry']['site']['track']['mode']
-            observer = create_topocentric(ssp['geometry']['site']['lat'], ssp['geometry']['site']['lon'])
             astrometrics['lat'] = ssp['geometry']['site']['lat']
             astrometrics['lon'] = ssp['geometry']['site']['lon']
+            astrometrics['alt'] = ssp['geometry']['site'].get('alt', 0)
             astrometrics['track_mode'] = track_mode
+            observer = create_topocentric(astrometrics['lat'], astrometrics['lon'], astrometrics['alt'])
 
             if 'tle' in ssp['geometry']['site']['track']:
                 track = create_sgp4(ssp['geometry']['site']['track']['tle'][0], ssp['geometry']['site']['track']['tle'][1])
@@ -654,7 +665,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     ovrc = [ovrc[0] / y_to_pix * s_osf, ovrc[1] / x_to_pix * s_osf]
                     epoch = o['epoch'] if 'epoch' in o else 0
                     (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch)
-                elif o['mode'] == 'tle' or o['mode'] == 'twobody' or o['mode'] == 'gc' or o['mode'] == 'ephemeris':
+                elif o['mode'] == 'tle' or o['mode'] == 'twobody' or o['mode'] == 'gc' or o['mode'] == 'ephemeris' or o['mode'] == 'observation':
                     if obs_cache[i] is None or updated:
                         if o['mode'] == 'tle':
                             if 'tle' in o:
@@ -670,6 +681,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         elif o['mode'] == 'ephemeris':
                             ts_epoch = time.utc_from_list(o['epoch'])
                             obs_cache[i] = [create_ephemeris_object(o['positions'], o['velocities'], o['seconds_from_epoch'], ts_epoch)]
+                        elif o['mode'] == 'observation':
+                            obs_cache[i] = [create_observation(o['ra'], o['dec'], time.utc_from_list(o['time']), observer, track, o.get('range', None))]
                         else:
                             ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                             obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
@@ -846,11 +859,53 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     else:
                         fpa_digital = fpa_digital + ssp['augment']['image']['post']
 
+                # cropped sensor
+                crop_bg_tf = bg_tf
+                crop_dc_tf = dc_tf
+                crop_rn_tf = rn_tf
+                crop_h_fpa_os = h_fpa_os
+                crop_w_fpa_os = w_fpa_os
+                crop_gain_tf = gain_tf
+                crop_bias_tf = bias_tf
+                if 'crop' in ssp['fpa']:
+                    cp = ssp['fpa']['crop']
+
+                    # crop images
+                    fpa_digital = crop(fpa_digital, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    fpa_conv_targ = crop(fpa_conv_targ, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    fpa_conv_star = crop(fpa_conv_star, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if len(bg_tf.shape) == 2:
+                        crop_bg_tf = crop(bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if len(dc_tf.shape) == 2:
+                        crop_dc_tf = crop(dc_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if len(rn_tf.shape) == 2:
+                        crop_rn_tf = crop(rn_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    fpa_conv_noise = crop(fpa_conv_noise, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    fpa_conv = crop(fpa_conv, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    rn_gt = crop(rn_gt, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if len(gain_tf.shape) == 2:
+                        crop_gain_tf = crop(gain_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if len(bias_tf.shape) == 2:
+                        crop_bias_tf = crop(bias_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+
+                    # update star positions
+                    r_stars_os = r_stars_os - cp['height_offset'] * s_osf
+                    c_stars_os = c_stars_os - cp['width_offset'] * s_osf
+                    crop_h_fpa_os = cp['height'] * s_osf
+                    crop_w_fpa_os = cp['width'] * s_osf
+
+                    # update target positions
+                    for opp in obs_os_pix:
+                        opp['rr'] = opp['rr'] - cp['height_offset'] * s_osf
+                        opp['cc'] = opp['cc'] - cp['width_offset'] * s_osf
+                        opp['rrr'] = opp['rrr'] - cp['height_offset']
+                        opp['rcc'] = opp['rcc'] - cp['width_offset']
+
                 if ssp['sim']['star_annotation_threshold'] is not False:
                     pes_stars_os = pe_stars_os / exposure_time
                     star_os_pix = {
-                        'h': h_fpa_os,
-                        'w': w_fpa_os,
+                        'h': crop_h_fpa_os,
+                        'w': crop_w_fpa_os,
                         'h_pad': h_pad_os_div2,
                         'w_pad': w_pad_os_div2,
                         'rr': r_stars_os,
@@ -870,12 +925,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     ground_truth = OrderedDict()
                     ground_truth['target_pe'] = fpa_conv_targ.numpy()
                     ground_truth['star_pe'] = fpa_conv_star.numpy()
-                    ground_truth['background_pe'] = bg_tf.numpy()
-                    ground_truth['dark_current_pe'] = dc_tf.numpy()
+                    ground_truth['background_pe'] = crop_bg_tf.numpy()
+                    ground_truth['dark_current_pe'] = crop_dc_tf.numpy()
                     ground_truth['photon_noise_pe'] = (fpa_conv_noise - fpa_conv).numpy()
                     ground_truth['read_noise_pe'] = rn_gt.numpy()
-                    ground_truth['gain'] = gain_tf.numpy()
-                    ground_truth['bias_pe'] = bias_tf.numpy()
+                    ground_truth['gain'] = crop_gain_tf.numpy()
+                    ground_truth['bias_pe'] = crop_bias_tf.numpy()
                 else:
                     ground_truth = None
 
@@ -905,6 +960,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         pickle.dump([r_stars_os.numpy(), c_stars_os.numpy(), pe_stars_os.numpy(), t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os], picklefile)
 
                 if with_meta:
-                    yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth, star_os_pix
+                    yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, crop_bg_tf, crop_dc_tf, crop_rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth, star_os_pix
                 else:
                     yield fpa_digital

@@ -1,0 +1,16 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Array.json",
+    "title": "Array",
+    "description": "A list of numbers that can be static, randomly sampled, or generated.",
+    "anyOf": [
+        {
+            "description": "An array.",
+            "type": ["array"]
+        },
+        { "$ref": "../generators/Sample.json" },
+        { "$ref": "../generators/Function.json" },
+        { "$ref": "../generators/Compound.json" },
+        { "$ref": "../generators/Pipeline.json" }
+    ]
+}

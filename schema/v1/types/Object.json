@@ -1,0 +1,100 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Object.json",
+    "title": "Object",
+    "description": "Common properties for obs objects.",
+    "type": ["object"],
+    "oneOf": [
+        {
+            "required": ["mv"]
+        },
+        {
+            "required": ["pe"]
+        }
+    ],
+    "properties": {
+        "name": {
+            "description": "Name of the object.",
+            "type": "string"
+        },
+        "mv": {
+            "description": "The brightness of the object in visual magnitude.",
+            "$ref": "Float.json"
+        },
+        "pe": {
+            "description": "The brightness of the object in photoelectrons per second.",
+            "$ref": "Float.json"
+        },
+        "offset": {
+            "description": "The offset in of the object in pixels, [row, column].",
+            "type": "array"
+        },
+        "events": {
+            "type": "object",
+            "properties": {
+                "create": {
+                    "description": "The time to create the object.",
+                    "$ref": "TimeDelta.json"
+                },
+                "delete": {
+                    "description": "The time to delete the object.",
+                    "$ref": "TimeDelta.json"
+                },
+                "update": {
+                    "description": "An array of times and values to update the object.",
+                    "type": "array",
+                    "items": [
+                        {
+                            "time": {
+                                "$ref": "TimeDelta.json",
+                                "description": "The time to update the object."
+                            },
+                            "values": {
+                                "type": "object",
+                                "description": "The values to update the object."
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "czml": {
+            "description": "CZML output options.",
+            "type": "object",
+            "properties": {
+                "label_show": {
+                    "description": "Show the name of object.",
+                    "type": "boolean",
+                    "default": false
+                },
+                "path_show": {
+                    "description": "Show path of object.",
+                    "type": "boolean",
+                    "default": true
+                },
+                "path_color": {
+                    "description": "Color of the path as [R, G, B].",
+                    "type": "array",
+                    "default": [255, 255, 0]
+                },
+                "billboard_show": {
+                    "description": "Show billboard of object.",
+                    "type": "boolean",
+                    "default": true
+                },
+                "billboard_image": {
+                    "description": "Base64 image of the billboard.",
+                    "type": "string"
+                },
+                "start_interval": {
+                    "description": "The start time of the interval. Default is the simulation start time.",
+                    "$ref": "Time.json"
+                },
+                "end_interval": {
+                    "description": "The end time of the interval. Default is the simulation end time.",
+                    "$ref": "Time.json"
+                }
+            }
+        }
+    }
+}

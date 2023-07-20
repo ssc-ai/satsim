@@ -68,7 +68,7 @@ def gen_sample(type='uniform', seed=None, negate=0.0, **kwargs):
         return f(**kwargs)
 
 
-def lognormal(mu=1.0, sigma=1.0, size=1, mu_mode='median'):
+def lognormal(mu=1.0, sigma=1.0, size=1, mu_mode='median', seed=None):
     """ Draw samples from a log-normal distribution. Draw samples from a log-normal
     distribution with specified mean, standard deviation, and array shape. Note that
     the mean and standard deviation are the values for the distribution itself.
@@ -77,6 +77,8 @@ def lognormal(mu=1.0, sigma=1.0, size=1, mu_mode='median'):
         mu: `float`, Mean or median value of log normal distribution
         sigma: `float`, Standard deviation of the log normal distribution, valid for `mu_mode` == `mean`
         size: `int` or `tuple of ints`, Output shape
+        mu_mode: `string`, `mean` or `median`
+        seed: `int`, Seed for the random number generator
 
     Returns:
         A `ndarray` or `scalar`, the drawn samples from log-normal distribution
@@ -86,6 +88,8 @@ def lognormal(mu=1.0, sigma=1.0, size=1, mu_mode='median'):
     else:
         lmu = np.log(mu)
 
+    rng = np.random.RandomState(seed)
+
     lsigma = np.sqrt(np.log(1 + (sigma * sigma) / (mu * mu)))
 
-    return np.random.lognormal(lmu, lsigma, size)
+    return rng.lognormal(lmu, lsigma, size)

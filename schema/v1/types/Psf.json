@@ -1,0 +1,79 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Psf.json",
+    "title": "Psf",
+    "description": "A point spread function (PSF) is the response of an imaging system to a point source or point object.",
+    "type": ["object"],
+    "oneOf": [
+        {
+            "description": "A Gaussian PSF.",
+            "properties": {
+                "mode": {
+                    "const": "gaussian"
+                },
+                "eod": {
+                    "description": "The energy on detector or ensquared energy from 0.0-1.0 of the gaussian. This is the fraction of the total energy in the PSF that falls within a single pixel when centered.",
+                    "$ref": "Float.json"
+                }
+            },
+            "required": ["mode", "eod"],
+            "examples": [
+                {
+                    "mode": "gaussian",
+                    "eod": 0.8
+                }
+            ]
+        },
+        {
+            "description": "A POPPY PSF.",
+            "properties": {
+                "mode": {
+                    "const": "poppy"
+                },
+                "optical_system": {
+                    "description": "The POPPY optical system.",
+                    "type": "array",
+                    "items": {
+                        "description": "POPPY optical object in JSON form.",
+                        "type": "object"
+                    }
+                },
+                "wavelengths": {
+                    "description": "The wavelengths to model in meters.",
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "weights": {
+                    "description": "The weights of the modeled wavelengths to be scaled.",
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                }
+            },
+            "required": ["mode", "optical_system", "wavelengths", "weights"],
+            "examples": [
+                {
+                    "mode": "poppy",
+                    "optical_system": [
+                        {
+                            "type": "CompoundAnalyticOptic",
+                            "opticslist": [
+                                {
+                                    "type": "CircularAperture",
+                                    "kwargs": {
+                                        "radius": 0.0015
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "wavelengths": [400e-9],
+                    "weights": [1.0]
+                }                
+            ]
+        }
+    ]
+}

@@ -41,6 +41,14 @@ satsim.geometry.ephemeris module
    :undoc-members:
    :show-inheritance:
 
+satsim.geometry.observation module
+----------------------------------
+
+.. automodule:: satsim.geometry.observation
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.geometry.random module
 -----------------------------
 

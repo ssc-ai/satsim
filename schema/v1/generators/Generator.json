@@ -1,0 +1,59 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/generators/Generator.json",
+    "title": "Generator",
+    "description": "The base schema for a property that runs a python function to generate compatible JSON.",
+    "type": "object",
+    "properties": {
+        "$generator": {
+            "description": "The module, function and kwargs.",
+            "type": "object",
+            "properties": {
+                "module": {
+                    "description": "The module containing the function.",
+                    "type": "string"
+                },
+                "function": {
+                    "description": "The function to call.",
+                    "type": "string"
+                },
+                "kwargs": {
+                    "description": "The kwargs to pass to the function.",
+                    "type": "object"
+                }
+            },
+            "required": ["module", "function", "kwargs"]
+        }
+    },
+    "required": ["$generator"],
+    "examples": [
+        {
+            "$generator": {
+                "module": "satsim.generator.obs.breakup",
+                "function": "collision_from_tle",
+                "kwargs": {
+                    "n": [250, 5],
+                    "tle": [
+                        "1 19046U 88032B   23017.86907359  .00005207  00000+0  36932-3 0  9990", 
+                        "2 19046  97.4038  12.6035 0034832 225.9729 133.8626 15.04685745878845"
+                    ],
+                    "collision_time": {
+                        "$ref": "geometry.time"
+                    },
+                    "collision_time_offset": -1800.0,
+                    "K": 0.25,
+                    "attack_angle": "random",
+                    "attack_velocity_scale": 0.1,
+                    "radius": 30.0,
+                    "target_mv": 1.0,
+                    "rpo_mv": 15.0,
+                    "target_mv_scale": [0.5, 4.0],
+                    "rpo_mv_scale": [0.5, 4.0],
+                    "offset": [0, 0],
+                    "variable_brightness": false,
+                    "scale_fragment_velocity": true
+                }
+            }            
+        }
+    ]
+}

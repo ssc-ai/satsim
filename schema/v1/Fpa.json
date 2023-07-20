@@ -1,0 +1,99 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/Fpa.json",
+    "title": "Fpa",
+    "description": "The focal plane array parameters.",
+    "type": "object",
+    "properties": {
+        "height": {
+            "description": "The height of the focal plane array.",
+            "$ref": "types/Integer.json"
+        },
+        "width": {
+            "description": "The width of the focal plane array.",
+            "$ref": "types/Integer.json"
+        },
+        "y_fov": {
+            "description": "The field of view in degrees in the y direction.",
+            "$ref": "types/Float.json"
+        },
+        "x_fov": {
+            "description": "The field of view in degrees in the x direction.",
+            "$ref": "types/Float.json"
+        },
+        "dark_current": {
+            "description": "The dark current of the focal plane array.",
+            "$ref": "types/Float.json"
+        },
+        "gain": {
+            "description": "The gain of the focal plane array.",
+            "$ref": "types/Float.json"
+        },
+        "bias": {
+            "description": "The bias of the focal plane array.",
+            "$ref": "types/Float.json"
+        },
+        "zeropoint": {
+            "description": "The zeropoint of the instrument.",
+            "$ref": "types/Float.json"
+        },
+        "a2d": {
+            "description": "The analog to digital conversion factor.",
+            "type": "object",
+            "properties": {
+                "response": {
+                    "description": "The response of the analog to digital conversion. Default is `linear`",
+                    "type": "string"
+                },
+                "fwc": {
+                    "description": "The full well capacity of the analog to digital conversion.",
+                    "$ref": "types/Integer.json"
+                },
+                "gain": {
+                    "description": "The gain of the analog to digital conversion.",
+                    "$ref": "types/Float.json"
+                },
+                "bias": {
+                    "description": "The offset of the analog to digital conversion.",
+                    "$ref": "types/Float.json"
+                }
+            }
+        },
+        "noise": {
+            "description": "The noise of the focal plane array.",
+            "type": "object",
+            "properties": {
+                "read": {
+                    "description": "The readout noise of the focal plane array.",
+                    "$ref": "types/Float.json"
+                },
+                "electronic": {
+                    "description": "The electronic noise of the focal plane array.",
+                    "$ref": "types/Float.json"
+                }
+            }
+        },
+        "psf": {
+            "description": "The point spread function of the focal plane array.",
+            "$ref": "types/Psf.json"
+        },
+        "time": {
+            "description": "The time of the focal plane array.",
+            "type": "object",
+            "properties": {
+                "exposure": {
+                    "description": "The exposure time in seconds.",
+                    "$ref": "types/Float.json"
+                },
+                "gap": {
+                    "description": "The read out time or gap between frames in seconds.",
+                    "$ref": "types/Float.json"
+                }
+            }
+        },
+        "num_frames": {
+            "description": "The number of frames of the focal plane array.",
+            "$ref": "types/Integer.json"
+        }
+    }
+}
