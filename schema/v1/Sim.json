@@ -1,0 +1,135 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/Sim.json",
+    "title": "Sim",
+    "description": "Describes the simulation configuration parameters.",
+    "type": "object",
+    "properties": {
+        "mode": {
+            "description": "The rendering mode. `none` disables rendering. `fftconv2p` uses 2D FFT convolution renderer.",
+            "type": "string",
+            "default": "fftconv2p"
+        },
+        "render_size": {
+            "description": "Specifies to render the images fully or in tiles. This allows for large images that cannot fit in memory. Set to `full` to render images in one piece. Specify tile size [hight, width] to render images in tiles.",
+            "type": [
+                "array",
+                "string"
+            ],
+            "default": "full"
+        },
+        "spacial_osf": {
+            "description": "The spacial oversampling factor. Note reduce this value to speed up rendering or fix out of memory errors. Should be an odd integer.",
+            "type": "integer",
+            "minimum": 1
+        },
+        "temporal_osf": {
+            "description": "The temporal oversampling factor.",
+            "type": [
+                "integer",
+                "string"
+            ],
+            "minimum": 1,
+            "default": "auto"
+        },
+        "padding": {
+            "description": "The image padding amount in pixels. This allows for objects to be rendered outside the image bounds.",
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+        },
+        "samples": {
+            "description": "The number of samples to simulate.",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+        },
+        "star_render_mode": {
+            "description": "The star rendering mode. `fft` uses FFT convolution renderer and all stars will have save the same streak shape. `transform` uses discrete transform renderer. `transform` is more computationally expensive with many stars.",
+            "type": "string",
+            "default": "fftconv2p"
+        },
+        "show_obs_boxes": {
+            "description": "Show observation boxes in annotated images.",
+            "type": "boolean",
+            "default": true
+        },
+        "show_star_boxes": {
+            "description": "Show star boxes in annotated images.",
+            "type": "boolean",
+            "default": false
+        },
+        "enable_shot_noise": {
+            "description": "Enable shot noise.",
+            "type": "boolean",
+            "default": true
+        },
+        "num_shot_noise_samples": {
+            "description": "The number of shot noise samples to average. This provides shot noise statistics similar to averaging multiple images.",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+        },
+        "star_catalog_query_mode": {
+            "description": "The star catalog query mode. `at_start` queries the catalog only for the first frame. `frame` queries the catalog for each frame.",
+            "type": "string",
+            "default": "frame"
+        },
+        "apply_star_wrap_around": {
+            "description": "Apply star wrap around.",
+            "type": "boolean",
+            "default": true
+        },
+        "num_target_samples": {
+            "description": "The number of target positions to sample. 2 produces a straight line and 3 produces a quadratic curve.",
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 3,
+            "default": 3
+        },
+        "calculate_snr": {
+            "description": "Calculate the SNR for each target pixel. This is a computationally expensive operation.",
+            "type": "boolean",
+            "default": true
+        },
+        "save_jpeg": {
+            "description": "Save annotated images as JPEG.",
+            "type": "boolean",
+            "default": true
+        },
+        "save_movie": {
+            "description": "Save annotate movie as animated PNG.",
+            "type": "boolean",
+            "default": true
+        },
+        "save_czml": {
+            "description": "Save CZML file for 3D visualization in Cesium.",
+            "type": "boolean",
+            "default": true
+        },
+        "save_ground_truth": {
+            "description": "Save ground truth image data.",
+            "type": "boolean",
+            "default": true
+        },
+        "star_annotation_threshold": {
+            "description": "The star annotation threshold. This is the minimum visual magnitude for a star to be annotated. `false` disables star annotation.",
+            "type": [
+                "number",
+                "boolean"
+            ],
+            "default": false
+        },
+        "save_pickle": {
+            "description": "Save intermediate data as pickle files for debugging.",
+            "type": "boolean",
+            "default": false
+        },
+        "czml_samples": {
+            "description": "The number of object position samples to save in the CZML file.",
+            "type": "integer",
+            "minimum": 1,
+            "default": 10
+        }
+    }
+}

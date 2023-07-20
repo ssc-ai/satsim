@@ -1,0 +1,47 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/LinePolar.json",
+    "title": "LinePolar",
+    "description": "A line object defined by polar coordinates.",
+    "allOf": [
+        { "$ref": "Object.json" },
+        {
+            "properties": {
+                "mode": {
+                    "description": "Specify the object type to a Line type.",
+                    "type": "string",
+                    "enum": [ "line-polar" ]
+                },
+                "origin": {
+                    "description": "The origin of the line on the array in [row, col] in normalized coordinates (0-1).",
+                    "type": "array"
+                },
+                "velocity": {
+                    "description": "The velocity of the line in degrees and pixel per second [theta, magnitude].",
+                    "type": "array"
+                },
+                "epoch": {
+                    "description": "The epoch time offset in seconds. Zero sets the start of the line at the start of exposure time.",
+                    "$ref": "TimeDelta.json",
+                    "default": 0
+                }
+            },
+            "required": [ "mode", "origin", "velocity" ]
+        }
+    ],
+    "examples": [
+        {
+            "mode": "line-polar",
+            "origin": [
+                { "$sample": "random.uniform", "low": 0.05, "high": 0.95 },
+                { "$sample": "random.uniform", "low": 0.05, "high": 0.95 }
+            ],
+            "velocity": [
+                { "$sample": "random.uniform", "low": 0, "high": 360 },
+                { "$sample": "random.uniform", "low": 0, "high": 0.35 }
+            ],
+            "mv":
+                { "$sample": "random.uniform", "low": 9.0, "high": 20.0 }
+        }
+    ]
+}

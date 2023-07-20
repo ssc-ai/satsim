@@ -1,0 +1,12 @@
+{
+  "name": "satsim-json-schema",
+  "version": "0.0.1",
+  "description": "SatSim JSON Schema",
+  "dependencies": {},
+  "devDependencies": {
+    "ajv": "^6.10.0"
+  },
+  "scripts": {
+    "validate": "node validate.js"
+  }
+}

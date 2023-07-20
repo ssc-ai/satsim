@@ -1,0 +1,91 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Ephemeris.json",
+    "title": "Ephemeris",
+    "description": "Creates an object from a list of ephemeris interpolated with Lagrange polynomials. Interpolated boundaries can be set by enclosing a set in an array",
+    "allOf": [
+        { "$ref": "Object.json" },
+        {
+            "properties": {
+                "mode": {
+                    "description": "Specify the object type to a ephemeris.",
+                    "type": "string",
+                    "enum": ["ephemeris"]
+                },
+                "positions": {
+                    "description": "A list of ECI positions. Add an additional list dimension to represent interpolation boundaries.",
+                    "type": "array",
+                    "items": {
+                        "type": "array"
+                    },
+                    "examples": [
+                        [
+                            [0, 0, 0],
+                            [1, 0, 0],
+                            [2, 0, 0]
+                        ],
+                        [
+                            [[0, 0, 0],
+                            [1, 0, 0],
+                            [2, 0, 0]],
+                            [[2, 0, 0],
+                            [3, 0, 0],
+                            [4, 0, 0]]
+                        ]
+                    ]
+                },
+                "velocities": {
+                    "description": "A list of ECI positions. Add an additional list dimension to represent interpolation boundaries.",
+                    "type": "array",
+                    "items": {
+                        "type": "array"
+                    },
+                    "examples": [
+                        [
+                            [0, 0, 0],
+                            [1, 0, 0],
+                            [2, 0, 0]
+                        ],
+                        [
+                            [[0, 0, 0],
+                            [1, 0, 0],
+                            [2, 0, 0]],
+                            [[2, 0, 0],
+                            [3, 0, 0],
+                            [4, 0, 0]]
+                        ]
+                    ]                    
+                },
+                "epoch": {
+                    "description": "The epoch time of the ephemeris.",
+                    "$ref": "TimeDelta.json"
+                },
+                "seconds_from_epoch": {
+                    "description": "List of seconds from epoch of the ephemeris. An additional dimension can be added to represent interpolation boundaries.",
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    },
+                    "examples": [
+                        [0, 1, 2],
+                        [
+                            [0, 1, 2],
+                            [2, 3, 4]
+                        ]
+                    ]
+                }
+            },
+            "required": ["mode", "positions", "velocities", "epoch", "seconds_from_epoch"]
+        }        
+    ],
+    "examples": [
+        {
+            "mode": "ephemeris",
+            "epoch": [2015, 4, 24, 9, 7, 4.128],
+            "positions": [[-35180.62550265, -23252.99066344, 92.95410805],[-35180.62550265, -23252.99066344, 92.95410805],[-35180.62550265, -23252.99066344, 92.95410805],[-35180.62550265, -23252.99066344, 92.95410805],[-35180.62550265, -23252.99066344, 92.95410805],[-35180.62550265, -23252.99066344, 92.95410805]],
+            "velocities": [[1.69553697, -2.56443628, 1.12318636e-03],[1.69553697, -2.56443628, 1.12318636e-03],[1.69553697, -2.56443628, 1.12318636e-03],[1.69553697, -2.56443628, 1.12318636e-03],[1.69553697, -2.56443628, 1.12318636e-03],[1.69553697, -2.56443628, 1.12318636e-03]],
+            "seconds_from_epoch": [0, 10.0, 20.0, 30.0, 40.0],
+            "mv": 17.0
+        }        
+    ]
+}

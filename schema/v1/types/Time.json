@@ -1,0 +1,16 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Time.json",
+    "title": "Time",
+    "description": "Time format as an array of 6 numbers: [year, month, day, hour, minute, second]",
+    "type": ["array"],
+    "items": {
+        "description": "Time format as an array of 6 numbers: [year, month, day, hour, minute, second]",
+        "type": "number"
+    },
+    "examples": [
+        [2019, 1, 1, 0, 0, 0],
+        [2019, 1, 1, 12, 0, 0],
+        [2019, 1, 1, 23, 59, 59.999999999]
+    ]
+}

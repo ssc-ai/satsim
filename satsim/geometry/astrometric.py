@@ -123,13 +123,14 @@ def load_sun():
     return SATSIM_SUN
 
 
-def create_topocentric(lat, lon):
+def create_topocentric(lat, lon, alt=0):
     """Create a Skyfield topocentric object which represents the location of a
     place on the planet Earth.
 
     Args:
         lat: `string or float`, latitude in degrees
         lon: `string or float`, longitude in degrees
+        alt: `float`, altitude in km
 
     Returns:
         A `Topos` Skyfield object on the planet Earth
@@ -137,7 +138,7 @@ def create_topocentric(lat, lon):
 
     earth = load_earth()
 
-    return earth + Topos(lat, lon)
+    return earth + Topos(lat, lon, elevation_m=alt)
 
 
 def apparent(p, deflection=False, aberration=True):
@@ -582,3 +583,53 @@ def eci_to_ecr(time, ra, dec, roll=0):
     ra = -ra
 
     return ra, dec, roll
+
+
+def eci_to_radec(x, y, z):
+    """Covert ECI coordinates to ra, dec, and distance.
+
+    Args:
+        x: `float`, x coordinate
+        y: `float`, y coordinate
+        z: `float`, z coordinate
+
+    Returns:
+        A `float`, ra, dec and distance in degrees
+    """
+
+    rho2 = x * x + y * y
+    rho = np.sqrt(rho2)
+
+    r = np.sqrt(rho2 + z * z)
+    dec = 0.0 if r == 0.0 else np.arctan2(z, rho)
+    ra = 0.0 if rho == 0.0 else np.arctan2(y, x)
+    if ra < 0.0:
+        ra += np.pi * 2
+
+    return ra * 180 / np.pi, dec * 180 / np.pi, r
+
+
+def radec_to_eci(ra, dec, d=0):
+    """Covert ra, dec, and distance to ECI coordinates.
+
+    Args:
+        ra: `float`, right ascension in degrees
+        dec: `float`, declination in degrees
+        d: `float`, distance
+
+    Returns:
+        A `float`, x, y, and z coordinates
+    """
+
+    ra = ra * np.pi / 180
+    dec = dec * np.pi / 180
+
+    r = 1.0 if d <= 0.0 else d
+
+    rCosTheta = r * np.cos(dec)
+
+    x = rCosTheta * np.cos(ra)
+    y = rCosTheta * np.sin(ra)
+    z = r * np.sin(dec)
+
+    return x, y, z

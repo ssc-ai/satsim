@@ -1,0 +1,31 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/generators/Import.json",
+    "title": "Import",
+    "description": "The base schema for a property that can be imported.",
+    "type": "object",
+    "properties": {
+        "$import": {
+            "description": "Path to JSON file.",
+            "type": "string"
+        },
+        "key": {
+            "description": "Key to import from the JSON file. If not specified, the root document is imported.",
+            "type": "string"
+        },
+        "override": {
+            "description": "Override the imported property with this value.",
+            "type": "object"
+        }
+    },
+    "required": ["$import"],
+    "examples": [
+        {
+            "$import": "../common/random_raven_fpa.json",
+            "key": "fpa",
+            "override": {
+                "num_frames": 10
+            }
+        }
+    ]
+}

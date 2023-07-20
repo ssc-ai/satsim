@@ -1,0 +1,93 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/GreatCircle.json",
+    "title": "GreatCircle",
+    "description": "An object that represents a great circle. Specify either az/el or ra/dec. az/el produces an arc in local coordinates. ra/dec produces an arc in equatorial coordinates.",
+    "allOf": [
+        { "$ref": "Object.json" },
+        {
+            "oneOf": [
+                { 
+                    "properties": {
+                        "mode": {
+                            "description": "Specify the object type to a great circle.",
+                            "enum": ["gc"]
+                        },
+                        "az": {
+                            "description": "The azimuth of the great circle in degrees.",
+                            "$ref": "Float.json"
+                        },
+                        "el": {
+                            "description": "The elevation of the great circle in degrees.",
+                            "$ref": "Float.json"
+                        },
+                        "heading": {
+                            "description": "The heading of the great circle in degrees.",
+                            "$ref": "Float.json"
+                        },
+                        "velocity": {
+                            "description": "The velocity of the great circle in degrees per second.",
+                            "$ref": "Float.json"
+                        },
+                        "epoch": {
+                            "description": "The epoch of the great circle.",
+                            "$ref": "TimeDelta.json"
+                        }
+                    },
+                    "required": ["mode", "az", "el", "heading", "velocity", "epoch"],
+                    "examples": [
+                          {
+                            "mode": "gc",
+                            "az": 132.4785,
+                            "el": 55.9591,
+                            "heading": 30,
+                            "velocity": 0.005,
+                            "epoch": [2015, 4, 24, 9, 7, 44.128],
+                            "mv": 10.0
+                          }        
+                    ]                    
+                },
+                { 
+                    "properties": {
+                        "mode": {
+                            "description": "Specify the object type to a great circle.",
+                            "enum": ["gc"]
+                        },
+                        "ra": {
+                            "description": "The right ascension of the great circle in degrees.",
+                            "$ref": "Float.json"
+                        },
+                        "dec": {
+                            "description": "The declination of the great circle in degrees.",
+                            "$ref": "Float.json"
+                        },
+                        "heading": {
+                            "description": "The heading of the great circle in degrees.",
+                            "$ref": "Float.json"
+                        },
+                        "velocity": {
+                            "description": "The velocity of the great circle in degrees per second.",
+                            "$ref": "Float.json"
+                        },
+                        "epoch": {
+                            "description": "The epoch of the great circle.",
+                            "$ref": "TimeDelta.json"
+                        }
+                    },
+                    "required": ["mode", "ra", "dec", "heading", "velocity", "epoch"],
+                    "examples": [
+                        {
+                            "mode": "gc",
+                            "ra": 216.814501992799,
+                            "dec": -3.372553893077959,
+                            "heading": 0,
+                            "velocity": 0.005,
+                            "epoch": [2015, 4, 24, 9, 7, 44.128],
+                            "mv": 10.0
+                        }        
+                    ]                    
+                }
+            ]
+        }
+    ]
+}

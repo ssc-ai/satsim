@@ -1,0 +1,16 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json",
+    "title": "Float",
+    "description": "A number that can be static, randomly sampled, or generated.",
+    "anyOf": [
+        {
+            "description": "A static number. Will be broadcasted to all elements if target type is an array.",
+            "type": ["number", "integer"]
+        },
+        { "$ref": "../generators/Sample.json" },
+        { "$ref": "../generators/Function.json" },
+        { "$ref": "../generators/Compound.json" },
+        { "$ref": "../generators/Pipeline.json" }
+    ]
+}

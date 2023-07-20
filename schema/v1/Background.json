@@ -1,0 +1,17 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/Background.json",
+    "title": "Background",
+    "description": "Describes a background.",
+    "type": "object",
+    "properties": {
+        "galactic": {
+            "description": "Galactic background in visual magnitude.",
+            "$ref": "types/Float.json"
+        },
+        "stray": {
+            "description": "Stray light model.",
+            "type": "object"
+        }
+    }
+}

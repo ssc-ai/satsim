@@ -219,6 +219,8 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
 
     objs = []
     for r, c, pe, mv in zip(rr, cc, pe_stars_os[mask], m_stars_os[mask]):
+        if np.isnan(r).any() or np.isnan(c).any():
+            continue
         annotation = _annotate_object(height, width, r, c, mv, pe.numpy(), True, box_size, box_pad, "Star", 2)
         if annotation is not None:
             objs.append(annotation)

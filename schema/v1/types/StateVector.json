@@ -1,0 +1,40 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/StateVector.json",
+    "title": "StateVector",
+    "description": "A satellite defined by a state vector.",
+    "allOf": [
+        { "$ref": "Object.json" },
+        {
+            "properties": {
+                "mode": {
+                    "description": "Specify the object type to a two body state vector satellite.",
+                    "type": "string",
+                    "enum": ["twobody"]
+                },
+                "position": {
+                    "description": "The ECI position of the two body orbit in km.",
+                    "type": "array"
+                },
+                "velocity": {
+                    "description": "The ECI velocity of the two body orbit in km/sec.",
+                    "type": "array"
+                },
+                "epoch": {
+                    "description": "The epoch of the two body orbit.",
+                    "$ref": "TimeDelta.json"
+                }
+            },
+            "required": ["mode", "position", "velocity", "epoch"]
+        }    
+    ],
+    "examples": [
+        {
+            "mode": "twobody",
+            "position": [-35180.62550265, -23252.99066344, 92.95410805],
+            "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+            "epoch": [2015, 4, 24, 9, 7, 4.128],
+            "mv": 17.0
+        }        
+    ]
+}

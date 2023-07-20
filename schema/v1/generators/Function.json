@@ -1,0 +1,36 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/generators/Function.json",
+    "title": "Function",
+    "description": "The base schema for a property that runs a python function to generate compatible data.",
+    "type": "object",
+    "properties": {
+        "$function": {
+            "description": "The function to call.",
+            "type": "string"
+        },
+        "module": {
+            "description": "The module containing the function.",
+            "type": "string"
+        },
+        "kwargs": {
+            "description": "The kwargs to pass to the function.",
+            "type": "object"
+        }
+    },
+    "required": ["$function", "module", "kwargs"],
+    "examples": [
+        {
+            "$function": "radial_cos2d",
+            "module": "satsim.image.model",
+            "kwargs": {
+                "height": 512,
+                "width": 512,
+                "y_scale": 0.03,
+                "x_scale": 0.03,
+                "power": 1000,
+                "mult": 50
+            }
+        }
+    ]
+}

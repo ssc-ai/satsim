@@ -1,0 +1,47 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/generators/Compound.json",
+    "title": "Compound",
+    "description": "The base schema for a property that runs multiple python function to generate compatible data and adds them together.",
+    "type": "object",
+    "properties": {
+        "$compound": {
+            "type": "array",
+            "items": {
+                "$ref": "Function.json"
+            }
+        }
+    },
+    "required": ["$compound"],
+    "examples": [
+        {
+            "$compound": [
+                {
+                    "$function": "sin2d",
+                    "module": "satsim.image.model",
+                    "kwargs": {
+                        "height": { "$ref": "fpa.height" },
+                        "width": { "$ref": "fpa.width" },
+                        "amplitude": 50,
+                        "frequency": 12,
+                        "bias": 1000,
+                        "damped": true
+                    }
+                },
+                {
+                    "$function": "sin2d",
+                    "module": "satsim.image.model",
+                    "kwargs": {
+                        "height": { "$ref": "fpa.height" },
+                        "width": { "$ref": "fpa.width" },
+                        "amplitude": 2,
+                        "frequency": 12,
+                        "bias": 10,
+                        "damped": false,
+                        "direction": 60
+                    }
+                }
+            ]
+        }
+    ]
+}

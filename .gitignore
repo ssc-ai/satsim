@@ -120,3 +120,6 @@ lprof0
 *.prof
 examples/*/**/images*
 .satsim_cache
+
+# npm
+node_modules/

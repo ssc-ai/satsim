@@ -1,0 +1,68 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Tle.json",
+    "title": "Tle",
+    "description": "A satellite defined by a two line element (TLE) set.",
+    "allOf": [
+        { "$ref": "Object.json" },
+        {
+            "oneOf": [
+                {
+                    "properties": {
+                        "mode": {
+                            "description": "Specify the object type to a SGP4 satellite.",
+                            "type": "string",
+                            "enum": ["tle"]
+                        },
+                        "tle": {
+                            "description": "The TLE SGP4 orbit as an array.",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": ["mode", "tle"],
+                    "examples": [
+                        {
+                            "mode": "tle",
+                            "name": "ISS (ZARYA)",
+                            "tle": [
+                                "1 25544U 98067A   20265.51736111  .00000865  00000-0  24091-4 0  9999",
+                                "2 25544  51.6443  72.9999 0001408  96.7431  17.2764 15.49397403246554"
+                            ],
+                            "mv": 10.0
+                        }
+                    ]                
+                },
+                {
+                    "properties": {
+                        "mode": {
+                            "description": "Specify the object type to a SGP4 satellite.",
+                            "type": "string",
+                            "enum": ["tle"]
+                        },
+                        "tle1": {
+                            "description": "The first line of the TLE SGP4 orbit.",
+                            "type": "string"
+                        },
+                        "tle2": {
+                            "description": "The second line of the TLE SGP4 orbit.",
+                            "type": "string"
+                        }
+                    },
+                    "required": ["mode", "tle1", "tle2"],
+                    "examples": [
+                        {
+                            "mode": "tle",
+                            "name": "ISS (ZARYA)",
+                            "tle1": "1 25544U 98067A   20265.51736111  .00000865  00000-0  24091-4 0  9999",
+                            "tle2": "2 25544  51.6443  72.9999 0001408  96.7431  17.2764 15.49397403246554",
+                            "mv": 10.0
+                        }
+                    ]                
+                }
+            ]            
+        }
+    ]
+}
