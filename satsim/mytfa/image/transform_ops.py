@@ -15,9 +15,9 @@
 """Image transform ops."""
 
 import tensorflow as tf
-from tensorflow_addons.image import utils as img_utils
-from tensorflow_addons.utils.types import TensorLike
-from tensorflow_addons.image.utils import wrap, unwrap
+from satsim.mytfa.image import utils as img_utils
+from satsim.mytfa.utils.types import TensorLike
+from satsim.mytfa.image.utils import wrap, unwrap
 
 from typing import Optional
 

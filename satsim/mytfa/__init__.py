@@ -22,7 +22,7 @@
 # Local project imports
 #from tensorflow_addons import activations
 #from tensorflow_addons import callbacks
-from tensorflow_addons import image
+from satsim.mytfa import image
 #from tensorflow_addons import layers
 #from tensorflow_addons import losses
 #from tensorflow_addons import metrics
@@ -32,6 +32,6 @@ from tensorflow_addons import image
 #from tensorflow_addons import text
 #from tensorflow_addons import options
 #from tensorflow_addons.register import register_all
-from tensorflow_addons.utils import types
+from satsim.mytfa.utils import types
 
 #from tensorflow_addons.version import __version__

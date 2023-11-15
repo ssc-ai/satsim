@@ -15,9 +15,9 @@
 """Image translate ops."""
 
 import tensorflow as tf
-from tensorflow_addons.image.transform_ops import transform
-from tensorflow_addons.image.utils import wrap, unwrap
-from tensorflow_addons.utils.types import TensorLike
+from satsim.mytfa.image.transform_ops import transform
+from satsim.mytfa.image.utils import wrap, unwrap
+from satsim.mytfa.utils.types import TensorLike
 
 from typing import Optional
 
