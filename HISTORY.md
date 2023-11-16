@@ -1,6 +1,13 @@
 History
 =======
 
+0.17.1
+---------------------
+
+* Copy useful TensorFlow Addon (TFA) functions into `tfa` as the TFA project is no longer maintained.
+* Copy tests.
+
+
 0.17.0
 ---------------------
 
