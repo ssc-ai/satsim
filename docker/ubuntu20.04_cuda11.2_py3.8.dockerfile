@@ -1,5 +1,5 @@
-#FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
-FROM nvidia/cuda@sha256:bdfbf44c08855938e4396baac3cc6e28546aa16b45a70bac4fb20621d9867cf1
+#FROM nvidia/cuda:11.2.2-cudnn8-runtime-ubuntu20.04
+FROM nvidia/cuda@sha256:081a31f56decc6c460df1808ed1c4867fb30b0fbfa8929258b10e3e5d6dc1a2e
 LABEL maintainer="Alexander Cabello <alexander.cabello@algoritics.com>"
 
 # install prereqs
@@ -14,7 +14,6 @@ RUN set -ex; \
     unzip \
     vim \
     libnvinfer8=8.0.0-1+cuda11.0 \
-    libnvinfer-dev=8.0.0-1+cuda11.0 \
     libnvinfer-plugin8=8.0.0-1+cuda11.0
 
 # configure locale
@@ -31,7 +30,7 @@ RUN pip3 --no-cache-dir install tensorflow~=2.11.0
 ENV SATSIM_VERSION='0.17.1'
 COPY dist/satsim-0.17.1-py2.py3-none-any.whl /tmp
 
-# install satsim wheel file togther with jupyterlab so dependency compatibility are resolved
+# install satsim wheel file together with jupyterlab so dependency compatibility are resolved
 RUN pip3 --no-cache-dir install \
         tmp/satsim-0.17.1-py2.py3-none-any.whl \
         jupyterlab \

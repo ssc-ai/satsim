@@ -1,5 +1,5 @@
-#FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
-FROM nvidia/cuda@sha256:bd746eb3b9953805ebe644847a227e218b5da775f47007c69930569a75c9ad7d
+#FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda@sha256:f6913f3c02f297877f6859d12ff330043c0be668fdad86868c29a239a5a82151
 LABEL maintainer="Alexander Cabello <alexander.cabello@algoritics.com>"
 
 # install prereqs
@@ -25,7 +25,7 @@ ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
 RUN pip3 --no-cache-dir install --upgrade pip setuptools
 
 # install tensorflow that works with installed cuda version
-RUN pip3 --no-cache-dir install tensorflow~=2.14.0
+RUN pip3 --no-cache-dir install tensorflow~=2.13.0
 
 # copy wheel file
 ENV SATSIM_VERSION='0.17.1'
