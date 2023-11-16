@@ -1,0 +1,175 @@
+{
+    "version": 1,
+    "sim": {
+        "mode": "fftconv2p",
+        "spacial_osf": 3,
+        "temporal_osf": 100,
+        "padding": 100,
+        "samples": 1
+    },
+    "fpa": {
+        "height": 400,
+        "width": 600,
+        "y_fov": 1.0,
+        "x_fov": 1.0,
+        "dark_current": 20,
+        "gain": 1,
+        "bias": {
+            "$compound": [
+                {
+                    "$function": "sin2d",
+                    "module": "satsim.image.model",
+                    "kwargs": {
+                        "height": { "$ref": "fpa.height" },
+                        "width": { "$ref": "fpa.width" },
+                        "amplitude": 50,
+                        "frequency": 12,
+                        "bias": 1000,
+                        "damped": true
+                    }
+                },
+                {
+                    "$function": "sin2d",
+                    "module": "satsim.image.model",
+                    "kwargs": {
+                        "height": { "$ref": "fpa.height" },
+                        "width": { "$ref": "fpa.width" },
+                        "amplitude": 2,
+                        "frequency": 12,
+                        "bias": 10,
+                        "damped": false,
+                        "direction": 60
+                    }
+                }
+            ]
+        },
+        "zeropoint": 23.497,
+        "a2d": {
+            "response": "linear",
+            "fwc": 200000,
+            "gain": 12.2,
+            "bias": 10
+        },
+        "noise": {
+            "read": 11,
+            "electronic": 14
+        },
+        "psf": {
+            "mode": "gaussian",
+            "eod": 0.5
+        },
+        "time": {
+            "exposure": 1.0,
+            "gap": 0.1    
+        },
+        "num_frames": 16
+    },
+    "background": {
+        "stray": {
+            "mode": "none"
+        },
+        "galactic": 22
+    },
+    "geometry": {
+        "stars": {
+            "mode": "bins",
+            "mv": {
+                "bins": [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+                "density": [1.0, 0.0, 0.019444, 0, 0.0055556, 0.016667, 0.036111, 0.038889, 0.097222, 0.66944, 2.4778, 5.0028, 10.269, 24.328, 35.192, 60.017, 110.06, 180.28, 285.53, 446.14]
+            },
+            "motion": {
+                "mode": "affine",
+                "rotation": 0.1,
+                "translation": [5, -10]
+            }
+        },
+        "obs": {
+            "mode": "list",
+            "list": [
+                {
+                    "mode": "line",
+                    "origin": [0.0, 0.0],
+                    "velocity": [22.7272727273, 34.0909090909],
+                    "mv": 15,
+                    "mv_truth": 15
+                },
+                {
+                    "mode": "line",
+                    "origin": [1.0, 0.0],
+                    "velocity": [-22.7272727273, 34.0909090909],
+                    "mv": 15,
+                    "mv_truth": 15
+                },
+                {
+                    "mode": "line",
+                    "origin": [0.25, 0.25],
+                    "velocity": [0.5, 1.5],
+                    "mv": 17,
+                    "mv_truth": 17
+                },
+                {
+                    "mode": "line",
+                    "origin": [0.25, 0.75],
+                    "velocity": [1.5, -1.5],
+                    "mv": 17,
+                    "mv_truth": 17
+                },
+                {
+                    "mode": "line",
+                    "origin": [0.75, 0.75],
+                    "velocity": [-0.5, -0.5],
+                    "mv": 17,
+                    "mv_truth": 17
+                },
+                {
+                    "mode": "line",
+                    "origin": [0.75, 0.25],
+                    "velocity": [0.0, 0.0],
+                    "pe": 100,
+                    "pe_truth": 100
+                },
+                {
+                    "mode": "line",
+                    "origin": [0.6, 0.6],
+                    "velocity": [0.0, 0.0],
+                    "pe": {
+                        "$pipeline": [
+                            {
+                                "module": "satsim.pipeline",
+                                "function": "constant",
+                                "kwargs": {
+                                    "value": 100
+                                }
+                            },
+                            {
+                                "module": "satsim.pipeline",
+                                "function": "poly",
+                                "kwargs": {
+                                    "coef": [2, 10]
+                                }
+                            }
+                        ]
+                    },
+                    "pe_truth": 210
+                },
+                {
+                    "mode": "line",
+                    "origin": [0.4, 0.4],
+                    "velocity": [0.0, 0.0],
+                    "mv": {
+                        "$pipeline": [
+                            {
+                                "module": "satsim.pipeline",
+                                "function": "constant",
+                                "kwargs": {
+                                    "value": 15
+                                }
+                            }
+                        ]
+                    },
+                    "mv_truth": 15
+                }
+            ]
+        }
+    }
+}

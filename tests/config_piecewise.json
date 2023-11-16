@@ -1,0 +1,109 @@
+{
+    "version": 1,
+    "sim": {
+      "mode": "fftconv2p",
+      "spacial_osf": 3,
+      "temporal_osf": "auto",
+      "padding": 8,
+      "samples": 1,
+      "save_movie": false,
+      "render_size": [
+        128,
+        128
+      ],
+      "apply_star_wrap_around": false,
+      "star_catalog_query_mode": "frame",
+      "save_jpeg": false,
+      "num_shot_noise_samples": 30
+    },
+    "fpa": {
+      "height": 1024,
+      "width": 1024,
+      "y_fov": 1.0,
+      "x_fov": 1.0,
+      "dark_current": 0.0,
+      "gain": 1,
+      "bias": 0,
+      "zeropoint": 17.72,
+      "a2d": {
+        "response": "linear",
+        "fwc": 12000,
+        "gain": 1,
+        "bias": 0
+      },
+      "noise": {
+        "read": 12.6,
+        "electronic": 0
+      },
+      "psf": {
+        "mode": "gaussian",
+        "eod": 0.1
+      },
+      "time": {
+        "exposure": 60.0,
+        "gap": -30.0
+      },
+      "num_frames": 2,
+      "flip_up_down": false
+    },
+    "background": {
+      "stray": {
+        "mode": "none"
+      },
+      "galactic": 19.989
+    },
+    "geometry": {
+      "stars": {
+        "mode": "sstr7",
+        "ra": 30.0,
+        "dec": 30.0,
+        "rotation": 0.0,
+        "path": "/workspace/share/sstrc7",
+        "motion": {
+            "mode": "affine-polar",
+            "rotation": 0,
+            "translation": [0, 0]
+        }
+      },
+      "time": [
+        2020,
+        10,
+        15,
+        5,
+        2,
+        40.000448
+      ],
+      "site": {
+        "mode": "topo",
+        "lat": "20.746111 N",
+        "lon": "156.431667 W",
+        "alt": 0.3,
+        "gimbal": {
+          "mode": "wcs",
+          "rotation": 0
+        },
+        "track": {
+          "mode": "fixed",
+          "az": 253.14642599416197,
+          "el": 30.017731674090346
+        }
+      },
+      "obs": {
+        "mode": "list",
+        "list": [
+          {
+            "mode": "tle",
+            "tle1": "1 00900U 64063C   20274.95388704  .00000217  00000-0  22188-3 0  9991",
+            "tle2": "2 00900  90.1603  30.0967 0029383 100.7142   7.3777 13.73420809784934",
+            "mv": 8.947921792526278
+          },
+          {
+            "mode": "tle",
+            "tle1": "1 00902U 64063E   20274.86057611  .00000016  00000-0  10884-4 0  9991",
+            "tle2": "2 00902  90.1717  32.7863 0019162 155.3924 328.3810 13.52686900574332",
+            "mv": 8.787384057900463
+          }
+        ]
+      }
+    }
+  }

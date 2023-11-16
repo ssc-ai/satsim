@@ -1,0 +1,29 @@
+{
+    "height": 400,
+    "width": 600,
+    "y_fov": 1.0,
+    "x_fov": 1.0,
+    "dark_current": 20,
+    "gain": 1,
+    "bias": 100,
+    "zeropoint": 23.497,
+    "a2d": {
+        "response": "linear",
+        "fwc": 200000,
+        "gain": 12.2,
+        "bias": 10
+    },
+    "noise": {
+        "read": 11,
+        "electronic": 14
+    },
+    "psf": {
+        "mode": "gaussian",
+        "eod": 0.5
+    },
+    "time": {
+        "exposure": 1.0,
+        "gap": 0.1    
+    },
+    "num_frames": 16
+}
