@@ -54,9 +54,12 @@ WORKDIR /workspace
 COPY examples/ /workspace/examples/
 COPY docs/_build/html/ /workspace/docs/
 
+# other env
+ENV SHELL=/bin/bash
+ENV TF_CPP_MIN_LOG_LEVEL=1
+ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/cuda/lib64
+
 # expose jupyter lab
 EXPOSE 8888
-
-ENV SHELL=/bin/bash
 
 CMD jupyter lab --ip=0.0.0.0 --port=8888 --allow-root

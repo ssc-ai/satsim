@@ -53,9 +53,17 @@ WORKDIR /workspace
 COPY examples/ /workspace/examples/
 COPY docs/_build/html/ /workspace/docs/
 
+# fix linking issues
+RUN ln -s /usr/local/cuda/lib64/libnvrtc.so.11.2 /usr/local/cuda/lib64/libnvrtc.so.11.0
+RUN ln -s /usr/lib/x86_64-linux-gnu/libnvinfer.so.8 /usr/lib/x86_64-linux-gnu/libnvinfer.so.7
+RUN ln -s /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.8 /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.7
+
+# other env
+ENV SHELL=/bin/bash
+ENV TF_CPP_MIN_LOG_LEVEL=1
+ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/cuda/lib64
+
 # expose jupyter lab
 EXPOSE 8888
-
-ENV SHELL=/bin/bash
 
 CMD jupyter lab --ip=0.0.0.0 --port=8888 --allow-root
