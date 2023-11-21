@@ -1,6 +1,7 @@
 """Tests for `satsim.image.fpa` package."""
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
+import platform
 
 import numpy as np
 import tensorflow as tf
@@ -87,7 +88,7 @@ def test_dataset_augment():
         img = tf.squeeze(i).numpy()
         bb = b.numpy()
 
-        if is_tensorflow_running_on_cpu():
+        if is_tensorflow_running_on_cpu() and platform.machine() == 'x86_64':
             assert(int(np.sum(img)) == 262143840)
         else:
             assert(int(np.sum(img)) == 262144096)
