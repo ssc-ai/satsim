@@ -228,6 +228,6 @@ def test_eci_to_radec():
 
     res = radec_to_eci(296.4388967291422, 51.34809573105908, 24994.512114451572)
 
-    assert(res[0] == 6950.804565599999)
+    np.testing.assert_almost_equal(res[0], 6950.804565599999, decimal=12)
     assert(res[1] == -13978.469491069998)
     assert(res[2] == 19519.58868464)
