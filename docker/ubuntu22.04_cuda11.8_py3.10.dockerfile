@@ -1,5 +1,5 @@
-#FROM nvidia/cuda:11.2.2-cudnn8-runtime-ubuntu20.04
-FROM nvidia/cuda@sha256:081a31f56decc6c460df1808ed1c4867fb30b0fbfa8929258b10e3e5d6dc1a2e
+#FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda@sha256:f6913f3c02f297877f6859d12ff330043c0be668fdad86868c29a239a5a82151
 LABEL maintainer="Alexander Cabello <alexander.cabello@algoritics.com>"
 
 # install prereqs
@@ -8,13 +8,14 @@ RUN set -ex; \
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     software-properties-common \
     python3 \
+    python3-dev \
     python3-pip \
     locales \
     zip \
     unzip \
     vim \
-    libnvinfer8=8.0.0-1+cuda11.0 \
-    libnvinfer-plugin8=8.0.0-1+cuda11.0
+    libnvinfer8=8.6.1.6-1+cuda11.8 \
+    libnvinfer-plugin8=8.6.1.6-1+cuda11.8
 
 # configure locale
 RUN locale-gen en_US.UTF-8
@@ -24,7 +25,7 @@ ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
 RUN pip3 --no-cache-dir install --upgrade pip setuptools
 
 # install tensorflow that works with installed cuda version
-RUN pip3 --no-cache-dir install tensorflow~=2.11.0
+RUN pip3 --no-cache-dir install tensorflow~=2.13.0
 
 # copy wheel file
 ENV SATSIM_VERSION='0.17.1'
@@ -52,11 +53,6 @@ RUN mkdir /workspace
 WORKDIR /workspace
 COPY examples/ /workspace/examples/
 COPY docs/_build/html/ /workspace/docs/
-
-# fix linking issues
-RUN ln -s /usr/local/cuda/lib64/libnvrtc.so.11.2 /usr/local/cuda/lib64/libnvrtc.so.11.0
-RUN ln -s /usr/lib/x86_64-linux-gnu/libnvinfer.so.8 /usr/lib/x86_64-linux-gnu/libnvinfer.so.7
-RUN ln -s /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.8 /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.7
 
 # other env
 ENV SHELL=/bin/bash

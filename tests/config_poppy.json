@@ -1,0 +1,321 @@
+{
+    "version": 1,
+    "sim": {
+        "spacial_osf": 3,
+        "temporal_osf": "auto",
+        "padding": 100,
+        "samples": 1,
+        "show_obs_boxes": false,
+        "num_target_samples": 2,
+        "apply_star_wrap_around": true
+    },
+    "fpa": {
+        "height": 512,
+        "width": 512,
+        "y_fov": 0.308312,
+        "x_fov": 0.308312,
+        "dark_current": {
+            "$sample": "random.lognormal",
+            "mean": 0.3,
+            "sigma": 0.95,
+            "size": [512, 512]
+        },
+        "gain": {
+            "$function": "radial_cos2d",
+            "module": "satsim.image.model",
+            "kwargs": {
+                "height": { "$ref": "fpa.height" },
+                "width": { "$ref": "fpa.width" },
+                "y_scale": 0.1,
+                "x_scale": 0.1,
+                "power": 4
+            }
+        },
+        "bias": {
+            "$compound": [
+                {
+                    "$function": "sin2d",
+                    "module": "satsim.image.model",
+                    "kwargs": {
+                        "height": { "$ref": "fpa.height" },
+                        "width": { "$ref": "fpa.width" },
+                        "amplitude": 50,
+                        "frequency": 12,
+                        "bias": 1000,
+                        "damped": true
+                    }
+                },
+                {
+                    "$function": "sin2d",
+                    "module": "satsim.image.model",
+                    "kwargs": {
+                        "height": { "$ref": "fpa.height" },
+                        "width": { "$ref": "fpa.width" },
+                        "amplitude": 2,
+                        "frequency": 12,
+                        "bias": 10,
+                        "damped": false,
+                        "direction": 60
+                    }
+                }
+            ]
+        },
+        "zeropoint": 20.6663,
+        "a2d": {
+            "response": "linear",
+            "fwc": 98000,
+            "gain": 1.5,
+            "bias": 1200,
+            "dtype": "uint16"
+        },
+        "noise": {
+            "read": 9,
+            "electronic": 0
+        },
+        "psf": {
+            "mode": "poppy",
+            "optical_system": [
+                {
+                    "type": "CompoundAnalyticOptic",
+                    "opticslist": [
+                        {
+                            "type": "CircularAperture",
+                            "kwargs": {
+                                "radius": 0.200
+                            }
+                        },
+                        {
+                            "type": "SecondaryObscuration",
+                            "kwargs": {
+                                "secondary_radius": 0.110,
+                                "n_supports": 4,
+                                "support_width": 0.010
+                            }
+                        }
+                    ]
+                },
+                {
+                    "type": "ZernikeWFE",
+                    "kwargs": {
+                        "radius": 0.200,
+                        "coefficients": [0, 0, 0, 100e-9]
+                    }
+                }
+            ],
+            "wavelengths": [600e-9],
+            "weights": [1.0]
+        },
+        "time": {
+            "$sample": "random.choice",
+            "choices": [
+                {"exposure": 5.0, "gap": 2.5 }
+            ]
+        },
+        "num_frames": 6,
+        "flip_up_down": true        
+    },
+    "background": {
+        "stray": {
+            "$function": "astropy_model2d",
+            "module": "satsim.image.model",
+            "kwargs": {
+                "height": { "$ref": "fpa.height" },
+                "width": { "$ref": "fpa.width" },
+                "filename": "./tests/stray_light.asdf"
+            }
+        },
+        "galactic": 19.5
+    },
+    "geometry": {
+        "time": [2015, 4, 24, 9, 7, 30.128],
+        "site": {
+            "mode": "topo",
+            "lat": "20.746111 N",
+            "lon": "156.431667 W",
+            "alt": 0.3,
+            "gimbal": {
+                "mode": "wcs",
+                "rotation": 9.5
+            },
+            "track": {
+                "mode": "rate",
+                "tle1": "1 36411U 10008A   15115.45079343  .00000069  00000-0  00000+0 0  9992",
+                "tle2": "2 36411 000.0719 125.6855 0001927 217.7585 256.6121 01.00266852 18866"
+            },
+            "czml": {
+                "label_show": true
+            }
+        },
+        "stars": {
+            "mode": "none",
+            "motion": { "mode": "none" }
+        },
+        "obs": {
+            "mode": "list",
+            "list": [
+                {
+                    "mode": "twobody",
+                    "position": [-35180.62550265, -23252.99066344, 92.95410805],
+                    "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+                    "epoch": [2015, 4, 24, 9, 7, 4.128],
+                    "mv": 17.0
+                },
+                {
+                    "mode": "twobody",
+                    "position": [-35180.62550265, -23252.99066344, 92.95410805],
+                    "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+                    "epoch": [2015, 4, 24, 9, 7, 14.128],
+                    "mv": 16.0
+                },
+                {
+                    "mode": "twobody",
+                    "position": [-35180.62550265, -23252.99066344, 92.95410805],
+                    "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+                    "epoch": [2015, 4, 24, 9, 7, 24.128],
+                    "mv": 15.0
+                },
+                {
+                    "mode": "twobody",
+                    "position": [-35180.62550265, -23252.99066344, 92.95410805],
+                    "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+                    "epoch": [2015, 4, 24, 9, 7, 34.128],
+                    "mv": 14.0
+                },
+                {
+                    "mode": "twobody",
+                    "position": [-35180.62550265, -23252.99066344, 92.95410805],
+                    "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+                    "epoch": [2015, 4, 24, 9, 7, 44.128],
+                    "mv": 13.0
+                },
+                {
+                    "mode": "twobody",
+                    "position": [-35180.62550265, -23252.99066344, 92.95410805],
+                    "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+                    "epoch": [2015, 4, 24, 9, 7, 54.128],
+                    "mv": 11.0
+                },
+                {
+                    "mode": "twobody",
+                    "position": [-35180.62550265, -23252.99066344, 92.95410805],
+                    "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+                    "epoch": [2015, 4, 24, 9, 7, 64.128],
+                    "mv": 9.0
+                },
+                {
+                    "mode": "twobody",
+                    "position": [-35180.62550265, -23252.99066344, 92.95410805],
+                    "velocity": [1.69553697, -2.56443628, 1.12318636e-03],
+                    "epoch": [2015, 4, 24, 9, 7, 74.128],
+                    "mv": 7.0,
+                    "czml": {
+                        "label_show": true,
+                        "path_show": false,
+                        "path_color": [255, 0, 0, 255],
+                        "billboard_show": true,
+                        "start_interval": [2015, 4, 24, 9, 7, 35.128],
+                        "end_interval": [2015, 4, 24, 9, 7, 45.128]
+                    }
+                },
+                {
+                    "mode": "ephemeris",
+                    "positions": [[-35180.62550265, -23252.99066344, 92.95410805],[-35180.62550265, -23252.99066344, 92.95410805],[-35180.62550265, -23252.99066344, 92.95410805]],
+                    "velocities": [[1.69553697, -2.56443628, 1.12318636e-03],[1.69553697, -2.56443628, 1.12318636e-03],[1.69553697, -2.56443628, 1.12318636e-03]],
+                    "seconds_from_epoch": [0, 1, 2],
+                    "epoch": [2015, 4, 24, 9, 7, 74.128],
+                    "mv": 7.0
+                },
+                {
+                    "mode": "gc",
+                    "az": 132.48,
+                    "el": 55.96,
+                    "heading": 0.0,
+                    "velocity": 10.0,
+                    "epoch": 0,
+                    "mv": 1.0,
+                    "model": {
+                        "mode": "sprite",
+                        "filename": "./tests/sprite.fits"
+                    }                    
+                },
+                {
+                    "mode": "gc",
+                    "ra": 132.48,
+                    "dec": 55.96,
+                    "heading": 0.0,
+                    "velocity": 10.0,
+                    "epoch": 0,
+                    "mv": 1.0,
+                    "model": {
+                        "mode": "sprite",
+                        "filename": "./tests/sprite.fits"
+                    }                    
+                }                
+            ]
+        }
+    },
+    "augment": {
+        "fpa": {
+            "psf": {
+                "$pipeline": [
+                    {
+                        "function": "scatter_shift_polar",
+                        "module": "satsim.image.augment",
+                        "kwargs": {
+                            "mag": {
+                                "$sample": "random.list",
+                                "length": 100,
+                                "value": { "$sample": "random.normal", "loc": 0, "scale": 6.0 }
+                            },
+                            "angle": {
+                                "$sample": "random.list",
+                                "length": 100,
+                                "value": { "$sample": "random.uniform", "low": 0, "high": 360  }
+                            },
+                            "weights": 1.0
+                        }
+                    }
+                ]
+            }
+        },
+        "background": {
+            "stray": {
+                "$pipeline": [
+                    {
+                        "function": "adjust_brightness",
+                        "module": "tensorflow.image",
+                        "kwargs": {
+                            "delta": 5.0
+                        }
+                    },
+                    {
+                        "function": "adjust_gamma",
+                        "module": "tensorflow.image",
+                        "kwargs": {
+                            "gamma": 1.0,
+                            "gain": 1.0
+                        }
+                    },
+                    {
+                        "function": "crop_and_resize",
+                        "module": "satsim.image.augment",
+                        "kwargs": {
+                            "y_start": 0.0,
+                            "x_start": 0.0,
+                            "y_box_size": 1.0,
+                            "x_box_size": 1.0
+                        }
+                    },
+                    {
+                        "function": "flip",
+                        "module": "satsim.image.augment",
+                        "kwargs": {
+                            "up_down": false,
+                            "left_right": false
+                        }
+                    }
+                ]
+            }
+        }
+    }
+}

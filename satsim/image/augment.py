@@ -4,11 +4,11 @@ import math
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_addons as tfa
 
 from satsim.geometry.sprite import load_sprite_from_file
 from satsim.math import fftconv2p
 from satsim.image.fpa import add_counts
+import satsim.tfa as tfa
 
 
 def scatter_shift_random(image, t, loc, scale, length, spacial_osf=1, normalize=True, mode='fft', interpolation='nearest', dtype=tf.float32):

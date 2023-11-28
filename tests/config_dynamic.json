@@ -1,0 +1,111 @@
+{
+    "version": 1,
+    "sim": {
+        "mode": "fftconv2p",
+        "spacial_osf": 3,
+        "temporal_osf": 100,
+        "padding": 100,
+        "samples": 2,
+        "save_pickle": true,
+        "save_movie": true
+    },
+    "fpa": {
+        "height": 400,
+        "width": 600,
+        "y_fov": 1.0,
+        "x_fov": 1.0,
+        "dark_current": {
+            "$sample": "random.lognormal",
+            "mean": 0.5,
+            "sigma": 1.1,
+            "size": [400,600]
+        },
+        "gain": {
+            "$sample": "random.normal",
+            "loc": 1.0,
+            "scale": 0.01,
+            "size": [400,600]
+        },
+        "bias": {
+            "$sample": "random.normal",
+            "loc": 100.0,
+            "scale": 1,
+            "size": [400,600]
+        },
+        "zeropoint": 23.497,
+        "a2d": {
+            "response": "linear",
+            "fwc": 200000,
+            "gain": 12.2,
+            "bias": 10
+        },
+        "noise": {
+            "read": 11,
+            "electronic": 14
+        },
+        "psf": {
+            "mode": "gaussian",
+            "eod": {
+                "$sample": "random.uniform",
+                "low": 0.1,
+                "high": 0.9
+            }
+        },
+        "time": {
+            "$sample": "random.choice",
+            "choices": [
+                { "exposure": 1.0, "gap": 0.1 },
+                { "exposure": 2.0, "gap": 0.1 },
+                { "exposure": 3.0, "gap": 0.1 },
+                { "exposure": 4.0, "gap": 0.1 }
+            ],
+            "probabilities": [0.25, 0.25, 0.25, 0.25]
+        },
+        "num_frames": 16
+    },
+    "background": {
+        "stray": {
+            "mode": "none"
+        },
+        "galactic": 22
+    },
+    "geometry": {
+        "stars": {
+            "mode": "bins",
+            "mv": {
+                "bins": [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+                "density": [1.0, 0.0, 0.019444, 0, 0.0055556, 0.016667, 0.036111, 0.038889, 0.097222, 0.66944, 2.4778, 5.0028, 10.269, 24.328, 35.192, 60.017, 110.06, 180.28, 285.53, 446.14]
+            },
+            "motion": {
+                "mode": "affine",
+                "rotation":
+                    { "$sample": "random.uniform", "low": -0.001, "high": 0.001, "seed": 42 },
+                "translation": [
+                    { "$sample": "random.uniform", "low": -20.0, "high": 20.0 },
+                    { "$sample": "random.uniform", "low": -20.0, "high": 20.0 }
+                ]
+            }
+        },
+        "obs": {
+            "mode": "list",
+            "list": {
+                "$sample": "random.list",
+                "length": 
+                    { "$sample": "random.randint", "low": 1, "high": 15 },
+                "value": {
+                    "mode": "line",
+                    "origin": [
+                        { "$sample": "random.uniform", "low": 0.1, "high": 0.9 },
+                        { "$sample": "random.uniform", "low": 0.1, "high": 0.9 }
+                    ],
+                    "velocity": [
+                        { "$sample": "random.uniform", "low": -0.5, "high": 0.5 },
+                        { "$sample": "random.uniform", "low": -0.5, "high": 0.5 }
+                    ],
+                    "mv": 
+                        { "$sample": "random.uniform", "low": 5.0, "high": 20.0 }
+                }
+            }
+        }
+    }
+}
