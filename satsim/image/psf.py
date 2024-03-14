@@ -145,6 +145,19 @@ def gen_from_poppy_configuration(height, width, y_ifov, x_ifov, s_osf, config):
         else:
             osys.add_pupil(getattr(module, c['type'])(**c['kwargs']))
 
+    if 'turbulant_atmosphere' in config:
+        turbulant_atmosphere = config['turbulant_atmosphere']
+        Cn2 = turbulant_atmosphere['Cn2'] * u.m**(-2 / 3)
+        L = turbulant_atmosphere['propagation_distance'] * u.m
+        nz = turbulant_atmosphere['zones']
+        dz = L / nz
+        for i in range(nz + 1):
+            if i == 0 or i == nz:
+                phase_screen = poppy.KolmogorovWFE(Cn2=Cn2, dz=dz / 2)
+            else:
+                phase_screen = poppy.KolmogorovWFE(Cn2=Cn2, dz=dz)
+            osys.add_pupil(phase_screen)
+
     if 'size' in config:
         # generate a cropped PSF
         osys.add_detector(pixelscale=ifov.value, fov_pixels=config['size'])
@@ -180,4 +193,10 @@ def _calc_npix(optical_system, fov, wavelengths):
     for wl in wavelengths:
         optimal_npix.append(int( ((det_fov / 2.0) * (diam / wl)).value + 1))
 
-    return max(optimal_npix)
+    npix = max(optimal_npix)
+
+    # atmosphere requires even number of pixels for symmetry
+    if npix % 2 != 0:
+        npix += 1
+
+    return npix

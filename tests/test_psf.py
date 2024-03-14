@@ -97,3 +97,45 @@ def test_gen_poppy():
     psf2 = gen_from_poppy_configuration(h, w, 0.3 / h, 0.3 / w, osf, config)
 
     np.testing.assert_array_almost_equal(psf, psf2, decimal=2)
+
+
+def test_gen_poppy_with_atmosphere():
+
+    config = {
+        "mode": "poppy",
+        "optical_system": [
+            {
+                "type": "CompoundAnalyticOptic",
+                "opticslist": [
+                    {
+                        "type": "CircularAperture",
+                        "kwargs": {
+                            "radius": 0.200
+                        }
+                    },
+                    {
+                        "type": "SecondaryObscuration",
+                        "kwargs": {
+                            "secondary_radius": 0.110,
+                            "n_supports": 4,
+                            "support_width": 0.010
+                        }
+                    }
+                ]
+            }
+        ],
+        "turbulant_atmosphere": {
+            "Cn2": 1.7e-15,
+            "propagation_distance": 3000,
+            "zones": 5
+        },
+        "wavelengths": [500e-9, 600e-9, 700e-9],
+        "weights": [0.3, 0.4, 0.3]
+    }
+
+    h = 200
+    w = 100
+    osf = 3
+    psf = gen_from_poppy_configuration(h, w, 0.3 / h, 0.3 / w, osf, config)
+    assert(psf.shape[0] == h * osf)
+    assert(psf.shape[1] == w * osf)

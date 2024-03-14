@@ -407,6 +407,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     if 'save_pickle' not in ssp['sim']:
         ssp['sim']['save_pickle'] = False
 
+    if 'psf_sample_frequency' not in ssp['sim']:
+        ssp['sim']['psf_sample_frequency'] = 'once'
+
     if star_mode == 'bins':
         star_dn = ssp['geometry']['stars']['mv']['density']
         star_pe = mv_to_pe(zeropoint, ssp['geometry']['stars']['mv']['bins']) * exposure_time
@@ -591,19 +594,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             pe_stars_os = []
 
         # gen psf
-        if ssp['sim']['mode'] != 'none':
-            if not isinstance(ssp['fpa']['psf'], dict):  # loaded from config
-                psf_os = ssp['fpa']['psf']
-                psf_os = tf.cast(psf_os, tf.float32)
-            elif ssp['fpa']['psf']['mode'] == 'gaussian':
-                eod = ssp['fpa']['psf']['eod']
-                sigma = eod_to_sigma(eod, s_osf)
-                psf_os = gen_gaussian(h_sub_pad_os, w_sub_pad_os, sigma)
-                save_cache(ssp['fpa']['psf'], psf_os)
-            elif ssp['fpa']['psf']['mode'] == 'poppy':
-                psf_os = gen_from_poppy_configuration(h_sub_pad_os / s_osf, w_sub_pad_os / s_osf, y_ifov, x_ifov, s_osf, ssp['fpa']['psf'])
-                save_cache(ssp['fpa']['psf'], psf_os)
-                psf_os = tf.cast(psf_os, tf.float32)
+        if ssp['sim']['psf_sample_frequency'] != 'frame':
+            psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
 
         if pydash.objects.has(ssp, 'augment.background.stray'):
             bg = ssp['augment']['background']['stray'](bg)
@@ -773,6 +765,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 tic('gen_frame', frame_num)
                 logger.debug('Generating frame {} of {}.'.format(frame_num + 1, num_frames))
                 astrometrics['frame_num'] = frame_num + 1
+
+                if ssp['sim']['psf_sample_frequency'] == 'frame':
+                    psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
 
                 t_start = frame_num * frame_time
                 t_end = t_start + exposure_time
@@ -963,3 +958,25 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, crop_bg_tf, crop_dc_tf, crop_rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth, star_os_pix
                 else:
                     yield fpa_digital
+
+
+def _gen_psf(ssp, height, width, y_ifov, x_ifov, s_osf):
+    """Generate the point spread function (PSF) for the focal plane array (FPA). """
+    psf_os = None
+    if ssp['sim']['mode'] != 'none':
+        if not isinstance(ssp['fpa']['psf'], dict):  # loaded from config
+            psf_os = ssp['fpa']['psf']
+            psf_os = tf.cast(psf_os, tf.float32)
+        elif ssp['fpa']['psf']['mode'] == 'gaussian':
+            logger.debug('Generating {} PSF.'.format(ssp['fpa']['psf']['mode']))
+            eod = ssp['fpa']['psf']['eod']
+            sigma = eod_to_sigma(eod, s_osf)
+            psf_os = gen_gaussian(height, width, sigma)
+            save_cache(ssp['fpa']['psf'], psf_os)
+        elif ssp['fpa']['psf']['mode'] == 'poppy':
+            logger.debug('Generating {} PSF.'.format(ssp['fpa']['psf']['mode']))
+            psf_os = gen_from_poppy_configuration(height / s_osf, width / s_osf, y_ifov, x_ifov, s_osf, ssp['fpa']['psf'])
+            save_cache(ssp['fpa']['psf'], psf_os)
+            psf_os = tf.cast(psf_os, tf.float32)
+
+    return psf_os
