@@ -130,7 +130,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
     """
     ssp_orig = copy.deepcopy(ssp)
 
-    (num_frames, exposure_time, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width) = _parse_sensor_params(ssp)
+    (num_frames, t_exposure, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width) = _parse_sensor_params(ssp)
 
     dt = datetime.now()
     if set_name is None:
@@ -170,7 +170,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     'fpa_digital': fpa_digital.numpy(),
                     'meta_data': copy.deepcopy(meta_data),
                     'frame_num': frame_num,
-                    'exposure_time': exposure_time,
+                    'exposure_time': t_exposure,
                     'time_stamp': dt,
                     'ssp': ssp_orig,
                     'show_obs_boxes': ssp['sim']['show_obs_boxes'],
@@ -233,7 +233,7 @@ def _parse_sensor_params(ssp):
         height = ssp['fpa']['height']
         width = ssp['fpa']['width']
 
-    exposure_time = ssp['fpa']['time']['exposure']
+    t_exposure = ssp['fpa']['time']['exposure']
 
     num_frames = ssp['fpa']['num_frames']
 
@@ -242,7 +242,7 @@ def _parse_sensor_params(ssp):
     else:
         a2d_dtype = 'uint16'
 
-    return num_frames, exposure_time, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width
+    return num_frames, t_exposure, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width
 
 
 def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug', with_meta=False, eager=True, num_sets=0):
@@ -334,8 +334,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     h_sub_pad_os = h_sub_os + h_pad_os
     w_sub_pad_os = w_sub_os + w_pad_os
 
-    exposure_time = ssp['fpa']['time']['exposure']
-    frame_time = ssp['fpa']['time']['gap'] + exposure_time
+    t_exposure = ssp['fpa']['time']['exposure']
+    t_frame = ssp['fpa']['time']['gap'] + t_exposure
 
     num_frames = ssp['fpa']['num_frames']
     astrometrics['num_frames'] = num_frames
@@ -412,7 +412,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if star_mode == 'bins':
         star_dn = ssp['geometry']['stars']['mv']['density']
-        star_pe = mv_to_pe(zeropoint, ssp['geometry']['stars']['mv']['bins']) * exposure_time
+        star_pe = mv_to_pe(zeropoint, ssp['geometry']['stars']['mv']['bins']) * t_exposure
     elif star_mode == 'sstr7' or star_mode == 'csv':
         star_ra = ssp['geometry']['stars']['ra'] if 'ra' in ssp['geometry']['stars'] else 0
         star_dec = ssp['geometry']['stars']['dec'] if 'dec' in ssp['geometry']['stars'] else 0
@@ -444,15 +444,15 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     obs = ssp['geometry']['obs']['list']
 
-    bg = mv_to_pe(zeropoint, ssp['background']['galactic']) * (y_ifov * 3600 * x_ifov * 3600) * exposure_time
+    bg = mv_to_pe(zeropoint, ssp['background']['galactic']) * (y_ifov * 3600 * x_ifov * 3600) * t_exposure
 
     if 'stray' in ssp['background']:
         if isinstance(ssp['background']['stray'], dict) and 'mode' in ssp['background']['stray'] and ssp['background']['stray']['mode'] == 'none':
             pass  # for backward compat
         else:
-            bg = bg + ssp['background']['stray'] * exposure_time
+            bg = bg + ssp['background']['stray'] * t_exposure
 
-    dc = ssp['fpa']['dark_current'] * exposure_time
+    dc = ssp['fpa']['dark_current'] * t_exposure
     rn = ssp['fpa']['noise']['read']
     en = ssp['fpa']['noise']['electronic']
     gain = ssp['fpa']['gain']
@@ -481,55 +481,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         else:
             tt = [2020, 1, 1, 0, 0, 0.0]
 
-        t0 = time.utc_from_list(tt)
-        t1 = time.utc_from_list(tt, exposure_time)
-        t2 = time.utc_from_list(tt, frame_time * num_frames)
-
-        def calculate_az_el(tt):
-            ttt = [t.tt for t in tt]
-            az = interp_degrees(ttt, t0.tt, t2.tt, track_az[0], track_az[1])
-            el = interp_degrees(ttt, t0.tt, t2.tt, track_el[0], track_el[1], normalize_360=False)
-            # az = np.interp(ttt, [t0.tt, t2.tt], track_az)
-            # el = np.interp(ttt, [t0.tt, t2.tt], track_el)
-
-            return az, el
-
-        def calculate_star_position_and_motion(t_start, t_end, star_rot, track_mode):
-            az, el = calculate_az_el([t_start, t_end])
-            if track_mode == 'rate':
-                track_target = [track]
-                star_ra0, star_dec0, dis0, az0, el0, los0 = get_los(observer, track, t_start)
-                star_ra1, star_dec1, dis1, az1, el1, los1 = get_los(observer, track, t_end)
-            elif track_mode == 'fixed':
-                track_target = []
-                star_ra0, star_dec0, dis0, az0, el0, los0 = get_los_azel(observer, az[0], el[0], t_start)
-                star_ra1, star_dec1, dis1, az1, el1, los1 = get_los_azel(observer, az[1], el[1], t_end)
-            else:
-                track_target = [track]
-                star_ra0, star_dec0, dis0, az0, el0, los0 = get_los(observer, track, t0)
-                star_ra1, star_dec1, dis1, az1, el1, los1 = get_los(observer, track, t0)
-
-            [rr0, rr1], [cc0, cc1], drr, dcc, _ = gen_track(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, observer, track, track_target, [0], t0, [t_start, t_end], star_rot, 1, track_mode, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
-            star_tran_os = [-drr, -dcc]  # stars move in the opposite direction of target
-            star_rot_rate = 0  # TODO
-
-            astrometrics['ra'] = mean_degrees(star_ra0, star_ra1)
-            astrometrics['dec'] = (star_dec0 + star_dec1) / 2
-            astrometrics['range'] = (dis0 + dis1) / 2
-            astrometrics['roll'] = star_rot
-            astrometrics['ra_rate'] = diff_degrees(star_ra1, star_ra0) / exposure_time * 3600
-            astrometrics['dec_rate'] = (star_dec1 - star_dec0) / exposure_time * 3600
-            astrometrics['az'] = mean_degrees(az0, az1)
-            astrometrics['el'] = (el0 + el1) / 2
-            astrometrics['time'] = time.mid(t_start, t_end).utc_datetime()
-            astrometrics['x_ifov'] = x_ifov
-            astrometrics['y_ifov'] = y_ifov
-            astrometrics['x_fov'] = x_fov
-            astrometrics['y_fov'] = y_fov
-
-            logger.debug('Boresight RA, Dec, Roll, Az, El: {}, {}, {}, {}, {}.'.format(astrometrics['ra'], astrometrics['dec'], astrometrics['roll'], astrometrics['az'], astrometrics['el']))
-
-            return star_ra0, star_dec0, star_tran_os, star_rot_rate
+        ts_collect_start = time.utc_from_list(tt)
+        ts_frame_end = time.utc_from_list(tt, t_exposure)
+        ts_collect_end = time.utc_from_list(tt, t_frame * num_frames)
 
         # site
         if 'site' in ssp['geometry']:
@@ -566,18 +520,29 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             if 'time' in ssp['geometry']['site']:
                 logger.warning('geometry.site.time is deprecated. Use geometry.time instead.')
                 tt = ssp['geometry']['site']['time']
-                t0 = time.utc_from_list(tt)
-                t1 = time.utc_from_list(tt, exposure_time)
-                t2 = time.utc_from_list(tt, frame_time * num_frames)
+                ts_collect_start = time.utc_from_list(tt)
+                ts_frame_end = time.utc_from_list(tt, t_exposure)
+                ts_collect_end = time.utc_from_list(tt, t_frame * num_frames)
 
-            star_ra, star_dec, star_tran_os, star_rot_rate = calculate_star_position_and_motion(t0, t1, star_rot, track_mode)
+            star_ra, star_dec, star_tran_os, star_rot_rate = _calculate_star_position_and_motion(ssp, astrometrics,
+                                                                                                 ts_collect_start, ts_collect_end, ts_collect_start, ts_frame_end, t_exposure,
+                                                                                                 h_fpa_pad_os, w_fpa_pad_os,
+                                                                                                 y_fov_pad, x_fov_pad,
+                                                                                                 y_fov, x_fov,
+                                                                                                 y_ifov, x_ifov,
+                                                                                                 observer, track, star_rot, track_mode, track_az, track_el)
         else:
+            observer = None
+            track = None
+            star_rot = None
             track_mode = None
+            track_az = None
+            track_el = None
             ssp['sim']['star_catalog_query_mode'] = 'at_start'
 
         if ssp['sim']['temporal_osf'] == 'auto':
             if star_mode != 'none':
-                rrr, ccc = rotate_and_translate(h_fpa_pad_os, w_fpa_pad_os, [0,h_fpa_pad_os], [0,w_fpa_pad_os], exposure_time, star_rot_rate, star_tran_os)
+                rrr, ccc = rotate_and_translate(h_fpa_pad_os, w_fpa_pad_os, [0,h_fpa_pad_os], [0,w_fpa_pad_os], t_exposure, star_rot_rate, star_tran_os)
                 rrr -= [0, h_fpa_pad_os]
                 ccc -= [0, w_fpa_pad_os]
                 t_osf = tf.cast(max([tf.sqrt(rrr[0] * rrr[0] + ccc[0] * ccc[0]), tf.sqrt(rrr[1] * rrr[1] + ccc[1] * ccc[1])]) + 1, tf.int32)
@@ -602,157 +567,11 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             bg = tf.cast(bg, tf.float32)
             bg = tf.where(tf.math.is_nan(bg), tf.zeros_like(bg), bg)
 
-        logger.debug('Exposure time {}.'.format(exposure_time))
+        logger.debug('Exposure time {}.'.format(t_exposure))
         logger.debug('Background pe/pix {}.'.format(np.mean(bg)))
         logger.debug('Finished initializing variables in {} sec.'.format(toc('init')))
 
         obs_cache = [None] * len(obs)
-
-        def gen_objects(obs, t_start, t_end):
-            """Generate object pixels. TODO move to submodule
-            """
-            obs_model = []
-            obs_os_pix = []
-            orrr = np.array([], dtype=np.int32)
-            occc = np.array([], dtype=np.int32)
-            oppp = np.array([], dtype=np.float32)
-            ts_start = time.utc_from_list(tt, t_start)
-            ts_mid = time.utc_from_list(tt, t_start + 0.5 * (t_end - t_start))
-            ts_end = time.utc_from_list(tt, t_end)
-
-            for i, o in enumerate(obs):
-
-                # TODO support in frame events
-                updated = False
-                if 'events' in o:
-                    if 'create' in o['events']:
-                        ts_start_ob = time.utc_from_list_or_scalar(o['events']['create'], default_t=tt)
-                        if ts_end.tt <= ts_start_ob.tt:
-                            continue
-                    if 'delete' in o['events']:
-                        ts_end_ob = time.utc_from_list_or_scalar(o['events']['delete'], default_t=tt)
-                        if ts_end.tt >= ts_end_ob.tt:
-                            continue
-                    if 'update' in o['events']:
-                        for eu in o['events']['update']:
-                            ts_start_ob = time.utc_from_list_or_scalar(eu['time'], default_t=tt)
-                            if ts_end.tt >= ts_start_ob.tt:
-                                o.update(eu['values'])
-                                updated = True
-
-                if 'mv' in o:
-                    ope = mv_to_pe(zeropoint, o['mv']) if not callable(o['mv']) else 0.0
-                    pe_func = (lambda x, t: x) if not callable(o['mv']) else (lambda x, t: mv_to_pe(zeropoint, o['mv'](x, t)) * _delta_t(t))
-                elif 'pe' in o:
-                    ope = o['pe'] if not callable(o['pe']) else 0.0
-                    pe_func = (lambda x, t: x) if not callable(o['pe']) else (lambda x, t: o['pe'](x, t) * _delta_t(t))
-
-                if o['mode'] == 'line':
-                    ovrc = [o['velocity'][0] / y_to_pix * s_osf, o['velocity'][1] / x_to_pix * s_osf]
-                    epoch = o['epoch'] if 'epoch' in o else 0
-                    (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch)
-                elif o['mode'] == 'line-polar':
-                    o_vel_angle = o['velocity'][0] * math.pi / 180
-                    ovrc = [o['velocity'][1] * math.sin(o_vel_angle), o['velocity'][1] * math.cos(o_vel_angle)]
-                    ovrc = [ovrc[0] / y_to_pix * s_osf, ovrc[1] / x_to_pix * s_osf]
-                    epoch = o['epoch'] if 'epoch' in o else 0
-                    (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch)
-                elif o['mode'] == 'tle' or o['mode'] == 'twobody' or o['mode'] == 'gc' or o['mode'] == 'ephemeris' or o['mode'] == 'observation':
-                    if obs_cache[i] is None or updated:
-                        if o['mode'] == 'tle':
-                            if 'tle' in o:
-                                obs_cache[i] = [create_sgp4(o['tle'][0], o['tle'][1])]
-                            else:
-                                obs_cache[i] = [create_sgp4(o['tle1'], o['tle2'])]
-                        elif o['mode'] == 'gc':
-                            ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
-                            if 'az' in o:
-                                obs_cache[i] = [GreatCircle(o['az'], o['el'], o['heading'], o['velocity'], ts_epoch, observer)]
-                            else:
-                                obs_cache[i] = [GreatCircle(o['ra'], o['dec'], o['heading'], o['velocity'], ts_epoch, None)]
-                        elif o['mode'] == 'ephemeris':
-                            ts_epoch = time.utc_from_list(o['epoch'])
-                            obs_cache[i] = [create_ephemeris_object(o['positions'], o['velocities'], o['seconds_from_epoch'], ts_epoch)]
-                        elif o['mode'] == 'observation':
-                            obs_cache[i] = [create_observation(o['ra'], o['dec'], time.utc_from_list(o['time']), observer, track, o.get('range', None))]
-                        else:
-                            ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
-                            obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
-
-                    # skip rest if not rendering images
-                    if ssp['sim']['mode'] == 'none':
-                        continue
-
-                    o_offset = [0.0, 0.0]
-                    if 'offset' in o:
-                        o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
-
-                    sat = obs_cache[i]
-                    az, el = calculate_az_el([ts_start, ts_mid, ts_end])
-
-                    try:
-                        [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(h_fpa_os, w_fpa_os, y_fov, x_fov, observer, track, sat, [ope], t0, [ts_start, ts_mid, ts_end], star_rot, 1, track_mode, offset=o_offset, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
-                    except Exception:
-                        logger.exception("Error propagating target. {}".format(o))
-                        continue
-
-                    if len(rr0) > 0 and not math.isnan(rr0[0]) and not math.isnan(cc0[0]) and not math.isnan(rr2[0]) and not math.isnan(cc2[0]):
-
-                        if rr0[0] < -h_pad_os and rr2[0] < -h_pad_os:
-                            continue
-                        elif rr0[0] > h_fpa_pad_os and rr2[0] > h_fpa_pad_os:
-                            continue
-                        elif cc0[0] < -w_pad_os and cc2[0] < -w_pad_os:
-                            continue
-                        elif cc0[0] > w_fpa_pad_os and cc2[0] > w_fpa_pad_os:
-                            continue
-
-                        if ssp['sim']['num_target_samples'] == 2:
-                            (orr, occ, opp, ott) = gen_line_from_endpoints(rr0[0], cc0[0], rr2[0], cc2[0], ope, t_start, t_end)
-                        else:
-                            (orr, occ, opp, ott) = gen_curve_from_points(rr0[0], cc0[0], rr1[0], cc1[0], rr2[0], cc2[0], ope, t_start, t_end)
-                    else:
-                        continue
-                elif o['mode'] == 'none':
-                    continue
-
-                opp = pe_func(opp, ott)
-                avg_pe = np.sum(opp) / (t_end - t_start)
-                avg_mv = pe_to_mv(zeropoint, avg_pe)
-
-                logger.debug('Average brightness for target: {:.2f} mv, {:.2f} pix.'.format(avg_mv, len(opp) / s_osf))
-
-                if 'model' in o:
-                    if render_mode != 'piecewise':
-                        if not callable(o['model']):
-                            patch = load_sprite_from_file(filename=o['model']['filename']) if 'mode' in o['model'] else o['model']
-                            fpa_os_clear = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
-                            fpa_os_w_targets = add_patch(fpa_os_clear, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
-                            obs_model.append(fpa_os_w_targets)
-                        else:
-                            fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
-                            patch = o['model'](x=None, t=ott[0])
-                            fpa_os_w_targets = add_patch(fpa_os_w_targets, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
-                            obs_model.append(fpa_os_w_targets)
-                            # TODO support sub-sample patching
-                    else:
-                        logger.warning('Sprite models not supported for piecewise rendering.')
-                else:
-                    orrr = np.concatenate((orrr, orr))
-                    occc = np.concatenate((occc, occ))
-                    oppp = np.concatenate((oppp, opp))
-
-                obs_os_pix.append({
-                    'rr': orr,
-                    'cc': occ,
-                    'rrr': orr / s_osf,
-                    'rcc': occ / s_osf,
-                    'mv': avg_mv,
-                    'pe': avg_pe,
-                })
-
-            return orrr, occc, oppp, obs_os_pix, obs_model
-
         if True:  # TODO remove eager
 
             gain_tf = tf.cast(gain, tf.float32)
@@ -769,18 +588,39 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 if ssp['sim']['psf_sample_frequency'] == 'frame':
                     psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
 
-                t_start = frame_num * frame_time
-                t_end = t_start + exposure_time
+                t_start = frame_num * t_frame
+                t_end = t_start + t_exposure
                 ts_start = time.utc_from_list(tt, t_start)
                 ts_end = time.utc_from_list(tt, t_end)
                 t_start_star = t_start
                 t_end_star = t_end
 
+                # calculate object pixels
+                r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = _gen_objects(ssp, render_mode,
+                                                                                    obs, obs_cache,
+                                                                                    ts_collect_start, ts_collect_end, t_start, t_end, tt,
+                                                                                    observer, track, track_az, track_el,
+                                                                                    zeropoint, s_osf,
+                                                                                    h_fpa_os, w_fpa_os,
+                                                                                    h_pad_os, w_pad_os,
+                                                                                    h_pad_os_div2, w_pad_os_div2,
+                                                                                    h_fpa_pad_os, w_fpa_pad_os,
+                                                                                    y_fov, x_fov,
+                                                                                    y_to_pix, x_to_pix,
+                                                                                    star_rot, track_mode)
+                logger.debug('Number of objects {}.'.format(len(obs_os_pix)))
+
+                if track_mode is not None:
+                    star_ra, star_dec, star_tran_os, star_rot_rate = _calculate_star_position_and_motion(ssp, astrometrics,
+                                                                                                         ts_collect_start, ts_collect_end, ts_start, ts_end, t_exposure,
+                                                                                                         h_fpa_pad_os, w_fpa_pad_os,
+                                                                                                         y_fov_pad, x_fov_pad,
+                                                                                                         y_fov, x_fov,
+                                                                                                         y_ifov, x_ifov,
+                                                                                                         observer, track, star_rot, track_mode, track_az, track_el)
+
                 # if image rendering is disabled, then propagate objects and return
                 if ssp['sim']['mode'] == 'none':
-                    r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = gen_objects(obs, t_start, t_end)
-                    if track_mode is not None:
-                        star_ra, star_dec, star_tran_os, star_rot_rate = calculate_star_position_and_motion(ts_start, ts_end, star_rot, track_mode)
                     if with_meta:
                         yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None, None
                     else:
@@ -788,18 +628,15 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     continue
 
                 # refresh catalog stars
-                # TODO should save stars and transform to FPA again on every frame
                 if (star_mode == 'sstr7' or star_mode == 'csv') and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
-                    if track_mode is not None:
-                        star_ra, star_dec, star_tran_os, star_rot_rate = calculate_star_position_and_motion(ts_start, ts_end, star_rot, track_mode)
                     if star_mode == 'sstr7':
                         r_stars_os, c_stars_os, m_stars_os = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
                     elif star_mode == 'csv':
                         r_stars_os, c_stars_os, m_stars_os = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
 
-                    pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * exposure_time
+                    pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
                     t_start_star = 0.0
-                    t_end_star = exposure_time
+                    t_end_star = t_exposure
                     if ssp['sim']['star_catalog_query_mode'] == 'frame':
                         ssp['sim']['apply_star_wrap_around'] = False
 
@@ -808,15 +645,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     r_stars_os, c_stars_os, star_bounds = apply_wrap_around(h_fpa_pad_os, w_fpa_pad_os, r_stars_os, c_stars_os, t_start, t_end, star_rot_rate, star_tran_os, star_bounds)
 
                 logger.debug('Number of stars {}.'.format(len(r_stars_os)))
+
                 t_start_star = tf.cast(t_start_star, tf.float32)
                 t_end_star = tf.cast(t_end_star, tf.float32)
                 r_stars_os = tf.cast(r_stars_os, tf.float32)
                 c_stars_os = tf.cast(c_stars_os, tf.float32)
                 pe_stars_os = tf.cast(pe_stars_os, tf.float32)
 
-                # calculate object pixels
-                r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = gen_objects(obs, t_start, t_end)
-                logger.debug('Number of objects {}.'.format(len(obs_os_pix)))
                 r_obs_os = tf.cast(r_obs_os, tf.float32)
                 c_obs_os = tf.cast(c_obs_os, tf.float32)
                 pe_obs_os = tf.cast(pe_obs_os, tf.float32)
@@ -897,7 +732,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         opp['rcc'] = opp['rcc'] - cp['width_offset']
 
                 if ssp['sim']['star_annotation_threshold'] is not False:
-                    pes_stars_os = pe_stars_os / exposure_time
+                    pes_stars_os = pe_stars_os / t_exposure
                     star_os_pix = {
                         'h': crop_h_fpa_os,
                         'w': crop_w_fpa_os,
@@ -980,3 +815,212 @@ def _gen_psf(ssp, height, width, y_ifov, x_ifov, s_osf):
             psf_os = tf.cast(psf_os, tf.float32)
 
     return psf_os
+
+
+def _gen_objects(ssp, render_mode,
+                 obs, obs_cache,
+                 tc_start, tc_end, t_start, t_end, tt,
+                 observer, track, track_az, track_el,
+                 zeropoint, s_osf,
+                 h_fpa_os, w_fpa_os,
+                 h_pad_os, w_pad_os,
+                 h_pad_os_div2, w_pad_os_div2,
+                 h_fpa_pad_os, w_fpa_pad_os,
+                 y_fov, x_fov,
+                 y_to_pix, x_to_pix,
+                 star_rot, track_mode):
+    """Generate object pixels. TODO move to submodule
+    """
+    obs_model = []
+    obs_os_pix = []
+    orrr = np.array([], dtype=np.int32)
+    occc = np.array([], dtype=np.int32)
+    oppp = np.array([], dtype=np.float32)
+    ts_start = time.utc_from_list(tt, t_start)
+    ts_mid = time.utc_from_list(tt, t_start + 0.5 * (t_end - t_start))
+    ts_end = time.utc_from_list(tt, t_end)
+
+    for i, o in enumerate(obs):
+
+        # TODO support in frame events
+        updated = False
+        if 'events' in o:
+            if 'create' in o['events']:
+                ts_start_ob = time.utc_from_list_or_scalar(o['events']['create'], default_t=tt)
+                if ts_end.tt <= ts_start_ob.tt:
+                    continue
+            if 'delete' in o['events']:
+                ts_end_ob = time.utc_from_list_or_scalar(o['events']['delete'], default_t=tt)
+                if ts_end.tt >= ts_end_ob.tt:
+                    continue
+            if 'update' in o['events']:
+                for eu in o['events']['update']:
+                    ts_start_ob = time.utc_from_list_or_scalar(eu['time'], default_t=tt)
+                    if ts_end.tt >= ts_start_ob.tt:
+                        o.update(eu['values'])
+                        updated = True
+
+        if 'mv' in o:
+            ope = mv_to_pe(zeropoint, o['mv']) if not callable(o['mv']) else 0.0
+            pe_func = (lambda x, t: x) if not callable(o['mv']) else (lambda x, t: mv_to_pe(zeropoint, o['mv'](x, t)) * _delta_t(t))
+        elif 'pe' in o:
+            ope = o['pe'] if not callable(o['pe']) else 0.0
+            pe_func = (lambda x, t: x) if not callable(o['pe']) else (lambda x, t: o['pe'](x, t) * _delta_t(t))
+
+        if o['mode'] == 'line':
+            ovrc = [o['velocity'][0] / y_to_pix * s_osf, o['velocity'][1] / x_to_pix * s_osf]
+            epoch = o['epoch'] if 'epoch' in o else 0
+            (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch)
+        elif o['mode'] == 'line-polar':
+            o_vel_angle = o['velocity'][0] * math.pi / 180
+            ovrc = [o['velocity'][1] * math.sin(o_vel_angle), o['velocity'][1] * math.cos(o_vel_angle)]
+            ovrc = [ovrc[0] / y_to_pix * s_osf, ovrc[1] / x_to_pix * s_osf]
+            epoch = o['epoch'] if 'epoch' in o else 0
+            (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch)
+        elif o['mode'] == 'tle' or o['mode'] == 'twobody' or o['mode'] == 'gc' or o['mode'] == 'ephemeris' or o['mode'] == 'observation':
+            if obs_cache[i] is None or updated:
+                if o['mode'] == 'tle':
+                    if 'tle' in o:
+                        obs_cache[i] = [create_sgp4(o['tle'][0], o['tle'][1])]
+                    else:
+                        obs_cache[i] = [create_sgp4(o['tle1'], o['tle2'])]
+                elif o['mode'] == 'gc':
+                    ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
+                    if 'az' in o:
+                        obs_cache[i] = [GreatCircle(o['az'], o['el'], o['heading'], o['velocity'], ts_epoch, observer)]
+                    else:
+                        obs_cache[i] = [GreatCircle(o['ra'], o['dec'], o['heading'], o['velocity'], ts_epoch, None)]
+                elif o['mode'] == 'ephemeris':
+                    ts_epoch = time.utc_from_list(o['epoch'])
+                    obs_cache[i] = [create_ephemeris_object(o['positions'], o['velocities'], o['seconds_from_epoch'], ts_epoch)]
+                elif o['mode'] == 'observation':
+                    obs_cache[i] = [create_observation(o['ra'], o['dec'], time.utc_from_list(o['time']), observer, track, o.get('range', None))]
+                else:
+                    ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
+                    obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
+
+            # skip rest if not rendering images
+            if ssp['sim']['mode'] == 'none':
+                continue
+
+            o_offset = [0.0, 0.0]
+            if 'offset' in o:
+                o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
+
+            sat = obs_cache[i]
+            az, el = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
+
+            try:
+                [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(h_fpa_os, w_fpa_os, y_fov, x_fov, observer, track, sat, [ope], tc_start, [ts_start, ts_mid, ts_end], star_rot, 1, track_mode, offset=o_offset, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
+            except Exception:
+                logger.exception("Error propagating target. {}".format(o))
+                continue
+
+            if len(rr0) > 0 and not math.isnan(rr0[0]) and not math.isnan(cc0[0]) and not math.isnan(rr2[0]) and not math.isnan(cc2[0]):
+
+                if rr0[0] < -h_pad_os and rr2[0] < -h_pad_os:
+                    continue
+                elif rr0[0] > h_fpa_pad_os and rr2[0] > h_fpa_pad_os:
+                    continue
+                elif cc0[0] < -w_pad_os and cc2[0] < -w_pad_os:
+                    continue
+                elif cc0[0] > w_fpa_pad_os and cc2[0] > w_fpa_pad_os:
+                    continue
+
+                if ssp['sim']['num_target_samples'] == 2:
+                    (orr, occ, opp, ott) = gen_line_from_endpoints(rr0[0], cc0[0], rr2[0], cc2[0], ope, t_start, t_end)
+                else:
+                    (orr, occ, opp, ott) = gen_curve_from_points(rr0[0], cc0[0], rr1[0], cc1[0], rr2[0], cc2[0], ope, t_start, t_end)
+            else:
+                continue
+        elif o['mode'] == 'none':
+            continue
+
+        opp = pe_func(opp, ott)
+        avg_pe = np.sum(opp) / (t_end - t_start)
+        avg_mv = pe_to_mv(zeropoint, avg_pe)
+
+        logger.debug('Average brightness for target: {:.2f} mv, {:.2f} pix.'.format(avg_mv, len(opp) / s_osf))
+
+        if 'model' in o:
+            if render_mode != 'piecewise':
+                if not callable(o['model']):
+                    patch = load_sprite_from_file(filename=o['model']['filename']) if 'mode' in o['model'] else o['model']
+                    fpa_os_clear = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
+                    fpa_os_w_targets = add_patch(fpa_os_clear, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
+                    obs_model.append(fpa_os_w_targets)
+                else:
+                    fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
+                    patch = o['model'](x=None, t=ott[0])
+                    fpa_os_w_targets = add_patch(fpa_os_w_targets, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
+                    obs_model.append(fpa_os_w_targets)
+                    # TODO support sub-sample patching
+            else:
+                logger.warning('Sprite models not supported for piecewise rendering.')
+        else:
+            orrr = np.concatenate((orrr, orr))
+            occc = np.concatenate((occc, occ))
+            oppp = np.concatenate((oppp, opp))
+
+        obs_os_pix.append({
+            'rr': orr,
+            'cc': occ,
+            'rrr': orr / s_osf,
+            'rcc': occ / s_osf,
+            'mv': avg_mv,
+            'pe': avg_pe,
+        })
+
+    return orrr, occc, oppp, obs_os_pix, obs_model
+
+
+def _calculate_az_el(tc_start, tc_end, t_curr, track_az, track_el):
+    tt = [t.tt for t in t_curr]
+    az = interp_degrees(tt, tc_start.tt, tc_end.tt, track_az[0], track_az[1])
+    el = interp_degrees(tt, tc_start.tt, tc_end.tt, track_el[0], track_el[1], normalize_360=False)
+
+    return az, el
+
+
+def _calculate_star_position_and_motion(ssp, astrometrics,
+                                        ts_collect_start, ts_collect_end, t_start, t_end, t_exposure,
+                                        h_fpa_pad_os, w_fpa_pad_os,
+                                        y_fov_pad, x_fov_pad,
+                                        y_fov, x_fov,
+                                        y_ifov, x_ifov,
+                                        observer, track, star_rot, track_mode, track_az, track_el):
+    az, el = _calculate_az_el(ts_collect_start, ts_collect_end, [t_start, t_end], track_az, track_el)
+    if track_mode == 'rate':
+        track_target = [track]
+        star_ra0, star_dec0, dis0, az0, el0, los0 = get_los(observer, track, t_start)
+        star_ra1, star_dec1, dis1, az1, el1, los1 = get_los(observer, track, t_end)
+    elif track_mode == 'fixed':
+        track_target = []
+        star_ra0, star_dec0, dis0, az0, el0, los0 = get_los_azel(observer, az[0], el[0], t_start)
+        star_ra1, star_dec1, dis1, az1, el1, los1 = get_los_azel(observer, az[1], el[1], t_end)
+    else:
+        track_target = [track]
+        star_ra0, star_dec0, dis0, az0, el0, los0 = get_los(observer, track, ts_collect_start)
+        star_ra1, star_dec1, dis1, az1, el1, los1 = get_los(observer, track, ts_collect_start)
+
+    [rr0, rr1], [cc0, cc1], drr, dcc, _ = gen_track(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, observer, track, track_target, [0], ts_collect_start, [t_start, t_end], star_rot, 1, track_mode, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
+    star_tran_os = [-drr, -dcc]  # stars move in the opposite direction of target
+    star_rot_rate = 0  # TODO
+
+    astrometrics['ra'] = mean_degrees(star_ra0, star_ra1)
+    astrometrics['dec'] = (star_dec0 + star_dec1) / 2
+    astrometrics['range'] = (dis0 + dis1) / 2
+    astrometrics['roll'] = star_rot
+    astrometrics['ra_rate'] = diff_degrees(star_ra1, star_ra0) / t_exposure * 3600
+    astrometrics['dec_rate'] = (star_dec1 - star_dec0) / t_exposure * 3600
+    astrometrics['az'] = mean_degrees(az0, az1)
+    astrometrics['el'] = (el0 + el1) / 2
+    astrometrics['time'] = time.mid(t_start, t_end).utc_datetime()
+    astrometrics['x_ifov'] = x_ifov
+    astrometrics['y_ifov'] = y_ifov
+    astrometrics['x_fov'] = x_fov
+    astrometrics['y_fov'] = y_fov
+
+    logger.debug('Boresight RA, Dec, Roll, Az, El: {}, {}, {}, {}, {}.'.format(astrometrics['ra'], astrometrics['dec'], astrometrics['roll'], astrometrics['az'], astrometrics['el']))
+
+    return star_ra0, star_dec0, star_tran_os, star_rot_rate
