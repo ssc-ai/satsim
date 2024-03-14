@@ -572,227 +572,226 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         logger.debug('Finished initializing variables in {} sec.'.format(toc('init')))
 
         obs_cache = [None] * len(obs)
-        if True:  # TODO remove eager
+        gain_tf = tf.cast(gain, tf.float32)
+        bg_tf = tf.cast(bg, tf.float32)
+        dc_tf = tf.cast(dc, tf.float32)
+        bias_tf = tf.cast(bias, tf.float32)
+        rn_tf = tf.cast(math.sqrt(rn * rn + en * en), tf.float32)
 
-            gain_tf = tf.cast(gain, tf.float32)
-            bg_tf = tf.cast(bg, tf.float32)
-            dc_tf = tf.cast(dc, tf.float32)
-            bias_tf = tf.cast(bias, tf.float32)
-            rn_tf = tf.cast(math.sqrt(rn * rn + en * en), tf.float32)
+        # gen frame and yield
+        for frame_num in range(num_frames):
+            tic('gen_frame', frame_num)
+            logger.debug('Generating frame {} of {}.'.format(frame_num + 1, num_frames))
+            astrometrics['frame_num'] = frame_num + 1
 
-            for frame_num in range(num_frames):
-                tic('gen_frame', frame_num)
-                logger.debug('Generating frame {} of {}.'.format(frame_num + 1, num_frames))
-                astrometrics['frame_num'] = frame_num + 1
+            if ssp['sim']['psf_sample_frequency'] == 'frame':
+                psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
 
-                if ssp['sim']['psf_sample_frequency'] == 'frame':
-                    psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
+            t_start = frame_num * t_frame
+            t_end = t_start + t_exposure
+            ts_start = time.utc_from_list(tt, t_start)
+            ts_end = time.utc_from_list(tt, t_end)
+            t_start_star = t_start
+            t_end_star = t_end
 
-                t_start = frame_num * t_frame
-                t_end = t_start + t_exposure
-                ts_start = time.utc_from_list(tt, t_start)
-                ts_end = time.utc_from_list(tt, t_end)
-                t_start_star = t_start
-                t_end_star = t_end
+            # calculate object pixels
+            r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = _gen_objects(ssp, render_mode,
+                                                                                obs, obs_cache,
+                                                                                ts_collect_start, ts_collect_end, t_start, t_end, tt,
+                                                                                observer, track, track_az, track_el,
+                                                                                zeropoint, s_osf,
+                                                                                h_fpa_os, w_fpa_os,
+                                                                                h_pad_os, w_pad_os,
+                                                                                h_pad_os_div2, w_pad_os_div2,
+                                                                                h_fpa_pad_os, w_fpa_pad_os,
+                                                                                y_fov, x_fov,
+                                                                                y_to_pix, x_to_pix,
+                                                                                star_rot, track_mode)
+            logger.debug('Number of objects {}.'.format(len(obs_os_pix)))
 
-                # calculate object pixels
-                r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = _gen_objects(ssp, render_mode,
-                                                                                    obs, obs_cache,
-                                                                                    ts_collect_start, ts_collect_end, t_start, t_end, tt,
-                                                                                    observer, track, track_az, track_el,
-                                                                                    zeropoint, s_osf,
-                                                                                    h_fpa_os, w_fpa_os,
-                                                                                    h_pad_os, w_pad_os,
-                                                                                    h_pad_os_div2, w_pad_os_div2,
-                                                                                    h_fpa_pad_os, w_fpa_pad_os,
-                                                                                    y_fov, x_fov,
-                                                                                    y_to_pix, x_to_pix,
-                                                                                    star_rot, track_mode)
-                logger.debug('Number of objects {}.'.format(len(obs_os_pix)))
+            if track_mode is not None:
+                star_ra, star_dec, star_tran_os, star_rot_rate = _calculate_star_position_and_motion(ssp, astrometrics,
+                                                                                                     ts_collect_start, ts_collect_end, ts_start, ts_end, t_exposure,
+                                                                                                     h_fpa_pad_os, w_fpa_pad_os,
+                                                                                                     y_fov_pad, x_fov_pad,
+                                                                                                     y_fov, x_fov,
+                                                                                                     y_ifov, x_ifov,
+                                                                                                     observer, track, star_rot, track_mode, track_az, track_el)
 
-                if track_mode is not None:
-                    star_ra, star_dec, star_tran_os, star_rot_rate = _calculate_star_position_and_motion(ssp, astrometrics,
-                                                                                                         ts_collect_start, ts_collect_end, ts_start, ts_end, t_exposure,
-                                                                                                         h_fpa_pad_os, w_fpa_pad_os,
-                                                                                                         y_fov_pad, x_fov_pad,
-                                                                                                         y_fov, x_fov,
-                                                                                                         y_ifov, x_ifov,
-                                                                                                         observer, track, star_rot, track_mode, track_az, track_el)
-
-                # if image rendering is disabled, then propagate objects and return
-                if ssp['sim']['mode'] == 'none':
-                    if with_meta:
-                        yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None, None
-                    else:
-                        yield None
-                    continue
-
-                # refresh catalog stars
-                if (star_mode == 'sstr7' or star_mode == 'csv') and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
-                    if star_mode == 'sstr7':
-                        r_stars_os, c_stars_os, m_stars_os = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
-                    elif star_mode == 'csv':
-                        r_stars_os, c_stars_os, m_stars_os = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
-
-                    pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
-                    t_start_star = 0.0
-                    t_end_star = t_exposure
-                    if ssp['sim']['star_catalog_query_mode'] == 'frame':
-                        ssp['sim']['apply_star_wrap_around'] = False
-
-                # wrap stars around
-                if ssp['sim']['apply_star_wrap_around']:
-                    r_stars_os, c_stars_os, star_bounds = apply_wrap_around(h_fpa_pad_os, w_fpa_pad_os, r_stars_os, c_stars_os, t_start, t_end, star_rot_rate, star_tran_os, star_bounds)
-
-                logger.debug('Number of stars {}.'.format(len(r_stars_os)))
-
-                t_start_star = tf.cast(t_start_star, tf.float32)
-                t_end_star = tf.cast(t_end_star, tf.float32)
-                r_stars_os = tf.cast(r_stars_os, tf.float32)
-                c_stars_os = tf.cast(c_stars_os, tf.float32)
-                pe_stars_os = tf.cast(pe_stars_os, tf.float32)
-
-                r_obs_os = tf.cast(r_obs_os, tf.float32)
-                c_obs_os = tf.cast(c_obs_os, tf.float32)
-                pe_obs_os = tf.cast(pe_obs_os, tf.float32)
-
-                # augment TODO abstract this
-                if pydash.objects.has(ssp, 'augment.fpa.psf'):
-                    psf_os_curr = ssp['augment']['fpa']['psf'](psf_os)
-                    psf_os_curr = tf.cast(psf_os_curr, tf.float32)
-                else:
-                    psf_os_curr = psf_os
-
-                # render
-                if render_mode == 'piecewise':
-                    fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=ssp['sim']['calculate_snr'], star_render_mode=ssp['sim']['star_render_mode'])
-                else:
-                    fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=ssp['sim']['calculate_snr'], obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'])
-
-                # add noise
-                fpa_conv = (fpa_conv_star + fpa_conv_targ + bg_tf) * gain_tf + dc_tf
-                if ssp['sim']['enable_shot_noise'] is True:
-                    fpa_conv_noise = add_photon_noise(fpa_conv, ssp['sim']['num_shot_noise_samples'])
-                else:
-                    fpa_conv_noise = fpa_conv
-                fpa, rn_gt = add_read_noise(fpa_conv_noise, rn, en)
-
-                # analog to digital
-                fpa_digital = analog_to_digital(fpa + bias_tf, a2d_gain, a2d_fwc, a2d_bias, dtype=a2d_dtype)
-
-                # augment TODO abstract this
-                if pydash.objects.has(ssp, 'augment.image'):
-                    if ssp['augment']['image']['post'] is None:
-                        pass
-                    elif callable(ssp['augment']['image']['post']):
-                        fpa_digital = ssp['augment']['image']['post'](fpa_digital)
-                    else:
-                        fpa_digital = fpa_digital + ssp['augment']['image']['post']
-
-                # cropped sensor
-                crop_bg_tf = bg_tf
-                crop_dc_tf = dc_tf
-                crop_rn_tf = rn_tf
-                crop_h_fpa_os = h_fpa_os
-                crop_w_fpa_os = w_fpa_os
-                crop_gain_tf = gain_tf
-                crop_bias_tf = bias_tf
-                if 'crop' in ssp['fpa']:
-                    cp = ssp['fpa']['crop']
-
-                    # crop images
-                    fpa_digital = crop(fpa_digital, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    fpa_conv_targ = crop(fpa_conv_targ, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    fpa_conv_star = crop(fpa_conv_star, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    if len(bg_tf.shape) == 2:
-                        crop_bg_tf = crop(bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    if len(dc_tf.shape) == 2:
-                        crop_dc_tf = crop(dc_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    if len(rn_tf.shape) == 2:
-                        crop_rn_tf = crop(rn_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    fpa_conv_noise = crop(fpa_conv_noise, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    fpa_conv = crop(fpa_conv, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    rn_gt = crop(rn_gt, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    if len(gain_tf.shape) == 2:
-                        crop_gain_tf = crop(gain_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    if len(bias_tf.shape) == 2:
-                        crop_bias_tf = crop(bias_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-
-                    # update star positions
-                    r_stars_os = r_stars_os - cp['height_offset'] * s_osf
-                    c_stars_os = c_stars_os - cp['width_offset'] * s_osf
-                    crop_h_fpa_os = cp['height'] * s_osf
-                    crop_w_fpa_os = cp['width'] * s_osf
-
-                    # update target positions
-                    for opp in obs_os_pix:
-                        opp['rr'] = opp['rr'] - cp['height_offset'] * s_osf
-                        opp['cc'] = opp['cc'] - cp['width_offset'] * s_osf
-                        opp['rrr'] = opp['rrr'] - cp['height_offset']
-                        opp['rcc'] = opp['rcc'] - cp['width_offset']
-
-                if ssp['sim']['star_annotation_threshold'] is not False:
-                    pes_stars_os = pe_stars_os / t_exposure
-                    star_os_pix = {
-                        'h': crop_h_fpa_os,
-                        'w': crop_w_fpa_os,
-                        'h_pad': h_pad_os_div2,
-                        'w_pad': w_pad_os_div2,
-                        'rr': r_stars_os,
-                        'cc': c_stars_os,
-                        'pe': pes_stars_os,
-                        'mv': m_stars_os if m_stars_os is not None else pe_to_mv(zeropoint, pes_stars_os),
-                        't_start': t_start_star,
-                        't_end': t_end_star,
-                        'rot': star_rot_rate,
-                        'tran': star_tran_os,
-                        'min_mv': ssp['sim']['star_annotation_threshold'] if isinstance(ssp['sim']['star_annotation_threshold'], numbers.Number) else 15
-                    }
-                else:
-                    star_os_pix = None
-
-                if ssp['sim']['save_ground_truth']:
-                    ground_truth = OrderedDict()
-                    ground_truth['target_pe'] = fpa_conv_targ.numpy()
-                    ground_truth['star_pe'] = fpa_conv_star.numpy()
-                    ground_truth['background_pe'] = crop_bg_tf.numpy()
-                    ground_truth['dark_current_pe'] = crop_dc_tf.numpy()
-                    ground_truth['photon_noise_pe'] = (fpa_conv_noise - fpa_conv).numpy()
-                    ground_truth['read_noise_pe'] = rn_gt.numpy()
-                    ground_truth['gain'] = crop_gain_tf.numpy()
-                    ground_truth['bias_pe'] = crop_bias_tf.numpy()
-                else:
-                    ground_truth = None
-
-                if output_debug:
-                    if fpa_os_w_targets is not None:
-                        with open(os.path.join(dir_debug, 'fpa_os_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                            pickle.dump(fpa_os_w_targets.numpy(), picklefile)
-                    if fpa_conv_os is not None:
-                        with open(os.path.join(dir_debug, 'fpa_conv_os_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                            pickle.dump(fpa_conv_os.numpy(), picklefile)
-                    if fpa_conv_crop is not None:
-                        with open(os.path.join(dir_debug, 'fpa_conv_crop_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                            pickle.dump(fpa_conv_crop.numpy(), picklefile)
-                    with open(os.path.join(dir_debug, 'fpa_conv_star_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                        pickle.dump(fpa_conv_star.numpy(), picklefile)
-                    with open(os.path.join(dir_debug, 'fpa_conv_targ_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                        pickle.dump(fpa_conv_targ.numpy(), picklefile)
-                    with open(os.path.join(dir_debug, 'fpa_conv_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                        pickle.dump(fpa_conv.numpy(), picklefile)
-                    with open(os.path.join(dir_debug, 'fpa_conv_noise_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                        pickle.dump(fpa_conv_noise.numpy(), picklefile)
-                    with open(os.path.join(dir_debug, 'fpa_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                        pickle.dump(fpa.numpy(), picklefile)
-                    with open(os.path.join(dir_debug, 'fpa_digital_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                        pickle.dump(fpa_digital.numpy(), picklefile)
-                    with open(os.path.join(dir_debug, 'stars_os_{}.pickle'.format(frame_num)), 'wb') as picklefile:
-                        pickle.dump([r_stars_os.numpy(), c_stars_os.numpy(), pe_stars_os.numpy(), t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os], picklefile)
-
+            # if image rendering is disabled, then return
+            if ssp['sim']['mode'] == 'none':
                 if with_meta:
-                    yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, crop_bg_tf, crop_dc_tf, crop_rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth, star_os_pix
+                    yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None, None
                 else:
-                    yield fpa_digital
+                    yield None
+                continue
+
+            # refresh catalog stars
+            if (star_mode == 'sstr7' or star_mode == 'csv') and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
+                if star_mode == 'sstr7':
+                    r_stars_os, c_stars_os, m_stars_os = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
+                elif star_mode == 'csv':
+                    r_stars_os, c_stars_os, m_stars_os = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
+
+                pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
+                t_start_star = 0.0
+                t_end_star = t_exposure
+                if ssp['sim']['star_catalog_query_mode'] == 'frame':
+                    ssp['sim']['apply_star_wrap_around'] = False
+
+            # wrap stars around
+            if ssp['sim']['apply_star_wrap_around']:
+                r_stars_os, c_stars_os, star_bounds = apply_wrap_around(h_fpa_pad_os, w_fpa_pad_os, r_stars_os, c_stars_os, t_start, t_end, star_rot_rate, star_tran_os, star_bounds)
+
+            logger.debug('Number of stars {}.'.format(len(r_stars_os)))
+
+            t_start_star = tf.cast(t_start_star, tf.float32)
+            t_end_star = tf.cast(t_end_star, tf.float32)
+            r_stars_os = tf.cast(r_stars_os, tf.float32)
+            c_stars_os = tf.cast(c_stars_os, tf.float32)
+            pe_stars_os = tf.cast(pe_stars_os, tf.float32)
+
+            r_obs_os = tf.cast(r_obs_os, tf.float32)
+            c_obs_os = tf.cast(c_obs_os, tf.float32)
+            pe_obs_os = tf.cast(pe_obs_os, tf.float32)
+
+            # augment TODO abstract this
+            if pydash.objects.has(ssp, 'augment.fpa.psf'):
+                psf_os_curr = ssp['augment']['fpa']['psf'](psf_os)
+                psf_os_curr = tf.cast(psf_os_curr, tf.float32)
+            else:
+                psf_os_curr = psf_os
+
+            # render
+            if render_mode == 'piecewise':
+                fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=ssp['sim']['calculate_snr'], star_render_mode=ssp['sim']['star_render_mode'])
+            else:
+                fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=ssp['sim']['calculate_snr'], obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'])
+
+            # add noise
+            fpa_conv = (fpa_conv_star + fpa_conv_targ + bg_tf) * gain_tf + dc_tf
+            if ssp['sim']['enable_shot_noise'] is True:
+                fpa_conv_noise = add_photon_noise(fpa_conv, ssp['sim']['num_shot_noise_samples'])
+            else:
+                fpa_conv_noise = fpa_conv
+            fpa, rn_gt = add_read_noise(fpa_conv_noise, rn, en)
+
+            # analog to digital
+            fpa_digital = analog_to_digital(fpa + bias_tf, a2d_gain, a2d_fwc, a2d_bias, dtype=a2d_dtype)
+
+            # augment TODO abstract this
+            if pydash.objects.has(ssp, 'augment.image'):
+                if ssp['augment']['image']['post'] is None:
+                    pass
+                elif callable(ssp['augment']['image']['post']):
+                    fpa_digital = ssp['augment']['image']['post'](fpa_digital)
+                else:
+                    fpa_digital = fpa_digital + ssp['augment']['image']['post']
+
+            # cropped sensor
+            crop_bg_tf = bg_tf
+            crop_dc_tf = dc_tf
+            crop_rn_tf = rn_tf
+            crop_h_fpa_os = h_fpa_os
+            crop_w_fpa_os = w_fpa_os
+            crop_gain_tf = gain_tf
+            crop_bias_tf = bias_tf
+            if 'crop' in ssp['fpa']:
+                cp = ssp['fpa']['crop']
+
+                # crop images
+                fpa_digital = crop(fpa_digital, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                fpa_conv_targ = crop(fpa_conv_targ, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                fpa_conv_star = crop(fpa_conv_star, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                if len(bg_tf.shape) == 2:
+                    crop_bg_tf = crop(bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                if len(dc_tf.shape) == 2:
+                    crop_dc_tf = crop(dc_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                if len(rn_tf.shape) == 2:
+                    crop_rn_tf = crop(rn_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                fpa_conv_noise = crop(fpa_conv_noise, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                fpa_conv = crop(fpa_conv, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                rn_gt = crop(rn_gt, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                if len(gain_tf.shape) == 2:
+                    crop_gain_tf = crop(gain_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                if len(bias_tf.shape) == 2:
+                    crop_bias_tf = crop(bias_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+
+                # update star positions
+                r_stars_os = r_stars_os - cp['height_offset'] * s_osf
+                c_stars_os = c_stars_os - cp['width_offset'] * s_osf
+                crop_h_fpa_os = cp['height'] * s_osf
+                crop_w_fpa_os = cp['width'] * s_osf
+
+                # update target positions
+                for opp in obs_os_pix:
+                    opp['rr'] = opp['rr'] - cp['height_offset'] * s_osf
+                    opp['cc'] = opp['cc'] - cp['width_offset'] * s_osf
+                    opp['rrr'] = opp['rrr'] - cp['height_offset']
+                    opp['rcc'] = opp['rcc'] - cp['width_offset']
+
+            if ssp['sim']['star_annotation_threshold'] is not False:
+                pes_stars_os = pe_stars_os / t_exposure
+                star_os_pix = {
+                    'h': crop_h_fpa_os,
+                    'w': crop_w_fpa_os,
+                    'h_pad': h_pad_os_div2,
+                    'w_pad': w_pad_os_div2,
+                    'rr': r_stars_os,
+                    'cc': c_stars_os,
+                    'pe': pes_stars_os,
+                    'mv': m_stars_os if m_stars_os is not None else pe_to_mv(zeropoint, pes_stars_os),
+                    't_start': t_start_star,
+                    't_end': t_end_star,
+                    'rot': star_rot_rate,
+                    'tran': star_tran_os,
+                    'min_mv': ssp['sim']['star_annotation_threshold'] if isinstance(ssp['sim']['star_annotation_threshold'], numbers.Number) else 15
+                }
+            else:
+                star_os_pix = None
+
+            if ssp['sim']['save_ground_truth']:
+                ground_truth = OrderedDict()
+                ground_truth['target_pe'] = fpa_conv_targ.numpy()
+                ground_truth['star_pe'] = fpa_conv_star.numpy()
+                ground_truth['background_pe'] = crop_bg_tf.numpy()
+                ground_truth['dark_current_pe'] = crop_dc_tf.numpy()
+                ground_truth['photon_noise_pe'] = (fpa_conv_noise - fpa_conv).numpy()
+                ground_truth['read_noise_pe'] = rn_gt.numpy()
+                ground_truth['gain'] = crop_gain_tf.numpy()
+                ground_truth['bias_pe'] = crop_bias_tf.numpy()
+            else:
+                ground_truth = None
+
+            if output_debug:
+                if fpa_os_w_targets is not None:
+                    with open(os.path.join(dir_debug, 'fpa_os_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                        pickle.dump(fpa_os_w_targets.numpy(), picklefile)
+                if fpa_conv_os is not None:
+                    with open(os.path.join(dir_debug, 'fpa_conv_os_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                        pickle.dump(fpa_conv_os.numpy(), picklefile)
+                if fpa_conv_crop is not None:
+                    with open(os.path.join(dir_debug, 'fpa_conv_crop_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                        pickle.dump(fpa_conv_crop.numpy(), picklefile)
+                with open(os.path.join(dir_debug, 'fpa_conv_star_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                    pickle.dump(fpa_conv_star.numpy(), picklefile)
+                with open(os.path.join(dir_debug, 'fpa_conv_targ_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                    pickle.dump(fpa_conv_targ.numpy(), picklefile)
+                with open(os.path.join(dir_debug, 'fpa_conv_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                    pickle.dump(fpa_conv.numpy(), picklefile)
+                with open(os.path.join(dir_debug, 'fpa_conv_noise_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                    pickle.dump(fpa_conv_noise.numpy(), picklefile)
+                with open(os.path.join(dir_debug, 'fpa_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                    pickle.dump(fpa.numpy(), picklefile)
+                with open(os.path.join(dir_debug, 'fpa_digital_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                    pickle.dump(fpa_digital.numpy(), picklefile)
+                with open(os.path.join(dir_debug, 'stars_os_{}.pickle'.format(frame_num)), 'wb') as picklefile:
+                    pickle.dump([r_stars_os.numpy(), c_stars_os.numpy(), pe_stars_os.numpy(), t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os], picklefile)
+
+            if with_meta:
+                yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, crop_bg_tf, crop_dc_tf, crop_rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth, star_os_pix
+            else:
+                yield fpa_digital
 
 
 def _gen_psf(ssp, height, width, y_ifov, x_ifov, s_osf):
