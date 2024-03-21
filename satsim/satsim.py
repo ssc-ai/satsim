@@ -136,7 +136,6 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
     if set_name is None:
         dir_name = os.path.join(output_dir, dt.isoformat().replace(':','-'))
         set_name = 'sat_{:05d}'.format(sample_num)
-
     else:
         dir_name = os.path.join(output_dir, set_name)
 
@@ -156,7 +155,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
         x_ifov)
 
     astrometrics_list = []
-    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
+    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix, segmentation in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
         astrometrics_list.append(astrometrics)
         if fpa_digital is not None:
             snr = signal_to_noise_ratio(fpa_conv_targ, fpa_conv_star + bg_tf + dc_tf, rn_tf)
@@ -180,6 +179,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     'dtype': a2d_dtype,
                     'save_jpeg': ssp['sim']['save_jpeg'],
                     'ground_truth': ground_truth,
+                    'segmentation': segmentation,
                 }, tag=dir_name)
             if output_debug:
                 with open(os.path.join(dir_debug, 'metadata_{}.json'.format(frame_num)), 'w') as jsonfile:
@@ -401,6 +401,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     if 'star_annotation_threshold' not in ssp['sim']:
         ssp['sim']['star_annotation_threshold'] = False
 
+    if 'save_segmentation' not in ssp['sim']:
+        ssp['sim']['save_segmentation'] = False
+
     if 'mode' not in ssp['sim']:
         ssp['sim']['mode'] = 'fftconv2p'
 
@@ -470,9 +473,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     set_number = 0
     while num_sets <= 0 or set_number < num_sets:
-        if num_sets == 0:
-            tic('init')
-
         set_number = set_number + 1
 
         # time
@@ -553,7 +553,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         # gen stars
         if star_mode == 'bins':
             r_stars_os, c_stars_os, pe_stars_os = gen_random_points(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_pe, star_dn, pad_mult=star_pad)
-            m_stars_os = None
+            ra_stars = np.array(range(len(r_stars_os)))
+            dec_stars = np.zeros(len(r_stars_os))
+            m_stars_os = pe_to_mv(zeropoint, pe_stars_os / t_exposure)
         else:
             r_stars_os, c_stars_os, m_stars_os = [], [], []
             pe_stars_os = []
@@ -571,12 +573,15 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         logger.debug('Background pe/pix {}.'.format(np.mean(bg)))
         logger.debug('Finished initializing variables in {} sec.'.format(toc('init')))
 
+        star_uid_map = {}
         obs_cache = [None] * len(obs)
         gain_tf = tf.cast(gain, tf.float32)
         bg_tf = tf.cast(bg, tf.float32)
         dc_tf = tf.cast(dc, tf.float32)
         bias_tf = tf.cast(bias, tf.float32)
-        rn_tf = tf.cast(math.sqrt(rn * rn + en * en), tf.float32)
+        _rn = tf.cast(rn, tf.float32)
+        _en = tf.cast(en, tf.float32)
+        rn_tf = tf.math.sqrt(_rn * _rn + _en * _en)
 
         # gen frame and yield
         for frame_num in range(num_frames):
@@ -621,7 +626,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             # if image rendering is disabled, then return
             if ssp['sim']['mode'] == 'none':
                 if with_meta:
-                    yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None, None
+                    yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None, None, None
                 else:
                     yield None
                 continue
@@ -629,9 +634,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             # refresh catalog stars
             if (star_mode == 'sstr7' or star_mode == 'csv') and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
                 if star_mode == 'sstr7':
-                    r_stars_os, c_stars_os, m_stars_os = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
+                    r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
                 elif star_mode == 'csv':
-                    r_stars_os, c_stars_os, m_stars_os = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
+                    r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
 
                 pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
                 t_start_star = 0.0
@@ -662,11 +667,15 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             else:
                 psf_os_curr = psf_os
 
+            # helper function for image rendering and segmentation rendering
+            def _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, render_separate):
+                if render_mode == 'piecewise':
+                    return render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=ssp['sim']['star_render_mode'])
+                else:
+                    return render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'])
+
             # render
-            if render_mode == 'piecewise':
-                fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=ssp['sim']['calculate_snr'], star_render_mode=ssp['sim']['star_render_mode'])
-            else:
-                fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=ssp['sim']['calculate_snr'], obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'])
+            fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, ssp['sim']['calculate_snr'])
 
             # add noise
             fpa_conv = (fpa_conv_star + fpa_conv_targ + bg_tf) * gain_tf + dc_tf
@@ -687,6 +696,76 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     fpa_digital = ssp['augment']['image']['post'](fpa_digital)
                 else:
                     fpa_digital = fpa_digital + ssp['augment']['image']['post']
+
+            # save segmentation matadata
+            segmentation = None
+            seg_id_stars = None
+            if ssp['sim']['save_segmentation']:
+
+                star_threshold = 50.0
+                if ssp['sim']['star_annotation_threshold'] is not False:
+                    star_threshold = ssp['sim']['star_annotation_threshold']
+
+                if 'crop' in ssp['fpa']:
+                    cp = ssp['fpa']['crop']
+                    segmentation = {
+                        'star_segmentation': np.zeros((cp['height'], cp['width']), dtype=np.uint16),
+                        'object_segmentation': np.zeros((cp['height'], cp['width']), dtype=np.uint16)
+                    }
+                else:
+                    segmentation = {
+                        'star_segmentation': np.zeros((h, w), dtype=np.uint16),
+                        'object_segmentation': np.zeros((h, w), dtype=np.uint16)
+                    }
+                seg_id_stars = np.zeros(len(r_stars_os))
+                min_dn = 1
+
+                # sort stars by brightness to ensure bright stars are rendered last
+                star_order = tf.argsort(pe_stars_os, direction='ASCENDING')
+                r_stars_os_sort = tf.gather(r_stars_os, star_order)
+                c_stars_os_sort = tf.gather(c_stars_os, star_order)
+                pe_stars_os_sort = tf.gather(pe_stars_os, star_order)
+                m_stars_os_sort = tf.gather(m_stars_os, star_order)
+                ra_stars_sort = tf.gather(ra_stars, star_order)
+                dec_stars_sort = tf.gather(dec_stars, star_order)
+
+                # for each bright star, create a segmentation mask
+                for i in range(len(ra_stars_sort)):
+                    if m_stars_os_sort[i] < star_threshold:
+                        fpa_segmentation, _, _, _, _ = _render([], [], [], [r_stars_os_sort[i]], [c_stars_os_sort[i]], [pe_stars_os_sort[i]], False)
+
+                        if 'crop' in ssp['fpa']:
+                            cp = ssp['fpa']['crop']
+                            fpa_segmentation = crop(fpa_segmentation, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+
+                        fpa_segmentation = analog_to_digital(fpa_segmentation, a2d_gain, a2d_fwc, 0, dtype=a2d_dtype)
+                        fpa_segmentation = fpa_segmentation.numpy()
+                        if np.max(fpa_segmentation.flatten()) > min_dn:
+                            # need to assign a unique id to each star and keep track of it as they could pop in and out of the frame
+                            star_uid = '{}, {}, {}'.format(ra_stars_sort[i], dec_stars_sort[i], m_stars_os_sort[i])
+                            if star_uid in star_uid_map:
+                                star_id = star_uid_map[star_uid]
+                            else:
+                                star_id = len(star_uid_map) + 1
+                                star_uid_map[star_uid] = star_id
+
+                            segmentation['star_segmentation'][fpa_segmentation > min_dn] = star_id
+                            seg_id_stars[star_order[i]] = star_id
+                            logger.debug('Generated star segmentation {}, {} mv.'.format(star_id, m_stars_os_sort[i]))
+
+                # for each observation, create a segmentation mask
+                obs_os_pix_sorted = sorted(obs_os_pix, key=lambda k: k['pe'], reverse=False)
+                for ob in obs_os_pix_sorted:
+                    fpa_segmentation, _, _, _, _ = _render(ob['rr'], ob['cc'], ob['pp'], [], [], [], False)
+                    if 'crop' in ssp['fpa']:
+                        cp = ssp['fpa']['crop']
+                        fpa_segmentation = crop(fpa_segmentation, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+
+                    fpa_segmentation = analog_to_digital(fpa_segmentation, a2d_gain, a2d_fwc, 0, dtype=a2d_dtype)
+                    fpa_segmentation = fpa_segmentation.numpy()
+                    if np.max(fpa_segmentation.flatten()) > min_dn:
+                        segmentation['object_segmentation'][fpa_segmentation > min_dn] = ob['id']
+                        logger.debug('Generated object segmentation {}, {} mv.'.format(ob['id'], ob['mv']))
 
             # cropped sensor
             crop_bg_tf = bg_tf
@@ -741,6 +820,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     'cc': c_stars_os,
                     'pe': pes_stars_os,
                     'mv': m_stars_os if m_stars_os is not None else pe_to_mv(zeropoint, pes_stars_os),
+                    'ra': ra_stars,
+                    'dec': dec_stars,
+                    'seg_id': seg_id_stars,
                     't_start': t_start_star,
                     't_end': t_end_star,
                     'rot': star_rot_rate,
@@ -789,7 +871,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     pickle.dump([r_stars_os.numpy(), c_stars_os.numpy(), pe_stars_os.numpy(), t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os], picklefile)
 
             if with_meta:
-                yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, crop_bg_tf, crop_dc_tf, crop_rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth, star_os_pix
+                yield fpa_digital, frame_num, astrometrics.copy(), obs_os_pix, fpa_conv_star, fpa_conv_targ, crop_bg_tf, crop_dc_tf, crop_rn_tf, ssp['sim']['num_shot_noise_samples'], obs_cache, ground_truth, star_os_pix, segmentation
             else:
                 yield fpa_digital
 
@@ -964,10 +1046,12 @@ def _gen_objects(ssp, render_mode,
         obs_os_pix.append({
             'rr': orr,
             'cc': occ,
+            'pp': opp,
             'rrr': orr / s_osf,
             'rcc': occ / s_osf,
             'mv': avg_mv,
             'pe': avg_pe,
+            'id': i + 1,  # 0 is reserved for the background for segmentation
         })
 
     return orrr, occc, oppp, obs_os_pix, obs_model

@@ -38,6 +38,8 @@ def test_annotation():
     assert(c['y_center'] == (0.55 + 0.75) / 2.)
     assert(c['x_center'] == (0.525 + 0.575) / 2.)
 
+    assert(c['seg_id'] == -1)
+
     b = set_frame_annotation(a, 0, h, w, [pix], box_size=[3,3], box_pad=1)  # total box size will be 5
 
     c = b['data']['objects'][0]
@@ -52,6 +54,8 @@ def test_annotation():
     assert(c['bbox_height'] == 0.5)
     assert(c['bbox_width'] == 0.25)
 
+    assert(c['seg_id'] == -1)
+
     b = set_frame_annotation(a, 0, h, w, [pix], box_size=None, box_pad=1)  # total box size will be 2+max-min
 
     c = b['data']['objects'][0]
@@ -62,6 +66,8 @@ def test_annotation():
 
     assert(c['y_center'] == (0.55 + 0.75) / 2.)
     assert(c['x_center'] == (0.525 + 0.575) / 2.)
+
+    assert(c['seg_id'] == -1)
 
     np.testing.assert_almost_equal(c['bbox_height'], 0.4)
     np.testing.assert_almost_equal(c['bbox_width'], 0.15)
@@ -78,7 +84,8 @@ def test_annotation_odd():
         'rr': orr,
         'cc': occ,
         'mv': 15,
-        'pe': 100
+        'pe': 100,
+        'id': 1
     }
 
     a = init_annotation('./', 0, h, w, 2., 3.)
@@ -100,6 +107,8 @@ def test_annotation_odd():
 
     assert(c['bbox_height'] == 1)
     assert(c['bbox_width'] == 1)
+
+    assert(c['seg_id'] == 1)
 
 
 def test_annotation_ob():
@@ -183,11 +192,14 @@ def test_annotation_star():
         'cc': [9.0],
         'pe': [100.0],
         'mv': [13.0],
+        'ra': [0.0],
+        'dec': [0.0],
+        'seg_id': [1],
         't_start': 0.0,
         't_end': 1.0,
         'rot': 0.0,
         'tran': [0.0, 1.0],
-        'min_mv': 15
+        'min_mv': 15,
     }
 
     a = init_annotation('./', 0, h, w, 2., 3.)
@@ -213,6 +225,10 @@ def test_annotation_star():
     assert(c['pe_per_sec'] == 100.0)
     assert(c['magnitude'] == 13.0)
 
+    assert(c['ra'] == 0.0)
+    assert(c['dec'] == 0.0)
+    assert(c['seg_id'] == 1)
+
 
 def test_annotation_empty():
 
@@ -228,11 +244,14 @@ def test_annotation_empty():
         'cc': [],
         'pe': [],
         'mv': [],
+        'ra': [],
+        'dec': [],
+        'seg_id': [],
         't_start': 0.0,
         't_end': 1.0,
         'rot': 0.0,
         'tran': [0.0, 1.0],
-        'min_mv': 15
+        'min_mv': 15,
     }
 
     a = init_annotation('./', 0, h, w, 2., 3.)
