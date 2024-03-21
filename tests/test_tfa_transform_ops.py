@@ -275,6 +275,7 @@ def test_rotate_even(dtype):
             ],
         )
 
+
 @pytest.mark.parametrize("dtype", _DTYPES)
 def test_rotate_odd(dtype):
     image = tf.reshape(tf.cast(tf.range(25), dtype), (5, 5))
