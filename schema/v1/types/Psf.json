@@ -38,6 +38,23 @@
                         "type": "object"
                     }
                 },
+                "turbulant_atmosphere": {
+                    "description": "The POPPY turbulant atmosphere.",
+                    "properties": {
+                        "Cn2": {
+                            "description": "Refractive index structure parameter.",
+                            "type": "number"
+                        },
+                        "propagation_distance": {
+                            "description": "Propagation distance in meters.",
+                            "type": "number"
+                        },
+                        "zones": {
+                            "description": "Number of wavefront zones.",
+                            "type": "integer"
+                        }
+                    }
+                },
                 "wavelengths": {
                     "description": "The wavelengths to model in meters.",
                     "type": "array",
@@ -70,6 +87,11 @@
                             ]
                         }
                     ],
+                    "turbulant_atmosphere": {
+                        "Cn2": 1.7e-15,
+                        "propagation_distance": 3000,
+                        "zones": 5
+                    },
                     "wavelengths": [400e-9],
                     "weights": [1.0]
                 }                
