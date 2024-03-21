@@ -471,6 +471,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     astrometrics['bias'] = a2d_bias
 
+    # gen psf
+    if ssp['sim']['psf_sample_frequency'] == 'once':
+        psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
+
     set_number = 0
     while num_sets <= 0 or set_number < num_sets:
         set_number = set_number + 1
@@ -561,7 +565,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             pe_stars_os = []
 
         # gen psf
-        if ssp['sim']['psf_sample_frequency'] != 'frame':
+        if ssp['sim']['psf_sample_frequency'] == 'collect':
             psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
 
         if pydash.objects.has(ssp, 'augment.background.stray'):
