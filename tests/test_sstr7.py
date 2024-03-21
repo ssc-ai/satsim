@@ -49,7 +49,7 @@ def test_query_by_los():
 
     def test_it(expected_num_stars, origin='corner', filter_ob=False, flipud=False, fliplr=False):
 
-        yy, xx, mm = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin=origin, filter_ob=filter_ob, flipud=flipud, fliplr=fliplr)
+        yy, xx, mm, rra, ddec = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin=origin, filter_ob=filter_ob, flipud=flipud, fliplr=fliplr)
 
         assert(len(yy) == expected_num_stars)
         assert(len(xx) == expected_num_stars)
@@ -95,26 +95,26 @@ def test_query_by_los():
     ra = 268
     dec = 89.9
     rot = 0
-    yy, xx, mm = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin='corner', filter_ob=False)
+    yy, xx, mm, rra, ddec= query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin='corner', filter_ob=False)
     assert(len(yy) == 242)
 
     # south pole
     ra = 359.9
     dec = -89.99
     rot = 190
-    yy, xx, mm = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin='corner', filter_ob=False)
+    yy, xx, mm, rra, ddec = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin='corner', filter_ob=False)
     assert(len(yy) == 976)
 
     # meridian crossing + inside
     ra = 359.9
     dec = -85
     rot = 0
-    yy, xx, mm = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin='corner', filter_ob=False)
+    yy, xx, mm, rra, ddec = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin='corner', filter_ob=False)
     assert(len(yy) == 2434)
 
     # meridian crossing + minRA
     ra = 1.0
     dec = 0
     rot = 0
-    yy, xx, mm = query_by_los(height, width, 10, 10, ra, dec, rot, origin='corner', filter_ob=False)
+    yy, xx, mm, rra, ddec = query_by_los(height, width, 10, 10, ra, dec, rot, origin='corner', filter_ob=False)
     assert(len(yy) == 83612)

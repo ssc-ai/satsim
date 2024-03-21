@@ -22,7 +22,7 @@ def test_query_by_los():
 
     def test_it(expected_num_stars, origin='corner', filter_ob=False, flipud=False, fliplr=False):
 
-        yy, xx, mm = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, rootPath='tests/hip_main.txt', origin=origin, flipud=flipud, fliplr=fliplr)
+        yy, xx, mm, rra, ddec = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, rootPath='tests/hip_main.txt', origin=origin, flipud=flipud, fliplr=fliplr)
 
         assert(len(yy) == expected_num_stars)
         assert(len(xx) == expected_num_stars)
