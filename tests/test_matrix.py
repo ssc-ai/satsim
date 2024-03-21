@@ -3453,6 +3453,27 @@ def test_matrix4():
     returnedResult = Matrix4.computeView(position, direction, up, right)
     assert(returnedResult == expected)
 
+    expected = Matrix4(
+        -1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        0,
+        0,
+        1
+    )
+    returnedResult = Matrix4.computeLookAt(position, direction, up)
+    assert(returnedResult == expected)
+
     expected = [
         1.0,
         2.0,

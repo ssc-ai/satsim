@@ -21,9 +21,24 @@
       "width": 1024,
       "y_fov": 1.0,
       "x_fov": 1.0,
-      "dark_current": 0.0,
-      "gain": 1,
-      "bias": 0,
+      "dark_current": {
+        "$sample": "random.uniform",
+        "low": 0.0,
+        "high": 1,
+        "size": [1024, 1024]
+    },
+      "gain": {
+        "$sample": "random.uniform",
+        "low": 0.99,
+        "high": 1.01,
+        "size": [1024, 1024]
+    },
+      "bias": {
+        "$sample": "random.uniform",
+        "low": 0.0,
+        "high": 1.0,
+        "size": [1024, 1024]
+    },
       "zeropoint": 17.72,
       "a2d": {
         "response": "linear",
@@ -32,7 +47,12 @@
         "bias": 0
       },
       "noise": {
-        "read": 12.6,
+        "read": {
+          "$sample": "random.uniform",
+          "low": 11,
+          "high": 12,
+          "size": [1024, 1024]
+        },
         "electronic": 0
       },
       "psf": {
@@ -50,7 +70,12 @@
       "stray": {
         "mode": "none"
       },
-      "galactic": 19.989
+      "galactic": {
+        "$sample": "random.uniform",
+        "low": 19,
+        "high": 20,
+        "size": [1024, 1024]
+      }
     },
     "geometry": {
       "stars": {
@@ -92,16 +117,32 @@
         "mode": "list",
         "list": [
           {
-            "mode": "tle",
-            "tle1": "1 00900U 64063C   20274.95388704  .00000217  00000-0  22188-3 0  9991",
-            "tle2": "2 00900  90.1603  30.0967 0029383 100.7142   7.3777 13.73420809784934",
-            "mv": 8.947921792526278
+            "mode": "observation",
+            "ra": 247.3,
+            "dec": -3.4,
+            "time": [
+              2020,
+              10,
+              15,
+              5,
+              2,
+              40.000448
+            ],
+            "mv": 5.0
           },
           {
-            "mode": "tle",
-            "tle1": "1 00902U 64063E   20274.86057611  .00000016  00000-0  10884-4 0  9991",
-            "tle2": "2 00902  90.1717  32.7863 0019162 155.3924 328.3810 13.52686900574332",
-            "mv": 8.787384057900463
+            "mode": "observation",
+            "ra": 247.5,
+            "dec": -3.3,
+            "time": [
+              2020,
+              10,
+              15,
+              5,
+              2,
+              40.000448
+            ],
+            "mv": 4.0
           }
         ]
       }

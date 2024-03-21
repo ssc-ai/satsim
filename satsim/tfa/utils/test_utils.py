@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 
-def assert_not_allclose(a, b, **kwargs):
+def assert_not_allclose(a, b, **kwargs):  # pragma: no cover
     """Assert that two numpy arrays, do not have near values.
 
     Args:
@@ -33,7 +33,7 @@ def assert_allclose_according_to_type(
     half_atol=1e-3,
     bfloat16_rtol=1e-2,
     bfloat16_atol=1e-2,
-):
+):  # pragma: no cover
     """
     Similar to tf.test.TestCase.assertAllCloseAccordingToType()
     but this doesn't need a subclassing to run.

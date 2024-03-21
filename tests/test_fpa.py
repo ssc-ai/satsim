@@ -125,6 +125,18 @@ def test_add_counts():
     for i in range(len(dn)):
         assert(d[r[i],c[i]] == dn[i])
 
+    a = tf.Variable(tf.zeros([500,500], dtype=tf.int32))
+
+    d = add_counts(a, r, c, [20, 20, 20]).numpy()
+
+    # check energy conserved
+    assert(np.sum(a.numpy().flatten()) == 0.0)
+    assert(np.sum(d.flatten()) == np.sum(dn))
+
+    # check correct value in pixels
+    for i in range(len(dn)):
+        assert(d[r[i],c[i]] == dn[i])
+
 
 def test_transform_and_add_counts():
 

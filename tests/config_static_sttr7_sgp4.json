@@ -84,6 +84,7 @@
                     "mv": 9.0,
                     "offset": [0.1, 0.1],
                     "events": {
+                        "create": 9.0,
                         "update": [
                             {
                                 "time": 10,
