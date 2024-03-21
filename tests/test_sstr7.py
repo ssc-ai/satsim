@@ -95,7 +95,7 @@ def test_query_by_los():
     ra = 268
     dec = 89.9
     rot = 0
-    yy, xx, mm, rra, ddec= query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin='corner', filter_ob=False)
+    yy, xx, mm, rra, ddec = query_by_los(height, width, y_fov, x_fov, ra, dec, rot, origin='corner', filter_ob=False)
     assert(len(yy) == 242)
 
     # south pole
