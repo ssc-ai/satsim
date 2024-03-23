@@ -34,7 +34,7 @@ def to_4D_image(image):
             return image
 
 
-def _dynamic_to_4D_image(image):
+def _dynamic_to_4D_image(image):  # pragma: no cover
     shape = tf.shape(image)
     original_rank = tf.rank(image)
     # 4D image => [N, H, W, C] or [N, C, H, W]

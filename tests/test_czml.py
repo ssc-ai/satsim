@@ -23,7 +23,7 @@ def test_czml():
     ssp['fpa']['num_frames'] = 1
     ssp['fpa']['time']['exposure'] = 60
 
-    fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix = next(image_generator(ssp, None, None, None, with_meta=True, num_sets=1))
+    fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix, segmentation = next(image_generator(ssp, None, None, None, with_meta=True, num_sets=1))
     j = save_czml(ssp, obs_cache, [astrometrics], './.images/satsim.czml')
 
     d = json.loads(j)

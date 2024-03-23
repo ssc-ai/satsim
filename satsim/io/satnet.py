@@ -80,7 +80,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
         snra = snr.numpy()
 
     for o in obs:
-        annotation = _annotate_object(height, width, o['rr'], o['cc'], o['mv'], o['pe'], filter_ob, box_size, box_pad, "Satellite", 1)
+        annotation = _annotate_object(height, width, o['rr'], o['cc'], o['mv'], o['pe'], o.get('id'), filter_ob, box_size, box_pad, "Satellite", 1)
 
         if annotation is None:
             continue
@@ -103,13 +103,13 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
         objs.append(annotation)
 
     if star_os_pix is not None:
-        star_annotations = _generate_star_annotations(star_os_pix['h'], star_os_pix['w'], star_os_pix['h_pad'], star_os_pix['w_pad'], star_os_pix['rr'], star_os_pix['cc'], star_os_pix['pe'], star_os_pix['mv'], star_os_pix['t_start'], star_os_pix['t_end'], star_os_pix['rot'], star_os_pix['tran'], star_os_pix['min_mv'])
+        star_annotations = _generate_star_annotations(star_os_pix['h'], star_os_pix['w'], star_os_pix['h_pad'], star_os_pix['w_pad'], star_os_pix['rr'], star_os_pix['cc'], star_os_pix['pe'], star_os_pix['mv'], star_os_pix['t_start'], star_os_pix['t_end'], star_os_pix['rot'], star_os_pix['tran'], star_os_pix['ra'], star_os_pix['dec'], star_os_pix['seg_id'], star_os_pix['min_mv'])
         objs.extend(star_annotations)
 
     return data
 
 
-def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_time, time_stamp, ssp, show_obs_boxes=True, astrometrics=None, save_pickle=False, dtype='uint16', save_jpeg=True, ground_truth=None, ground_truth_min=None, show_star_boxes=False):
+def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_time, time_stamp, ssp, show_obs_boxes=True, astrometrics=None, save_pickle=False, dtype='uint16', save_jpeg=True, ground_truth=None, ground_truth_min=None, show_star_boxes=False, segmentation=None):
     """Write image and annotation files compatible with SatNet. In addition,
     writes annotated images and SatSim configuration file for reference.
 
@@ -126,6 +126,8 @@ def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_
         save_jpeg: `boolean`: specify to save a JPEG annotated image
         ground_truth: `OrderedDict`: an ordered dictionary of arrays or numbers
         ground_truth_min: `float`, set any value less than this number in ground_truth to 0
+        show_star_boxes: `boolean`, draw boudning boxes around stars
+        segmentation: `dict`, if not None, segmentation maps
     """
 
     file_name = '{}.{:04d}'.format(sat_name, frame_num)
@@ -176,8 +178,12 @@ def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_
         tifffile.imwrite(os.path.join(annotation_dir, '{}.tiff'.format(file_name)), np.stack(ground_truth), dtype='float32', bigtiff=True, compression='lzw',
                          metadata={'ImageDescription': keys})
 
+    if segmentation is not None:
+        for key in segmentation:
+            tifffile.imwrite(os.path.join(annotation_dir, '{}_{}.tiff'.format(file_name, key)), segmentation[key], dtype='uint16', bigtiff=True, compression='lzw')
 
-def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, min_mv=10, box_size=None, box_pad=0):
+
+def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, min_mv=10, box_size=None, box_pad=0):
     """Generates the star annotation data from the SatSim internal star data. Data is typically in oversampled pixel space.
 
     Args:
@@ -193,6 +199,9 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
         t_end_star: `float`, exposure end time in sec from start of collection
         star_rot_rate: `float`, rotation rate in radians/sec clockwise
         star_tran_os: `[float,float]`, translation rate in pixel/sec in `[row,col]` order
+        ra_stars: `list`, RA position for each stars
+        dec_star: `list`, declination position for each stars
+        seg_id_stars: `list`, segmentation ids for each star
         min_mv: `float`, minimum magnitude brightness to annotate
         box_size: `[int, int]`, box size in row,col pixels
         box_pad: `int`, amount of pad to add to each side of box
@@ -200,6 +209,9 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
     Returns:
         A `dict`, the star annotations
     """
+    if seg_id_stars is None:
+        seg_id_stars = np.full_like(r_stars_os, -1, dtype=int)
+
     mask = tf.math.less_equal(m_stars_os, min_mv)
 
     h_minus_1 = height - 1.0
@@ -209,6 +221,9 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
     c_stars_os = tf.convert_to_tensor(c_stars_os, dtype=tf.float32)
     pe_stars_os = tf.convert_to_tensor(pe_stars_os, dtype=tf.float32)
     m_stars_os = tf.convert_to_tensor(m_stars_os, dtype=tf.float32)
+    ra_stars = tf.convert_to_tensor(ra_stars, dtype=tf.float32)
+    dec_stars = tf.convert_to_tensor(dec_stars, dtype=tf.float32)
+    seg_id_stars = tf.convert_to_tensor(seg_id_stars, dtype=tf.int32)
 
     (rr0, cc0) = rotate_and_translate(h_minus_1, w_minus_1, r_stars_os[mask], c_stars_os[mask], t_start_star, star_rot_rate, star_tran_os)
     (rrm, ccm) = rotate_and_translate(h_minus_1, w_minus_1, r_stars_os[mask], c_stars_os[mask], (t_start_star + t_end_star) * 0.5, star_rot_rate, star_tran_os)
@@ -218,17 +233,19 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
     cc = np.stack([cc0, ccm, cc1], axis=1) - w_pad_os
 
     objs = []
-    for r, c, pe, mv in zip(rr, cc, pe_stars_os[mask], m_stars_os[mask]):
+    for r, c, pe, mv, ra, dec, sid in zip(rr, cc, pe_stars_os[mask], m_stars_os[mask], ra_stars[mask], dec_stars[mask], seg_id_stars[mask]):
         if np.isnan(r).any() or np.isnan(c).any():
             continue
-        annotation = _annotate_object(height, width, r, c, mv, pe.numpy(), True, box_size, box_pad, "Star", 2)
+        annotation = _annotate_object(height, width, r, c, mv, pe.numpy(), sid, True, box_size, box_pad, "Star", 2)
         if annotation is not None:
+            annotation['ra'] = _cast_to_float(ra)
+            annotation['dec'] = _cast_to_float(dec)
             objs.append(annotation)
 
     return objs
 
 
-def _annotate_object(height, width, rr, cc, mv, pe, filter_ob=True, box_size=None, box_pad=0, class_name="Satellite", class_id=1, clip_box=False):
+def _annotate_object(height, width, rr, cc, mv, pe, seg_id=None, filter_ob=True, box_size=None, box_pad=0, class_name="Satellite", class_id=1, clip_box=False):
     """Generates the star annotation data from the SatSim internal star data. Data is typically in oversampled pixel space.
 
     Args:
@@ -238,6 +255,7 @@ def _annotate_object(height, width, rr, cc, mv, pe, filter_ob=True, box_size=Non
         cc: `float`, object position column pixel
         mv: `list`, magnitude
         pe: `list`, photoelectrons per sec
+        seg_id: `int`, segmentation id
         filter_ob: `boolean`, bounds min and max and remove out of bounds
         box_size: `[int, int]`, box size in row,col pixels
         box_pad: `int`, amount of pad to add to each side of box
@@ -248,6 +266,9 @@ def _annotate_object(height, width, rr, cc, mv, pe, filter_ob=True, box_size=Non
     Returns:
         A `dict`, a SatNet formatted annotation
     """
+    if seg_id is None:
+        seg_id = -1
+
     rr_norm = (rr + 0.5) / height
     cc_norm = (cc + 0.5) / width
 
@@ -286,33 +307,42 @@ def _annotate_object(height, width, rr, cc, mv, pe, filter_ob=True, box_size=Non
         bbox_height = (box_size[0] + box_pad * 2) / height
         bbox_width = (box_size[1] + box_pad * 2) / width
 
-    def cast_to_float(num):
-        if isinstance(num, np.ndarray):
-            return num.astype(float)
-        else:
-            return float(num)
-
     return OrderedDict({
         'class_name': class_name,
         'class_id': class_id,
-        'y_min': cast_to_float(y_min),
-        'x_min': cast_to_float(x_min),
-        'y_max': cast_to_float(y_max),
-        'x_max': cast_to_float(x_max),
-        'y_center': cast_to_float(y_center),
-        'x_center': cast_to_float(x_center),
-        'bbox_height': cast_to_float(bbox_height),
-        'bbox_width': cast_to_float(bbox_width),
+        'y_min': _cast_to_float(y_min),
+        'x_min': _cast_to_float(x_min),
+        'y_max': _cast_to_float(y_max),
+        'x_max': _cast_to_float(x_max),
+        'y_center': _cast_to_float(y_center),
+        'x_center': _cast_to_float(x_center),
+        'bbox_height': _cast_to_float(bbox_height),
+        'bbox_width': _cast_to_float(bbox_width),
         'source': 'satsim',
-        'magnitude': cast_to_float(mv),
-        'pe_per_sec': cast_to_float(pe),
-        'y_start': cast_to_float(rr_norm[0]),
-        'x_start': cast_to_float(cc_norm[0]),
-        'y_mid': cast_to_float(y_center_true),
-        'x_mid': cast_to_float(x_center_true),
-        'y_end': cast_to_float(rr_norm[-1]),
-        'x_end': cast_to_float(cc_norm[-1]),
+        'magnitude': _cast_to_float(mv),
+        'pe_per_sec': _cast_to_float(pe),
+        'y_start': _cast_to_float(rr_norm[0]),
+        'x_start': _cast_to_float(cc_norm[0]),
+        'y_mid': _cast_to_float(y_center_true),
+        'x_mid': _cast_to_float(x_center_true),
+        'y_end': _cast_to_float(rr_norm[-1]),
+        'x_end': _cast_to_float(cc_norm[-1]),
+        'seg_id': _cast_to_int(seg_id)
     })
+
+
+def _cast_to_float(num):
+    if isinstance(num, np.ndarray):
+        return num.astype(float)
+    else:
+        return float(num)
+
+
+def _cast_to_int(num):
+    if isinstance(num, np.ndarray):
+        return num.astype(int)
+    else:
+        return int(num)
 
 
 def _is_out_of_bounds(a, b):

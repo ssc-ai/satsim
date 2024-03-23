@@ -40,7 +40,7 @@ def test_fftconv2_big():
     a = datasets.face(gray=True)
 
     a = a[0:s,0:s]
-    b = np.outer(signal.gaussian(s, 8), signal.gaussian(s, 8))
+    b = np.outer(signal.windows.gaussian(s, 8), signal.windows.gaussian(s, 8))
     c = signal.fftconvolve(a, b, mode='same')
 
     # warning, takes a long time (just a check to see if equal)
@@ -173,3 +173,7 @@ def test_lagrange_segment_boundaries():
 
     myy = lagrange(xx, yy, nxx, 5)
     np.testing.assert_array_equal(myy, [-1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.5, 6.0, 7.5, 9.0, 11.5, 14.0, 16.5, 19.0, 21.5, 24.0])
+
+    # test invalid
+    invalid = lagrange(np.zeros((3,3,3)), yy, nxx, 5)
+    assert(invalid is None)

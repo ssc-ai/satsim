@@ -120,6 +120,16 @@
             ],
             "default": false
         },
+        "save_segmentation": {
+            "description": "Save star and object segmenation annotation. Each star and object will have a unique ID for a collect.",
+            "type": "boolean",
+            "default": false
+        },
+        "psf_sample_frequency": {
+            "description": "The frequency to regenerate a new PSF. Useful when turbulant_atmosphere should be resampled. Valid values: once, collect, frame",
+            "type": "string",
+            "default": "once"
+        },
         "save_pickle": {
             "description": "Save intermediate data as pickle files for debugging.",
             "type": "boolean",

@@ -16,7 +16,7 @@ requirements = [
     'Cython>=0.29.0',
     'scikit-image>=0.19.3',
     'Pillow>=9.0,<10.0',
-    'numpy>=1.21.0,<1.24.0', # 1.24.0 breaks poppy
+    'numpy>=1.21.0',
     'PyYAML>=6.0',
     'matplotlib>=3.7.0',
     'astropy>=5.2.1,<6',
@@ -35,6 +35,7 @@ requirements = [
     'pooch>=1.6.0',
     'czmlpy>=0.9.0',
     'tifffile>=2023.4.12',
+    'imagecodecs>=2023.3.16',
 ]
 
 setup_requirements = ['pytest-runner', ]
@@ -68,6 +69,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/ssc-ai/satsim',
-    version='0.17.1',
+    version='0.18.0',
     zip_safe=False,
 )

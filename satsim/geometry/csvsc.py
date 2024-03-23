@@ -55,6 +55,8 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath="hip_main
             rr: `list`, list of row pixel locations
             cc: `list`, list of column pixel locations
             mv: `list`, list of visual magnitudes
+            rra: `list`, list of RA positions in degrees
+            ddec: `list`, list of declination positions in degrees
     """
 
     cmin, cmax, w = get_min_max_ra_dec(height, width, y_fov / height, x_fov / width, ra, dec, rot, 0, origin)
@@ -73,4 +75,4 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath="hip_main
     if fliplr:
         cc = width - cc
 
-    return rr, cc, mm
+    return rr, cc, mm, rra, ddec

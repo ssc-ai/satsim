@@ -192,6 +192,8 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_S
             rr: `list`, list of row pixel locations
             cc: `list`, list of column pixel locations
             mv: `list`, list of visual magnitudes
+            rra: `list`, list of RA positions in degrees
+            ddec: `list`, list of declination positions in degrees
     """
 
     cmin, cmax, w = get_min_max_ra_dec(height, width, y_fov / height, x_fov / width, ra, dec, rot, pad_mult, origin)
@@ -201,11 +203,11 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_S
 
     stars = query_by_min_max(cmin[0], cmax[0], cmin[1], cmax[1], rootPath)
 
-    rra = np.array([s['ra'] for s in stars])
-    ddec = np.array([s['dec'] for s in stars])
+    rra = np.degrees(np.array([s['ra'] for s in stars]))
+    ddec = np.degrees(np.array([s['dec'] for s in stars]))
     mm = np.array([s['mv'] for s in stars])
 
-    cc, rr = w.wcs_world2pix(np.degrees(rra), np.degrees(ddec), 0)
+    cc, rr = w.wcs_world2pix(rra, ddec, 0)
 
     if filter_ob:
         hp = height * (1 + pad_mult)
@@ -214,6 +216,8 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_S
         rr = rr[in_bounds]
         cc = cc[in_bounds]
         mm = mm[in_bounds]
+        rra = rra[in_bounds]
+        ddec = ddec[in_bounds]
 
     if origin == 'center':
         rr += height / 2.0
@@ -225,7 +229,7 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_S
     if fliplr:
         cc = width - cc
 
-    return rr, cc, mm
+    return rr, cc, mm, rra, ddec
 
 
 def query_by_min_max(ra_min, ra_max, dec_min, dec_max, rootPath=DEFAULT_SSTR7_PATH, clip_min_max=True):

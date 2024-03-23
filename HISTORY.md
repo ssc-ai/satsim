@@ -1,6 +1,13 @@
 History
 =======
 
+0.18.0
+---------------------
+
+* Add turbulent atmosphere to POPPY PSF generation. Set with psf option `turbulent_atmosphere` and sim option `psf_sample_frequency`.
+* Add star and object segmentation annotation. Set sim option `save_segmentation` to `true` and `star_annotation_threshold` to limit stars annotated.
+
+
 0.17.1
 ---------------------
 

@@ -547,7 +547,6 @@ def test_cartesian2():
     assert(Cartesian2.equals(cartesian, None) is False)
 
     cartesian = Cartesian2(1.0, 2.0)
-    print('cart2?', Cartesian2.equalsEpsilon(cartesian, Cartesian2(1.0, 2.0), 0.0))
     assert(Cartesian2.equalsEpsilon(cartesian, Cartesian2(1.0, 2.0), 0.0) is
            True
            )

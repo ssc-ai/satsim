@@ -624,7 +624,7 @@ def radec_to_eci(ra, dec, d=0):
     ra = ra * np.pi / 180
     dec = dec * np.pi / 180
 
-    r = 1.0 if d <= 0.0 else d
+    r = 1.0 if d is None or d <= 0.0 else d
 
     rCosTheta = r * np.cos(dec)
 

@@ -8,10 +8,15 @@ Installation
 Stable Release
 --------------
 
-To install SatSim, download the python wheel file from `GitHub releases`_:
+To install SatSim:
+
+.. code-block:: console
+
+    $ pip3 install satsim
+
+Or build python wheel file from `GitHub releases`_:
 
 .. _GitHub releases: https://github.com/ssc-ai/satsim/releases
-
 
 Then run this command in your terminal from the location of the python wheel
 file.

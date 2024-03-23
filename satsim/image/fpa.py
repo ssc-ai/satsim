@@ -4,7 +4,7 @@ import tensorflow as tf
 import numpy as np
 
 from satsim.geometry.transform import rotate_and_translate
-from satsim.util import get_semantic_version, is_tensorflow_running_on_cpu
+from satsim.util import is_tensorflow_running_on_cpu
 from satsim.math import fftconv2p
 
 
@@ -395,7 +395,7 @@ def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, tr
     def func_eval(i, img, r_batch, c_batch, cnt_os_batch):
 
         # vectorize
-        tt = repeat(tf.linspace(t_start, t_end, t_osf), batch_size)
+        tt = tf.repeat(tf.linspace(t_start, t_end, t_osf), batch_size)
         rr = tf.tile(r_batch[i, :], [t_osf])
         cc = tf.tile(c_batch[i, :], [t_osf])
         cnt_os = tf.tile(cnt_os_batch[i, :], [t_osf])
@@ -422,26 +422,6 @@ def _to_batch_1d(x, batch_size):
     x = tf.reshape(x, [num_batches, batch_size])
 
     return x
-
-
-def _repeat_legacy_tf(input, repeats, axis=None, name=None):
-
-    from tensorflow.python.ops.ragged.ragged_util import repeat
-
-    if axis is None:
-        input = tf.reshape(input, [-1])
-        axis = 0
-    return repeat(input, repeats, axis, name)
-
-
-#
-# use tf.repeat if implemented
-#
-tf_ver = get_semantic_version(tf)
-if tf_ver[0] == 1 and tf_ver[1] < 15 or tf_ver[0] == 2 and tf_ver[1] == 0:
-    repeat = _repeat_legacy_tf
-else:
-    repeat = tf.repeat
 
 
 def _to_shape(a, b):

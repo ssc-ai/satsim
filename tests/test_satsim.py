@@ -6,14 +6,17 @@ import os
 import pickle
 import json
 import copy
+from datetime import datetime
 
 import numpy as np
 import scipy
+from tifffile import imread
 
 
 from satsim import config, gen_images
 from satsim.util import configure_eager
 from satsim.util.system import is_tensorflow_running_on_cpu
+from satsim.util import MultithreadedTaskQueue
 
 
 def test_star_brightness():
@@ -209,7 +212,7 @@ def _test_target_centroid(render_size=None):
     with open(os.path.join(dirname, 'Debug', 'fpa_conv_0.pickle'), 'rb') as f:
         fpa4 = pickle.load(f)
 
-    print(scipy.ndimage.center_of_mass(fpa4))
+    # print(scipy.ndimage.center_of_mass(fpa4))
 
     np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa4), (np.asarray(fpa4.shape) - 1) / 2, 1e-5)
 
@@ -310,6 +313,13 @@ def test_poppy():
     del(ssp['geometry']['site']['track']['tle2'])
     gen_images(ssp, eager=True, output_dir='./.images', output_debug=True)
 
+    ssp['geometry']['site']['track']['mode'] = 'rate'
+    ssp['geometry']['site']['track']['position'] = [-35180.62550265, -23252.99066344, 92.95410805]
+    ssp['geometry']['site']['track']['velocity'] = [1.69553697, -2.56443628, 1.12318636e-03]
+    ssp['geometry']['site']['track']['epoch'] = [2015, 4, 24, 9, 7, 24.128]
+    del(ssp['geometry']['site']['track']['tle'])
+    gen_images(ssp, eager=True, output_dir='./.images', output_debug=True)
+
 
 def test_render_modes():
     """ Note `scipy.ndimage.center_of_mass` returns center of pixel
@@ -340,11 +350,11 @@ def test_render_modes():
 
     ssp['sim']['calculate_snr'] = True
 
-    from satsim.util import MultithreadedTaskQueue
-
     queue = MultithreadedTaskQueue()
 
-    dirname0 = gen_images(copy.deepcopy(ssp), eager=True, output_dir='./.images', output_debug=True, queue=queue)
+    dirname0 = gen_images(copy.deepcopy(ssp), eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_render_modes'))
+    queue.waitUntilEmpty()
+
     with open(os.path.join(dirname0, 'Debug', 'fpa_conv_star_0.pickle'), 'rb') as f:
         fpa_conv_star_0 = pickle.load(f)
     with open(os.path.join(dirname0, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
@@ -352,7 +362,9 @@ def test_render_modes():
 
     ssp['sim']['calculate_snr'] = False
 
-    dirname1 = gen_images(copy.deepcopy(ssp), eager=True, output_dir='./.images', output_debug=True, queue=queue)
+    dirname1 = gen_images(copy.deepcopy(ssp), eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_render_modes2'))
+    queue.waitUntilEmpty()
+
     with open(os.path.join(dirname1, 'Debug', 'fpa_conv_star_0.pickle'), 'rb') as f:
         fpa_conv_star_1 = pickle.load(f)
 
@@ -360,7 +372,9 @@ def test_render_modes():
     ssp['sim']['render_size'] = [100, 100]
     ssp['sim']['calculate_snr'] = True
 
-    dirname2 = gen_images(copy.deepcopy(ssp), eager=True, output_dir='./.images', output_debug=True, queue=queue)
+    dirname2 = gen_images(copy.deepcopy(ssp), eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_render_modes3'))
+    queue.waitUntilEmpty()
+
     with open(os.path.join(dirname2, 'Debug', 'fpa_conv_star_0.pickle'), 'rb') as f:
         fpa_conv_star_2 = pickle.load(f)
     with open(os.path.join(dirname2, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
@@ -369,7 +383,9 @@ def test_render_modes():
     ssp['sim']['render_size'] = [100, 100]
     ssp['sim']['calculate_snr'] = False
 
-    dirname3 = gen_images(copy.deepcopy(ssp), eager=True, output_dir='./.images', output_debug=True, queue=queue)
+    dirname3 = gen_images(copy.deepcopy(ssp), eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_render_modes4'))
+    queue.waitUntilEmpty()
+
     with open(os.path.join(dirname3, 'Debug', 'fpa_conv_star_0.pickle'), 'rb') as f:
         fpa_conv_star_3 = pickle.load(f)
 
@@ -464,3 +480,135 @@ def test_crop():
     with open(os.path.join(dirname, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
         f = pickle.load(f)
         assert(f.shape == (512, 1024))
+
+
+def test_segmentation_annotation():
+
+    queue = MultithreadedTaskQueue()
+
+    ssp = config.load_json('./tests/config_static.json')
+    ssp['sim']['save_segmentation'] = True
+    ssp['sim']['star_annotation_threshold'] = 10
+    ssp['fpa']['num_frames'] = 1
+    ssp['geometry']['stars']['mv']['bins'] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    ssp['geometry']['stars']['mv']['density'] = [0,0,0,0,0,0.73333,0,1.6667,3.7333,11.494,18.172,33.236,36.531,57.311,93.314,149.13,250.63,380.99]
+
+    np.random.seed(42)
+    set_name = _gen_name('test_segmentation_annotation')
+    dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=set_name)
+    queue.waitUntilEmpty()
+
+    with open(os.path.join(dirname, 'Debug', 'fpa_conv_star_0.pickle'), 'rb') as f:
+        pe_data = pickle.load(f)
+        seg_data = imread(dirname + '/Annotations/' + set_name + '.0000_star_segmentation.tiff')
+        mask_data = pe_data[seg_data > 0]
+
+    assert(not np.any(mask_data < ssp['fpa']['a2d']['gain']))
+
+    with open(os.path.join(dirname, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
+        pe_data = pickle.load(f)
+        seg_data = imread(dirname + '/Annotations/' + set_name + '.0000_object_segmentation.tiff')
+        mask_data = pe_data[seg_data > 0]
+
+    assert(not np.any(mask_data < ssp['fpa']['a2d']['gain']))
+
+    ssp = config.load_json('./tests/config_piecewise.json')
+    ssp, d = config.transform(ssp, max_stages=10, with_debug=True)
+
+    ssp['fpa']['crop'] = {
+        "height_offset": 0,
+        "width_offset": 0,
+        "height": 512,
+        "width": 1024
+    }
+    ssp['sim']['save_segmentation'] = True
+    ssp['sim']['star_annotation_threshold'] = 9
+
+    np.random.seed(42)
+    set_name = _gen_name('test_segmentation_annotation2')
+    dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=set_name)
+    queue.waitUntilEmpty()
+
+    with open(os.path.join(dirname, 'Debug', 'fpa_conv_star_0.pickle'), 'rb') as f:
+        pe_data = pickle.load(f)
+        seg_data = imread(dirname + '/Annotations/' + set_name + '.0000_star_segmentation.tiff')
+        mask_data = pe_data[seg_data > 0]
+
+    assert(not np.any(mask_data < ssp['fpa']['a2d']['gain']))
+
+    with open(os.path.join(dirname, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
+        pe_data = pickle.load(f)
+        seg_data = imread(dirname + '/Annotations/' + set_name + '.0000_object_segmentation.tiff')
+        mask_data = pe_data[seg_data > 0]
+
+    assert(not np.any(mask_data < ssp['fpa']['a2d']['gain']))
+
+
+def test_mode_none():
+
+    queue = MultithreadedTaskQueue()
+
+    ssp = config.load_json('./tests/config_static.json')
+    ssp['sim']['mode'] = 'none'
+
+    np.random.seed(42)
+    dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_none'))
+    queue.waitUntilEmpty()
+
+    assert(dirname is not None)
+
+
+def test_mode_misc():
+
+    queue = MultithreadedTaskQueue()
+
+    ssp = config.load_json('./tests/config_static.json')
+    ssp['sim']['psf_sample_frequency'] = 'frame'
+    ssp['fpa']['num_frames'] = 3
+    ssp['augment'] = {
+        'image': {
+            'post': None
+        }
+    }
+
+    np.random.seed(42)
+    dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_misc'))
+    queue.waitUntilEmpty()
+
+    pad = 2 * ssp['sim']['padding']
+    ssp['fpa']['psf'] = np.random.rand((pad + ssp['fpa']['height']) * ssp['sim']['spacial_osf'], (pad + ssp['fpa']['width']) * ssp['sim']['spacial_osf'])
+    ssp['augment']['image']['post'] = 1
+    dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_misc2'))
+    queue.waitUntilEmpty()
+
+    assert(dirname is not None)
+
+    ssp['augment']['image']['post'] = lambda x: x + 1.0
+    dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_misc3'))
+    queue.waitUntilEmpty()
+
+    assert(dirname is not None)
+
+
+def test_csv_catalog():
+
+    queue = MultithreadedTaskQueue()
+
+    ssp = config.load_json('./tests/config_static_sttr7_sgp4.json')
+    ssp['fpa']['x_fov'] = 20.0
+    ssp['fpa']['y_fov'] = 20.0
+    ssp['fpa']['zeropoint'] = 17.0
+    ssp['geometry']['stars'] = {
+        'mode': 'csv',
+        'path': './tests/hip_main.txt',
+        'motion': { 'mode': 'none'}
+    }
+
+    dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=_gen_name('test_csv_catalog'))
+    queue.waitUntilEmpty()
+
+    assert(dirname is not None)
+
+
+def _gen_name(name):
+    return '{}_{}'.format(datetime.now().isoformat().replace(':', '-'), name)
