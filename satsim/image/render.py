@@ -177,7 +177,12 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
     else:
 
         # blur targets and stars together
-        fpa_conv_os = fftconv2p(fpa_os_w_stars + fpa_os_w_targets, psf_os, pad=1)
+        fpa_os_sum = fpa_os_w_stars + fpa_os_w_targets
+        if(tf.reduce_all(tf.equal(fpa_os_sum, 0))):
+            fpa_conv_os = fpa_os_sum
+        else:
+            fpa_conv_os = fftconv2p(fpa_os_sum, psf_os, pad=1)
+
         fpa_conv_crop = crop(fpa_conv_os, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
         fpa_conv_ds = downsample(fpa_conv_crop, s_osf, 'pool')
 
