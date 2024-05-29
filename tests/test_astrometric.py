@@ -4,7 +4,8 @@ from dateutil import parser
 import numpy as np
 
 from satsim.geometry.sgp4 import create_sgp4
-from satsim.geometry.astrometric import apparent, load_earth, load_sun, load_moon, create_topocentric, get_los, gen_track, query_by_los, GreatCircle, get_los_azel, angle_between, lambertian_sphere_to_mv, angle_from_los, eci_to_radec, radec_to_eci
+from satsim.geometry.astrometric import apparent, load_earth, load_sun, load_moon, create_topocentric, get_los, gen_track, query_by_los, GreatCircle, get_los_azel, angle_between, angle_from_los, eci_to_radec, radec_to_eci
+from satsim.geometry.photometric import lambertian_sphere_to_mv
 from satsim import time
 
 
