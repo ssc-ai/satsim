@@ -61,7 +61,7 @@ class EarthTwoBodySatellite(VectorFunction):
         tt = _to_astropy(t)
         td = tt - self.epoch['time']
 
-        if td.size > 1:
+        if td.ndim > 0:
             rGCRS = np.zeros((3, td.size))
             vGCRS = np.zeros((3, td.size))
             for i in range(td.size):
