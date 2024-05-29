@@ -20,21 +20,25 @@ def _rotation_from_vectors(v, local=np.array([[1,0,0], [0,1,0], [0,0,1]])):
     return M
 
 
-def _generate_random_mv(mv, scale, n, sigma=1.0):
-    ZP = 1.0
+def _generate_random_mv_or_size(mv_or_size, scale, n, sigma=1.0, brightness_model='mv'):
     # samples = np.abs(np.random.normal(0, sigma, n))
     samples = np.abs(np.random.lognormal(0, sigma, n))
-    samples = samples / np.sum(samples)
-    pe_target = mv_to_pe(ZP, mv)
-    pe_part = samples * pe_target
-    return pe_to_mv(ZP, pe_target * scale[0]), pe_to_mv(ZP, pe_part * scale[1])
+    samples = samples / np.sum(samples)  # normalize
+
+    if brightness_model == 'mv':
+        ZP = 1.0
+        pe_target = mv_to_pe(ZP, mv_or_size)
+        pe_part = samples * pe_target
+        return pe_to_mv(ZP, pe_target * scale[0]), pe_to_mv(ZP, pe_part * scale[1])
+    else:
+        return mv_or_size * scale[0], samples * mv_or_size * scale[1]
 
 
 def collision_from_tle(tle, collision_time, radius=37.5, K=0.5,
                        attack_angle='random', attack_velocity=None, attack_velocity_scale=1.0,
                        n=[100,100], target_mv_scale=[0.5, 2.0], rpo_mv_scale=[0.5, 2.0],
                        target_mv=12.0, rpo_mv=12.0, offset=[0.0, 0.0], collision_time_offset=0.0, variable_brightness=True,
-                       fragment_angle='random', scale_fragment_velocity=False):
+                       fragment_angle='random', scale_fragment_velocity=False, brightness_model='mv'):
     """Generates a two object collision configuration from the input `tle`.
 
     Args:
@@ -55,6 +59,7 @@ def collision_from_tle(tle, collision_time, radius=37.5, K=0.5,
         variable_brightness: `boolean`, if True randomly assign sine variable brightness between 0 to 1 hz. default=True
         fragment_angle: `string`, specified the fragment angle sampling. `random` or `linspace`. default=`random`
         scale_fragment_velocity: `boolean`, if True scale the fragment velocity by cosine of the exit velocity. default=`false`
+        brightness_model: `string`, the model to use for brightness calculations. valid options `mv`, `lambertian_sphere` default=`mv`
 
     Example usage in SatSim configuration::
 
@@ -109,10 +114,10 @@ def collision_from_tle(tle, collision_time, radius=37.5, K=0.5,
     collision_time = time.to_utc_list(t)
 
     # brightness calculations
-    target_mv_after, target_particles_mv = _generate_random_mv(target_mv, target_mv_scale, n[0], np.random.uniform(0.0,1.0))
+    target_mv_after, target_particles_mv = _generate_random_mv_or_size(target_mv, target_mv_scale, n[0], np.random.uniform(0.0,1.0), brightness_model=brightness_model)
 
     if rpo_mv is not None:
-        rpo_mv_after, rpo_particles_mv = _generate_random_mv(rpo_mv, rpo_mv_scale, n[1], np.random.uniform(0.0,1.0))
+        rpo_mv_after, rpo_particles_mv = _generate_random_mv_or_size(rpo_mv, rpo_mv_scale, n[1], np.random.uniform(0.0,1.0), brightness_model=brightness_model)
     else:
         rpo_mv_after, rpo_particles_mv = (None, [])
 
@@ -184,6 +189,60 @@ def collision_from_tle(tle, collision_time, radius=37.5, K=0.5,
     vv[ndiv2:,2] = np.abs(vv[ndiv2:,2])
     vv[ndiv2:,:] = M1.dot(vv[ndiv2:,:].T).T + velocity1
 
+    obs = {
+        "mode": "list",
+        "list": [{
+            "mode": "twobody",
+            "position": list(position),
+            "velocity": list(v),
+            "epoch": collision_time,
+            "offset": offset,
+            "events": {
+                "create": collision_time
+            }
+        } for v, m in zip(vv, np.concatenate([target_particles_mv, rpo_particles_mv]))]
+    }
+
+    target_obs = None
+    if target_mv is not None:
+        target_obs = {
+            "mode": "twobody",
+            "position": list(position),
+            "velocity": list(velocity0),
+            "epoch": collision_time,
+            "offset": offset,
+            "events": {
+                "update": [
+                    {
+                        "time": collision_time,
+                        "values": {
+                        }
+                    }
+                ]
+            }
+        }
+        obs['list'].append(target_obs)
+
+    rpo_obs = None
+    if rpo_mv is not None:
+        rpo_obs = {
+            "mode": "twobody",
+            "position": list(position),
+            "velocity": list(velocity1),
+            "epoch": collision_time,
+            "offset": offset,
+            "events": {
+                "update": [
+                    {
+                        "time": collision_time,
+                        "values": {
+                        }
+                    }
+                ]
+            }
+        }
+        obs['list'].append(rpo_obs)
+
     if variable_brightness is True:
         def mv_func(mv_in):
             return {
@@ -209,60 +268,46 @@ def collision_from_tle(tle, collision_time, radius=37.5, K=0.5,
         def mv_func(mv_in):
             return mv_in
 
-    obs = {
-        "mode": "list",
-        "list": [{
-            "mode": "twobody",
-            "position": list(position),
-            "velocity": list(v),
-            "epoch": collision_time,
-            "mv": mv_func(m),
-            "offset": offset,
-            "events": {
-                "create": collision_time
-            }
-        } for v, m in zip(vv, np.concatenate([target_particles_mv, rpo_particles_mv]))]
-    }
+    if brightness_model == 'mv':
 
-    if target_mv is not None:
-        obs['list'].append({
-            "mode": "twobody",
-            "position": list(position),
-            "velocity": list(velocity0),
-            "epoch": collision_time,
-            "mv": target_mv,
-            "offset": offset,
-            "events": {
-                "update": [
-                    {
-                        "time": collision_time,
-                        "values": {
-                            "mv": mv_func(target_mv_after)
-                        }
-                    }
-                ]
-            }
-        })
+        for i, m in enumerate(np.concatenate([target_particles_mv, rpo_particles_mv])):
+            obs['list'][i]['mv'] = mv_func(m)
 
-    if rpo_mv is not None:
-        obs['list'].append({
-            "mode": "twobody",
-            "position": list(position),
-            "velocity": list(velocity1),
-            "epoch": collision_time,
-            "mv": rpo_mv,
-            "offset": offset,
-            "events": {
-                "update": [
-                    {
-                        "time": collision_time,
-                        "values": {
-                            "mv": mv_func(rpo_mv_after)
-                        }
-                    }
-                ]
+        if target_obs is not None:
+            target_obs['mv'] = mv_func(target_mv_after)
+            target_obs['events']['update'][-1]['values']['mv'] = mv_func(target_mv_after)
+        if rpo_obs is not None:
+            rpo_obs['mv'] = mv_func(rpo_mv_after)
+            rpo_obs['events']['update'][-1]['values']['mv'] = mv_func(rpo_mv_after)
+
+    else:
+        albedo = 0.3  # TODO: make this a parameter
+        for i, m in enumerate(np.concatenate([target_particles_mv, rpo_particles_mv])):
+            obs['list'][i]['model'] = {
+                'mode': brightness_model,
+                'albedo': albedo,
+                'size': m
             }
-        })
+
+        if target_obs is not None:
+            target_obs['model'] = {
+                'mode': brightness_model,
+                'albedo': albedo,
+                'size': target_mv
+            }
+            target_obs['events']['update'][-1]['values']['model'] = {
+                'size': target_mv_after
+            }
+
+        if rpo_obs is not None:
+            rpo_obs['model'] = {
+                'mode': brightness_model,
+                'albedo': albedo,
+                'size': rpo_mv
+            }
+            rpo_obs['events']['update'][-1]['values']['model'] = {
+                'size': rpo_mv_after
+            }
 
     return obs
 
@@ -270,7 +315,7 @@ def collision_from_tle(tle, collision_time, radius=37.5, K=0.5,
 def breakup_from_tle(tle, breakup_time, radius=37.5, breakup_velocity=108,
                      n=100, target_mv_scale=[0.5, 2.0], target_mv=12.0,
                      offset=[0.0, 0.0], breakup_time_offset=0.0,
-                     variable_brightness=True):
+                     variable_brightness=True, brightness_model='mv'):
     """Generates a breakup configuration from the input `tle`.
 
     Args:
@@ -283,6 +328,7 @@ def breakup_from_tle(tle, breakup_time, radius=37.5, breakup_velocity=108,
         offset: `array`, row column offset of target position on fpa in normalized coordinates. default=12
         breakup_time_offset: `float`, number of seconds to offset breakup time from `breakup`. default=[0,0]
         variable_brightness: `boolean`, if True randomly assign sine variable brightness between 0 to 1 hz. default=True
+        brightness_model: `string`, the model to use for brightness calculations. valid options `mv`, `lambertian_sphere` default=`mv`
 
     Example usage in SatSim configuration::
 
@@ -319,6 +365,6 @@ def breakup_from_tle(tle, breakup_time, radius=37.5, breakup_velocity=108,
                              attack_angle='random', attack_velocity=breakup_velocity, attack_velocity_scale=1.0,
                              n=n, target_mv_scale=target_mv_scale, rpo_mv_scale=None, target_mv=target_mv, rpo_mv=None,
                              offset=offset, collision_time_offset=breakup_time_offset, variable_brightness=variable_brightness,
-                             scale_fragment_velocity=False)
+                             scale_fragment_velocity=False, brightness_model=brightness_model)
 
     return obs
