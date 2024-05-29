@@ -9,6 +9,14 @@ satsim.util package
 Submodules
 ----------
 
+satsim.util.python module
+-------------------------
+
+.. automodule:: satsim.util.python
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.util.system module
 -------------------------
 
