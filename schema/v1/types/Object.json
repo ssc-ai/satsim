@@ -10,6 +10,9 @@
         },
         {
             "required": ["pe"]
+        },
+        {
+            "required": ["model"]
         }
     ],
     "properties": {
@@ -24,6 +27,33 @@
         "pe": {
             "description": "The brightness of the object in photoelectrons per second.",
             "$ref": "Float.json"
+        },
+        "model": {
+            "description": "The model (brightness) of the object.",
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "description": "The mode of the model.",
+                    "type": "string",
+                    "enum": ["lambertian_sphere"]
+                },
+                "size": {
+                    "description": "The diameter of the sphere in meters.",
+                    "$ref": "Float.json"
+                },
+                "albedo": {
+                    "description": "The albedo of the object.",
+                    "$ref": "Float.json"
+                },
+                "distance": {
+                    "description": "The distance of the object in kilometers (optional).",
+                    "$ref": "Float.json"
+                },
+                "phase_angle": {
+                    "description": "The phase angle of the object in degrees (optional).",
+                    "$ref": "Float.json"
+                }
+            }
         },
         "offset": {
             "description": "The offset in of the object in pixels, [row, column].",

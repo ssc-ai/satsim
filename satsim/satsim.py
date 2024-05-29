@@ -30,14 +30,15 @@ from satsim.geometry.csvsc import query_by_los as csvsc_query_by_los
 from satsim.geometry.sgp4 import create_sgp4
 from satsim.geometry.ephemeris import create_ephemeris_object
 from satsim.geometry.astrometric import create_topocentric, gen_track, get_los, get_los_azel, GreatCircle
+from satsim.geometry.photometric import model_to_mv
 from satsim.geometry.twobody import create_twobody
 from satsim.geometry.observation import create_observation
 from satsim.io.satnet import write_frame, set_frame_annotation, init_annotation
 from satsim.io.image import save_apng
 from satsim.io.czml import save_czml
-from satsim.util import tic, toc, MultithreadedTaskQueue, configure_eager, configure_single_gpu
+from satsim.util import tic, toc, MultithreadedTaskQueue, configure_eager, configure_single_gpu, merge_dicts
 from satsim.config import transform, save_debug, _transform, save_cache
-from satsim.pipeline import _delta_t
+from satsim.pipeline import _delta_t, _avg_t
 from satsim import time
 
 logger = logging.getLogger(__name__)
@@ -929,6 +930,7 @@ def _gen_objects(ssp, render_mode,
 
         # TODO support in frame events
         updated = False
+        target = None
         if 'events' in o:
             if 'create' in o['events']:
                 ts_start_ob = time.utc_from_list_or_scalar(o['events']['create'], default_t=tt)
@@ -942,7 +944,7 @@ def _gen_objects(ssp, render_mode,
                 for eu in o['events']['update']:
                     ts_start_ob = time.utc_from_list_or_scalar(eu['time'], default_t=tt)
                     if ts_end.tt >= ts_start_ob.tt:
-                        o.update(eu['values'])
+                        merge_dicts(o, eu['values'])
                         updated = True
 
         if 'mv' in o:
@@ -951,6 +953,9 @@ def _gen_objects(ssp, render_mode,
         elif 'pe' in o:
             ope = o['pe'] if not callable(o['pe']) else 0.0
             pe_func = (lambda x, t: x) if not callable(o['pe']) else (lambda x, t: o['pe'](x, t) * _delta_t(t))
+        else:
+            ope = 0.0
+            pe_func = (lambda x, t: x)
 
         if o['mode'] == 'line':
             ovrc = [o['velocity'][0] / y_to_pix * s_osf, o['velocity'][1] / x_to_pix * s_osf]
@@ -992,11 +997,11 @@ def _gen_objects(ssp, render_mode,
             if 'offset' in o:
                 o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
 
-            sat = obs_cache[i]
+            target = obs_cache[i][0]
             az, el = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
 
             try:
-                [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(h_fpa_os, w_fpa_os, y_fov, x_fov, observer, track, sat, [ope], tc_start, [ts_start, ts_mid, ts_end], star_rot, 1, track_mode, offset=o_offset, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
+                [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(h_fpa_os, w_fpa_os, y_fov, x_fov, observer, track, [target], [ope], tc_start, [ts_start, ts_mid, ts_end], star_rot, 1, track_mode, offset=o_offset, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
             except Exception:
                 logger.exception("Error propagating target. {}".format(o))
                 continue
@@ -1021,25 +1026,32 @@ def _gen_objects(ssp, render_mode,
         elif o['mode'] == 'none':
             continue
 
+        # non-sprite based brightness models
+        has_brightness_model = 'model' in o and not callable(o['model']) and 'mode' in o['model'] and o['model']['mode'] != 'sprite'
+        if has_brightness_model:
+            pe_func = (lambda x, t: mv_to_pe(zeropoint, model_to_mv(observer, target, o['model'], time.utc_from_list(tt, _avg_t(t)))) * _delta_t(t))
+
         opp = pe_func(opp, ott)
         avg_pe = np.sum(opp) / (t_end - t_start)
         avg_mv = pe_to_mv(zeropoint, avg_pe)
 
         logger.debug('Average brightness for target: {:.2f} mv, {:.2f} pix.'.format(avg_mv, len(opp) / s_osf))
 
-        if 'model' in o:
+        # TODO generalize `model`
+        # sprint based brightness models
+        if 'model' in o and not has_brightness_model:
             if render_mode != 'piecewise':
-                if not callable(o['model']):
-                    patch = load_sprite_from_file(filename=o['model']['filename']) if 'mode' in o['model'] else o['model']
-                    fpa_os_clear = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
-                    fpa_os_w_targets = add_patch(fpa_os_clear, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
-                    obs_model.append(fpa_os_w_targets)
-                else:
+                if callable(o['model']):
                     fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
                     patch = o['model'](x=None, t=ott[0])
                     fpa_os_w_targets = add_patch(fpa_os_w_targets, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
                     obs_model.append(fpa_os_w_targets)
                     # TODO support sub-sample patching
+                elif o['model']['mode'] == 'sprite':
+                    patch = load_sprite_from_file(filename=o['model']['filename']) if 'mode' in o['model'] else o['model']
+                    fpa_os_clear = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
+                    fpa_os_w_targets = add_patch(fpa_os_clear, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
+                    obs_model.append(fpa_os_w_targets)
             else:
                 logger.warning('Sprite models not supported for piecewise rendering.')
         else:

@@ -516,6 +516,23 @@ def angle_between(observer, object_a, object_b, t):
     return a.separation_from(b).degrees
 
 
+def distance_between(object_a, object_b, t):
+    """Calculate the distance between `object_a` and `object_b` at time `t`.
+
+    Args:
+        object_a: `object`, Skyfield object
+        object_b: `object`, Skyfield object
+        t: `Time`, Skyfield `Time`
+
+    Returns:
+        A `float`, distance in km
+    """
+    a = object_a.at(t)
+    b = object_b.at(t)
+
+    return (a - b).distance().km
+
+
 def angle_from_los(observer, object_a, ra, dec, t):
     """Calculate the angle between `observer` to `object_a` and `observer`
     to a line of sight in `ra` and `dec`. Angle is returned in degrees.
@@ -533,34 +550,6 @@ def angle_from_los(observer, object_a, ra, dec, t):
     s = Star(ra=Angle(degrees=ra), dec=Angle(degrees=dec))
 
     return angle_between(observer, s, object_a, t)
-
-
-def lambertian_sphere_to_mv(albedo, distance, radius, phase_angle):
-    """Applies lambertian sphere approximation to convert target brightness
-    to visual magnitudes based on sun brightness of -26.74.
-
-    Args:
-        albedo: `float`, The ratio of reflected light to incident light
-            off of the object's surface
-        distance: `float`, distance to object in meters
-        radius: `float`, radius of sphere in meters
-        phase_angle: `float`, the angle between observer, object, and sun in degrees
-
-    Returns:
-        A `float`, calculated visual magnitude
-    """
-    phase_angle = np.deg2rad(phase_angle)
-
-    mv_sun = -26.74
-
-    # Lambertian sphere approximation.
-    phase_factor = np.sin(phase_angle) + (np.pi - phase_angle) * np.cos(phase_angle)
-    intensity = phase_factor * (2 * albedo * (radius * radius)) / (3 * np.pi * (distance * distance))
-
-    # Convert intensities to magnitudes
-    mvVector = mv_sun - 2.5 * np.log10(intensity)
-
-    return mvVector
 
 
 def eci_to_ecr(time, ra, dec, roll=0):

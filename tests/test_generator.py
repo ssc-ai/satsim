@@ -98,6 +98,22 @@ def test_breakup():
 
     assert(len(output['list']) == n + 1)
 
+    target_size = 12.0
+    target_scale = [0.5, 2.0]
+    output = breakup.breakup_from_tle(tle, collision_time, breakup_velocity, radius, n, target_scale, target_size, brightness_model='lambertian_sphere')
+    assert(len(output['list']) == n + 1)
+
+    total_size = 0.0
+    for item in output['list']:
+        model = item.get('model')
+        size = model.get('size')
+        total_size += size
+
+    expected_size = target_size + target_size * target_scale[1]
+
+    np.testing.assert_almost_equal(total_size, expected_size)
+    np.testing.assert_almost_equal(output['list'][-1]['events']['update'][0]['values']['model']['size'], target_size * target_scale[0])
+
 
 def test_collision():
 
@@ -124,6 +140,27 @@ def test_collision():
     output = breakup.collision_from_tle(tle, collision_time, radius, K, attach_angle, attack_velocity, attack_velocity_scale,
                                         [10, 20], fragment_angle='linspace', scale_fragment_velocity=True, variable_brightness=False)
     assert(len(output['list']) == 10 + 20 + 2)
+
+    target_size = 12.0
+    target_scale = [0.5, 2.0]
+    rpo_size = 6.0
+    rpo_scale = [0.5, 2.0]
+    output = breakup.collision_from_tle(tle, collision_time, radius, K, attach_angle, attack_velocity, attack_velocity_scale,
+                                        [10, 20], target_scale, rpo_scale, target_size, rpo_size,
+                                        fragment_angle='linspace', scale_fragment_velocity=True, variable_brightness=False, brightness_model='lambertian_sphere')
+    assert(len(output['list']) == 10 + 20 + 2)
+
+    total_size = 0.0
+    for item in output['list']:
+        model = item.get('model')
+        size = model.get('size')
+        total_size += size
+
+    expected_size = target_size + target_size * target_scale[1] + rpo_size + rpo_size * rpo_scale[1]
+
+    np.testing.assert_almost_equal(total_size, expected_size)
+    np.testing.assert_almost_equal(output['list'][-2]['events']['update'][0]['values']['model']['size'], target_size * target_scale[0])
+    np.testing.assert_almost_equal(output['list'][-1]['events']['update'][0]['values']['model']['size'], rpo_size * rpo_scale[0])
 
 
 def test_rpo():

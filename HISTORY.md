@@ -1,6 +1,12 @@
 History
 =======
 
+0.19.0
+---------------------
+
+* Add lambertian sphere brightness model for objects. Set object key `model` `mode` to `lambertian_sphere` and set `albedo` and `size` (meters) parameters. For 2D simulations, `distance` (km) and `phase_angle` (degrees) parameters must also be specified.
+
+
 0.18.0
 ---------------------
 

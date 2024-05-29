@@ -49,6 +49,14 @@ satsim.geometry.observation module
    :undoc-members:
    :show-inheritance:
 
+satsim.geometry.photometric module
+----------------------------------
+
+.. automodule:: satsim.geometry.photometric
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.geometry.random module
 -----------------------------
 

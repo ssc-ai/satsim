@@ -122,7 +122,32 @@
                         "create": 1.0,
                         "delete": 5.0
                     }
+                },
+                {
+                    "mode": "twobody",
+                    "position": [-35204.34419132078, -23217.077089991137, 92.97508204470279],
+                    "velocity": [1.692918281515607, -2.5661652062418896, 0.0011262853330114807],
+                    "epoch": 6,
+                    "model": {
+                        "mode": "lambertian_sphere",
+                        "diameter": 5.0,
+                        "albedo": 0.2
+
+                    },
+                    "events": {
+                        "update": [
+                            {
+                                "time": 10,
+                                "values": {
+                                    "model": {
+                                        "albedo": 0.3
+                                    }
+                                }
+                            }
+                        ]
+                    }
                 }
+
             ]
         }
     }

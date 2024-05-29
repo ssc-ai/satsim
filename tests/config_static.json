@@ -144,6 +144,19 @@
                 },
                 {
                     "mode": "none"
+                },
+                {
+                    "mode": "line",
+                    "origin": [0.1, 0.1],
+                    "velocity": [1.0, 1.0],
+                    "model": {
+                        "mode": "lambertian_sphere",
+                        "diameter": 10.0,
+                        "albedo": 0.2,
+                        "phase_angle": 0.0,
+                        "distance": 400000
+                    },
+                    "mv_truth": 14.96310309343897
                 }
             ]
         }
