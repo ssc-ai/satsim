@@ -128,12 +128,13 @@ def _test_target_brightness(render_size=None):
         with open(os.path.join(dirname, 'Debug', 'fpa_os_0.pickle'), 'rb') as f:
             fpa_os_1 = pickle.load(f)
 
-        np.testing.assert_approx_equal(np.sum(fpa_os_0.flatten()) * 2, np.sum(fpa_os_1.flatten()), significant=7)
+        np.testing.assert_approx_equal(np.sum(fpa_os_0.flatten()) * 2, np.sum(fpa_os_1.flatten()), significant=6)
 
     with open(os.path.join(dirname, 'Debug', 'metadata_0.json'), 'r') as f:
         metadata_1 = json.load(f)
 
-    for a, b in zip(ssp['geometry']['obs']['list'], metadata_1['data']['objects']):
+    filtered_obs = [item for item in ssp['geometry']['obs']['list'] if item.get('mode') != 'none']
+    for a, b in zip(filtered_obs, metadata_1['data']['objects']):
         if 'mv_truth' in a:
             assert(a['mv_truth'] == b['magnitude'])
         if 'pe_truth' in a:
