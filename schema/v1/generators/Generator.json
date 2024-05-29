@@ -51,7 +51,8 @@
                     "rpo_mv_scale": [0.5, 4.0],
                     "offset": [0, 0],
                     "variable_brightness": false,
-                    "scale_fragment_velocity": true
+                    "scale_fragment_velocity": true,
+                    "brightness_model": "mv"
                 }
             }            
         }
