@@ -11,6 +11,7 @@ from datetime import datetime
 import numpy as np
 import scipy
 from tifffile import imread
+from astropy.io import fits as afits
 
 
 from satsim import config, gen_images
@@ -298,13 +299,20 @@ def test_poppy():
 
     configure_eager()
 
+    queue = MultithreadedTaskQueue()
+
     ssp = config.load_json('./tests/config_poppy.json')
     ssp, d = config.transform(ssp, max_stages=10, with_debug=True)
 
     ssp['fpa']['num_frames'] = 1
     ssp['fpa']['time']['exposure'] = 1
 
-    gen_images(ssp, eager=True, output_dir='./.images', output_debug=True)
+    dir_name = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue)
+    queue.waitUntilEmpty()
+    hdul = afits.open(os.path.join(dir_name, 'ImageFiles', 'sat_00000.0000.fits'))
+    hdulhdr = hdul[0].header
+    assert(hdulhdr['EXPTIME'] == ssp['fpa']['time']['exposure'])
+    assert(hdulhdr['TRKMODE'] == ssp['geometry']['site']['track']['mode'])
 
     ssp['sim']['enable_shot_noise'] = False
     ssp['sim']['save_pickle'] = False
@@ -312,7 +320,12 @@ def test_poppy():
     ssp['geometry']['site']['track']['tle'] = [ssp['geometry']['site']['track']['tle1'], ssp['geometry']['site']['track']['tle2']]
     del(ssp['geometry']['site']['track']['tle1'])
     del(ssp['geometry']['site']['track']['tle2'])
-    gen_images(ssp, eager=True, output_dir='./.images', output_debug=True)
+    dir_name = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue)
+    queue.waitUntilEmpty()
+    hdul = afits.open(os.path.join(dir_name, 'ImageFiles', 'sat_00000.0000.fits'))
+    hdulhdr = hdul[0].header
+    assert(hdulhdr['EXPTIME'] == ssp['fpa']['time']['exposure'])
+    assert(hdulhdr['TRKMODE'] == ssp['geometry']['site']['track']['mode'])
 
     ssp['geometry']['site']['track']['mode'] = 'rate'
     ssp['geometry']['site']['track']['position'] = [-35180.62550265, -23252.99066344, 92.95410805]

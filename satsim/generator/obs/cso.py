@@ -20,7 +20,7 @@ def one(origin=[0.5, 0.5], velocity=[0.0, 0.0], mv=[15.0, 16.0], separation=0.01
             "length":
                 { "sample": "random.randint", "low": 0, "high": 15 },
             "list": {
-                "generator": {
+                "$generator": {
                     "module": "satsim.generator.obs.cso",
                     "function": "one",
                     "kwargs": {

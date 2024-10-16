@@ -14,7 +14,7 @@ def tle_file(filename, lines=3, mv=[10.0, 16.0]):
     Example usage in SatSim configuration::
 
         "obs": {
-            "generator": {
+            "$generator": {
                 "module": "satsim.generator.obs.io",
                 "function": "tle_file",
                 "kwargs": {
