@@ -108,6 +108,7 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     hdr['CROTA1']   = 0.0
     hdr['CROTA2']   = 0.0
     hdr['EQUINOX']  = 2000.0
+    hdr["TRKMODE"]  = get_or_default('track_mode')
 
     if dtype == 'uint16':
         hdu.scale('int16', bzero=32768)
