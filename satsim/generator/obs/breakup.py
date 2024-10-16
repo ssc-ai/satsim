@@ -64,7 +64,7 @@ def collision_from_tle(tle, collision_time, radius=37.5, K=0.5,
     Example usage in SatSim configuration::
 
         "obs": {
-            "generator": {
+            "$generator": {
                 "module": "satsim.generator.obs.breakup",
                 "function": "collision_from_tle",
                 "kwargs": {

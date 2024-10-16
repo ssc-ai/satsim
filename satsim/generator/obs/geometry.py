@@ -143,7 +143,7 @@ def sphere(n=10, origin=[0.5,0.5], velocity=[0.01, 5.0], mv=[10.0, 16.0], t=0.0)
     Example usage in SatSim configuration::
 
         "obs": {
-            "generator": {
+            "$generator": {
                 "module": "satsim.generator.obs.geometry",
                 "function": "sphere",
                 "kwargs": {

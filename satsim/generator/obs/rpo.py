@@ -27,7 +27,7 @@ def rpo_from_tle(tle, epoch, delta_distance=5, delta_position_direction='random'
     Example usage in SatSim configuration::
 
         "obs": {
-            "generator": {
+            "$generator": {
                 "module": "satsim.generator.obs.rpo",
                 "function": "rpo_from_tle",
                 "kwargs": {
