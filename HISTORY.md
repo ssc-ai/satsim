@@ -1,6 +1,12 @@
 History
 =======
 
+0.19.2
+---------------------
+
+* Add `rate-sidereal` track mode. This mode takes n - 1 rate track frames and the last frame in sidereal tracking mode.
+
+
 0.19.1
 ---------------------
 
