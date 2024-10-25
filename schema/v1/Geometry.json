@@ -50,7 +50,7 @@
                                 "mode": {
                                     "description": "The track mode.",
                                     "type": "string",
-                                    "enum": ["rate", "sidereal"]
+                                    "enum": ["rate", "sidereal", "fixed", "rate-sidereal"]
                                 },
                                 "tle": {
                                     "description": "The TLE SGP4 orbit as an array.",

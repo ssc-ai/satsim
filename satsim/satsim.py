@@ -499,7 +499,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             astrometrics['lat'] = ssp['geometry']['site']['lat']
             astrometrics['lon'] = ssp['geometry']['site']['lon']
             astrometrics['alt'] = ssp['geometry']['site'].get('alt', 0)
-            astrometrics['track_mode'] = track_mode
+            astrometrics['track_mode'] = _parse_track_mode(track_mode, 0, num_frames)
             observer = create_topocentric(astrometrics['lat'], astrometrics['lon'], astrometrics['alt'])
 
             if 'tle' in ssp['geometry']['site']['track']:
@@ -535,7 +535,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                                  y_fov_pad, x_fov_pad,
                                                                                                  y_fov, x_fov,
                                                                                                  y_ifov, x_ifov,
-                                                                                                 observer, track, star_rot, track_mode, track_az, track_el)
+                                                                                                 observer, track, star_rot, astrometrics['track_mode'], track_az, track_el)
         else:
             observer = None
             track = None
@@ -593,6 +593,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             tic('gen_frame', frame_num)
             logger.debug('Generating frame {} of {}.'.format(frame_num + 1, num_frames))
             astrometrics['frame_num'] = frame_num + 1
+            astrometrics['track_mode'] = _parse_track_mode(track_mode, frame_num, num_frames)
 
             if ssp['sim']['psf_sample_frequency'] == 'frame':
                 psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
@@ -603,11 +604,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             ts_end = time.utc_from_list(tt, t_end)
             t_start_star = t_start
             t_end_star = t_end
+            t_frame_track_start = _parse_start_track_time(track_mode, frame_num, num_frames, ts_collect_start, ts_start)
 
             # calculate object pixels
             r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = _gen_objects(ssp, render_mode,
                                                                                 obs, obs_cache,
-                                                                                ts_collect_start, ts_collect_end, t_start, t_end, tt,
+                                                                                t_frame_track_start, ts_collect_end, t_start, t_end, tt,
                                                                                 observer, track, track_az, track_el,
                                                                                 zeropoint, s_osf,
                                                                                 h_fpa_os, w_fpa_os,
@@ -616,17 +618,17 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                 h_fpa_pad_os, w_fpa_pad_os,
                                                                                 y_fov, x_fov,
                                                                                 y_to_pix, x_to_pix,
-                                                                                star_rot, track_mode)
+                                                                                star_rot, astrometrics['track_mode'])
             logger.debug('Number of objects {}.'.format(len(obs_os_pix)))
 
             if track_mode is not None:
                 star_ra, star_dec, star_tran_os, star_rot_rate = _calculate_star_position_and_motion(ssp, astrometrics,
-                                                                                                     ts_collect_start, ts_collect_end, ts_start, ts_end, t_exposure,
+                                                                                                     t_frame_track_start, ts_collect_end, ts_start, ts_end, t_exposure,
                                                                                                      h_fpa_pad_os, w_fpa_pad_os,
                                                                                                      y_fov_pad, x_fov_pad,
                                                                                                      y_fov, x_fov,
                                                                                                      y_ifov, x_ifov,
-                                                                                                     observer, track, star_rot, track_mode, track_az, track_el)
+                                                                                                     observer, track, star_rot, astrometrics['track_mode'], track_az, track_el)
 
             # if image rendering is disabled, then return
             if ssp['sim']['mode'] == 'none':
@@ -1123,3 +1125,23 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
     logger.debug('Boresight RA, Dec, Roll, Az, El: {}, {}, {}, {}, {}.'.format(astrometrics['ra'], astrometrics['dec'], astrometrics['roll'], astrometrics['az'], astrometrics['el']))
 
     return star_ra0, star_dec0, star_tran_os, star_rot_rate
+
+
+def _parse_track_mode(track_mode, frame_num, total_frames):
+    if track_mode is not None and track_mode == 'rate-sidereal':
+        if frame_num < total_frames - 1:  # TODO make this more general, only supports last frame
+            return 'rate'
+        else:
+            return 'sidereal'
+
+    return track_mode
+
+
+def _parse_start_track_time(track_mode, frame_num, total_frames, ts_collect_start, ts_start):
+    if track_mode is not None and track_mode == 'rate-sidereal':
+        if frame_num < total_frames - 1:  # TODO make this more general, only supports last frame
+            return ts_collect_start
+        else:
+            return ts_start
+
+    return ts_collect_start

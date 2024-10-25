@@ -327,6 +327,19 @@ def test_poppy():
     assert(hdulhdr['EXPTIME'] == ssp['fpa']['time']['exposure'])
     assert(hdulhdr['TRKMODE'] == ssp['geometry']['site']['track']['mode'])
 
+    ssp['fpa']['num_frames'] = 2
+    ssp['geometry']['site']['track']['mode'] = 'rate-sidereal'
+    dir_name = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue)
+    queue.waitUntilEmpty()
+    hdul = afits.open(os.path.join(dir_name, 'ImageFiles', 'sat_00000.0000.fits'))
+    hdulhdr = hdul[0].header
+    assert(hdulhdr['EXPTIME'] == ssp['fpa']['time']['exposure'])
+    assert(hdulhdr['TRKMODE'] == 'rate')
+    hdul = afits.open(os.path.join(dir_name, 'ImageFiles', 'sat_00000.0001.fits'))
+    hdulhdr = hdul[0].header
+    assert(hdulhdr['EXPTIME'] == ssp['fpa']['time']['exposure'])
+    assert(hdulhdr['TRKMODE'] == 'sidereal')
+
     ssp['geometry']['site']['track']['mode'] = 'rate'
     ssp['geometry']['site']['track']['position'] = [-35180.62550265, -23252.99066344, 92.95410805]
     ssp['geometry']['site']['track']['velocity'] = [1.69553697, -2.56443628, 1.12318636e-03]
