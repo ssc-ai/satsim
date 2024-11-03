@@ -1,6 +1,12 @@
 History
 =======
 
+0.19.3
+---------------------
+
+* Add object ID to FITS and annotations.
+
+
 0.19.2
 ---------------------
 
