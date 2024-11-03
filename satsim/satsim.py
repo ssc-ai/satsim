@@ -512,6 +512,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             else:
                 track = None
 
+            astrometrics['object'] = pydash.objects.get(ssp, 'geometry.site.track.name', '')
             track_az = pydash.objects.get(ssp, 'geometry.site.track.az', 0)
             track_el = pydash.objects.get(ssp, 'geometry.site.track.el', 0)
 
@@ -974,8 +975,13 @@ def _gen_objects(ssp, render_mode,
                 if o['mode'] == 'tle':
                     if 'tle' in o:
                         obs_cache[i] = [create_sgp4(o['tle'][0], o['tle'][1])]
+                        if 'id' not in o:
+                            o['id'] = o['tle'][0][2:7]
                     else:
                         obs_cache[i] = [create_sgp4(o['tle1'], o['tle2'])]
+                        if 'id' not in o:
+                            o['id'] = o['tle1'][2:7]
+
                 elif o['mode'] == 'gc':
                     ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                     if 'az' in o:
@@ -1028,6 +1034,9 @@ def _gen_objects(ssp, render_mode,
         elif o['mode'] == 'none':
             continue
 
+        object_name = o.get('name', '')
+        object_id = o.get('id', '')
+
         # non-sprite based brightness models
         has_brightness_model = 'model' in o and not callable(o['model']) and 'mode' in o['model'] and o['model']['mode'] != 'sprite'
         if has_brightness_model:
@@ -1070,6 +1079,8 @@ def _gen_objects(ssp, render_mode,
             'mv': avg_mv,
             'pe': avg_pe,
             'id': i + 1,  # 0 is reserved for the background for segmentation
+            'object_name': object_name,
+            'object_id': object_id,
         })
 
     return orrr, occc, oppp, obs_os_pix, obs_model

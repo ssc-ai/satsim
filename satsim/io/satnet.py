@@ -80,7 +80,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
         snra = snr.numpy()
 
     for o in obs:
-        annotation = _annotate_object(height, width, o['rr'], o['cc'], o['mv'], o['pe'], o.get('id'), filter_ob, box_size, box_pad, "Satellite", 1)
+        annotation = _annotate_object(height, width, o['rr'], o['cc'], o['mv'], o['pe'], o.get('id'), filter_ob, box_size, box_pad, "Satellite", 1, object_name=o.get('object_name'), object_id=o.get('object_id'))
 
         if annotation is None:
             continue
@@ -245,7 +245,7 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
     return objs
 
 
-def _annotate_object(height, width, rr, cc, mv, pe, seg_id=None, filter_ob=True, box_size=None, box_pad=0, class_name="Satellite", class_id=1, clip_box=False):
+def _annotate_object(height, width, rr, cc, mv, pe, seg_id=None, filter_ob=True, box_size=None, box_pad=0, class_name="Satellite", class_id=1, clip_box=False, object_name="", object_id=""):
     """Generates the star annotation data from the SatSim internal star data. Data is typically in oversampled pixel space.
 
     Args:
@@ -327,7 +327,9 @@ def _annotate_object(height, width, rr, cc, mv, pe, seg_id=None, filter_ob=True,
         'x_mid': _cast_to_float(x_center_true),
         'y_end': _cast_to_float(rr_norm[-1]),
         'x_end': _cast_to_float(cc_norm[-1]),
-        'seg_id': _cast_to_int(seg_id)
+        'seg_id': _cast_to_int(seg_id),
+        'object_name': object_name,
+        'object_id': object_id,
     })
 
 
