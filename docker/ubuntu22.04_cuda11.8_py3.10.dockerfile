@@ -28,12 +28,12 @@ RUN pip3 --no-cache-dir install --upgrade pip setuptools
 RUN pip3 --no-cache-dir install tensorflow~=2.13.0
 
 # copy wheel file
-ENV SATSIM_VERSION='0.19.2'
-COPY dist/satsim-0.19.2-py2.py3-none-any.whl /tmp
+ENV SATSIM_VERSION='0.19.3'
+COPY dist/satsim-0.19.3-py2.py3-none-any.whl /tmp
 
 # install satsim wheel file together with jupyterlab so dependency compatibility are resolved
 RUN pip3 --no-cache-dir install \
-        tmp/satsim-0.19.2-py2.py3-none-any.whl \
+        tmp/satsim-0.19.3-py2.py3-none-any.whl \
         jupyterlab \
         scikit-learn \
         virtualenv
