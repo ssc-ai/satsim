@@ -1,6 +1,13 @@
 History
 =======
 
+0.19.4
+---------------------
+
+* Fix observer altitude units.
+* Fix apparent position of stars to include stellar aberration.
+
+
 0.19.3
 ---------------------
 
