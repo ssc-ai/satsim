@@ -4,7 +4,8 @@ from functools import lru_cache
 
 import numpy as np
 from pygc import great_circle
-from skyfield.api import Topos, Star, Angle
+from skyfield.api import Topos, Star, Angle, iers2010
+from skyfield.toposlib import _ltude
 from skyfield.relativity import add_aberration, add_deflection
 from skyfield.earthlib import compute_limb_angle
 from skyfield.positionlib import Apparent
@@ -138,7 +139,17 @@ def create_topocentric(lat, lon, alt=0):
 
     earth = load_earth()
 
-    return earth + Topos(lat, lon, elevation_m=alt)
+    if isinstance(lat, str):
+        lat = _ltude(lat, 'latitude', 'N', 'S')
+
+    if isinstance(lon, str):
+        lon = _ltude(lon, 'longitude', 'E', 'W')
+
+    topo = iers2010.latlon(latitude_degrees=lat,
+                           longitude_degrees=lon,
+                           elevation_m=alt * 1000)
+
+    return earth + topo
 
 
 def apparent(p, deflection=False, aberration=True):
@@ -198,7 +209,7 @@ def apparent(p, deflection=False, aberration=True):
 
 
 @lru_cache(maxsize=32)
-def get_los(observer, target, t, deflection=False, aberration=True):
+def get_los(observer, target, t, deflection=False, aberration=True, stellar_aberration=False):
     """Get the apparent line of sight vector from an observer and target in
     right ascension (RA) and declination (Dec).
 
@@ -207,7 +218,8 @@ def get_los(observer, target, t, deflection=False, aberration=True):
         target: `object`, target as a Skyfield object
         t: `object`, skyfield time
         deflection: `boolean`, enable deflection adjustment
-        aberration: `boolean`, enable aberration of light adjustment
+        aberration: `boolean`, enable aberration of light adjustment for the target
+        stellar_aberration: `boolean`, enable stellar aberration adjustment for a star
 
     Returns:
         A `tuple`, containing:
@@ -219,15 +231,25 @@ def get_los(observer, target, t, deflection=False, aberration=True):
             icrf_los: LOS as skyfield ICRF object
     """
 
-    icrf_los = apparent(observer.at(t).observe(target), deflection, aberration)
+    if deflection or aberration:
+        icrf_los = apparent(observer.at(t).observe(target), deflection, aberration)
+    else:
+        icrf_los = (target - observer).at(t)
+
     ra, dec, d = icrf_los.radec()
     el, az, d = icrf_los.altaz()
+
+    if stellar_aberration:
+        star = Star(ra=ra, dec=dec)
+        icrf_los = apparent(observer.at(t).observe(star), deflection, True)
+        ra, dec, d = icrf_los.radec()
+        el, az, d = icrf_los.altaz()
 
     return ra._degrees, dec._degrees, d.km, az._degrees, el._degrees, icrf_los
 
 
 @lru_cache(maxsize=32)
-def get_los_azel(observer, az, el, t, deflection=False, aberration=True):
+def get_los_azel(observer, az, el, t, deflection=False, aberration=True, stellar_aberration=False):
     """Get the apparent line of sight vector from an observer based on topocentric
     az and el.
 
@@ -249,6 +271,12 @@ def get_los_azel(observer, az, el, t, deflection=False, aberration=True):
 
     icrf_los = apparent(observer.at(t).from_altaz(alt_degrees=el, az_degrees=az), deflection, aberration)
     ra, dec, d = icrf_los.radec()
+
+    if stellar_aberration:
+        star = Star(ra=ra, dec=dec)
+        icrf_los = apparent(observer.at(t).observe(star), deflection, True)
+        ra, dec, d = icrf_los.radec()
+        el, az, d = icrf_los.altaz()    
 
     return ra._degrees, dec._degrees, d.km, az, el, icrf_los
 
@@ -387,7 +415,7 @@ def wcs_from_observer_rate(height, width, y_fov, x_fov, observer, t0, tt, rot, t
     """
     wsc = []
     for t in tt:
-        [ra0,dec0,d0,az0,el0,los0] = get_los(observer, track, t)
+        [ra0,dec0,d0,az0,el0,los0] = get_los(observer, track, t, deflection=False, aberration=True, stellar_aberration=False)
         wcs0 = get_wcs(height, width, y_fov / height, x_fov / width, ra0, dec0, rot)
         wsc.append(wcs0)
     return wsc
@@ -413,7 +441,7 @@ def wcs_from_observer_fixed(height, width, y_fov, x_fov, observer, tt, rot, az, 
     """
     wsc = []
     for t,a,e in zip(tt,az,el):
-        [ra0,dec0,d0,az0,el0,los0] = get_los_azel(observer, a, e, t)
+        [ra0,dec0,d0,az0,el0,los0] = get_los_azel(observer, a, e, t, deflection=False, aberration=True, stellar_aberration=False)
         wcs0 = get_wcs(height, width, y_fov / height, x_fov / width, ra0, dec0, rot)
         wsc.append(wcs0)
     return wsc
@@ -438,7 +466,7 @@ def wcs_from_observer_sidereal(height, width, y_fov, x_fov, observer, t0, tt, ro
         A `object`: WCS transform
     """
     wsc = []
-    [ra0,dec0,d0,az0,el0,los0] = get_los(observer, track, t0)
+    [ra0,dec0,d0,az0,el0,los0] = get_los(observer, track, t0, deflection=False, aberration=True, stellar_aberration=False)
     wcs0 = get_wcs(height, width, y_fov / height, x_fov / width, ra0, dec0, rot)
     for t in tt:
         wsc.append(wcs0)
@@ -479,6 +507,7 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
             dc: `float`, star motion along the columns in pixel per second
             b: `float`, list of brightnesses of each target in Mv
     """
+    # note wcs are based on apparent position of the tracked target
     if track_type == 'rate':
         wcs = wcs_from_observer_rate(height, width, y_fov, x_fov, observer, t0, tt, rot, track)
     elif track_type == 'fixed':
