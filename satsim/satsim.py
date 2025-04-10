@@ -162,7 +162,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
             snr = signal_to_noise_ratio(fpa_conv_targ, fpa_conv_star + bg_tf + dc_tf, rn_tf)
             if num_shot_noise_samples is not None:
                 snr = snr * np.sqrt(num_shot_noise_samples)
-            meta_data = set_frame_annotation(meta_data, frame_num, h_fpa_os, w_fpa_os, obs_os_pix, [20 * s_osf, 20 * s_osf], snr=snr, star_os_pix=star_os_pix)
+            meta_data = set_frame_annotation(meta_data, frame_num, h_fpa_os, w_fpa_os, obs_os_pix, [20 * s_osf, 20 * s_osf], snr=snr, star_os_pix=star_os_pix, metadata=astrometrics)
             if queue is not None:
                 queue.task(write_frame, {
                     'dir_name': dir_name,
@@ -184,7 +184,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                 }, tag=dir_name)
             if output_debug:
                 with open(os.path.join(dir_debug, 'metadata_{}.json'.format(frame_num)), 'w') as jsonfile:
-                    json.dump(meta_data, jsonfile, indent=2)
+                    json.dump(meta_data, jsonfile, indent=2, default=str)
 
             logger.debug('Finished frame {} of {} in {} sec.'.format(frame_num + 1, num_frames, toc('gen_frame', frame_num)))
         else:
@@ -642,6 +642,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             # refresh catalog stars
             if (star_mode == 'sstr7' or star_mode == 'csv') and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
                 if star_mode == 'sstr7':
+                    # note star_ra and star_dec are apparent positions which includes stellar aberration
                     r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
                 elif star_mode == 'csv':
                     r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
@@ -1104,23 +1105,33 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
     az, el = _calculate_az_el(ts_collect_start, ts_collect_end, [t_start, t_end], track_az, track_el)
     if track_mode == 'rate':
         track_target = [track]
-        star_ra0, star_dec0, dis0, az0, el0, los0 = get_los(observer, track, t_start)
-        star_ra1, star_dec1, dis1, az1, el1, los1 = get_los(observer, track, t_end)
+        star_ra0, star_dec0, _, _, _, _ = get_los(observer, track, t_start, deflection=False, aberration=True, stellar_aberration=True)
+        star_ra1, star_dec1, _, _, _, _ = get_los(observer, track, t_end, deflection=False, aberration=True, stellar_aberration=True)
+        ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, t_start, deflection=False, aberration=True, stellar_aberration=False)
+        ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, t_end, deflection=False, aberration=True, stellar_aberration=False)
     elif track_mode == 'fixed':
         track_target = []
-        star_ra0, star_dec0, dis0, az0, el0, los0 = get_los_azel(observer, az[0], el[0], t_start)
-        star_ra1, star_dec1, dis1, az1, el1, los1 = get_los_azel(observer, az[1], el[1], t_end)
-    else:
+        star_ra0, star_dec0, _, _, _, _ = get_los_azel(observer, az[0], el[0], t_start, deflection=False, aberration=True, stellar_aberration=True)
+        star_ra1, star_dec1, _, _, _, _ = get_los_azel(observer, az[1], el[1], t_end, deflection=False, aberration=True, stellar_aberration=True)
+        ra0, dec0, dis0, az0, el0, los0 = get_los_azel(observer, az[0], el[0], t_start, deflection=False, aberration=True, stellar_aberration=False)
+        ra1, dec1, dis1, az1, el1, los1 = get_los_azel(observer, az[1], el[1], t_end, deflection=False, aberration=True, stellar_aberration=False)
+    elif track_mode == 'sidereal':
         track_target = [track]
-        star_ra0, star_dec0, dis0, az0, el0, los0 = get_los(observer, track, ts_collect_start)
-        star_ra1, star_dec1, dis1, az1, el1, los1 = get_los(observer, track, ts_collect_start)
+        star_ra0, star_dec0, _, _, _, _ = get_los(observer, track, ts_collect_start, deflection=False, aberration=True, stellar_aberration=True)
+        star_ra1, star_dec1, _, _, _, _ = get_los(observer, track, ts_collect_start, deflection=False, aberration=True, stellar_aberration=True)
+        ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, ts_collect_start, deflection=False, aberration=True, stellar_aberration=False)
+        ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, ts_collect_start, deflection=False, aberration=True, stellar_aberration=False)
+    else:
+        logger.error('Unknown track mode: {}.'.format(track_mode))
 
     [rr0, rr1], [cc0, cc1], drr, dcc, _ = gen_track(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, observer, track, track_target, [0], ts_collect_start, [t_start, t_end], star_rot, 1, track_mode, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
     star_tran_os = [-drr, -dcc]  # stars move in the opposite direction of target
     star_rot_rate = 0  # TODO
 
-    astrometrics['ra'] = mean_degrees(star_ra0, star_ra1)
-    astrometrics['dec'] = (star_dec0 + star_dec1) / 2
+    astrometrics['ra'] = mean_degrees(ra0, ra1)
+    astrometrics['dec'] = (dec0 + dec1) / 2
+    astrometrics['ra_apparent'] = mean_degrees(star_ra0, star_ra1)
+    astrometrics['dec_apparent'] = (star_dec0 + star_dec1) / 2
     astrometrics['range'] = (dis0 + dis1) / 2
     astrometrics['roll'] = star_rot
     astrometrics['ra_rate'] = diff_degrees(star_ra1, star_ra0) / t_exposure * 3600
