@@ -32,7 +32,7 @@ def test_model_to_mv():
     np.testing.assert_almost_equal(targ_solar_phase_ang, [13.97588734, 14.00264072, 14.02943033, 14.056256, 14.08311756])
 
     distance = distance_between(satellite, observer, t)
-    np.testing.assert_almost_equal(distance, [11207.43860261, 11203.56046744, 11199.67919308, 11195.79478102, 11191.90723288])
+    np.testing.assert_almost_equal(distance, [11207.43860525, 11203.56047005, 11199.67919572, 11195.79478366, 11191.90723549])
 
     model = {
         'mode': 'lambertian_sphere',

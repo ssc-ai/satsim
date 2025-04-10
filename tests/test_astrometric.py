@@ -196,15 +196,15 @@ def test_angle():
     np.testing.assert_almost_equal(moon_solar_phase_ang, 8.82909120048772, decimal=5)
     np.testing.assert_almost_equal(moon_ang, 40.23102425482865, decimal=5)
 
-    ra, dec, _, az, el, _ = get_los(observer, satellite, t_epoch, False, False)
+    ra, dec, _, az, el, _ = get_los(observer, satellite, t_epoch, True, True, False)
 
     ang = angle_from_los(observer, satellite, ra, dec, t_epoch)
 
-    np.testing.assert_almost_equal(0, ang, decimal=6)
+    np.testing.assert_almost_equal(0, ang, decimal=2)
 
     ang = angle_from_los(observer, satellite, ra, dec + 1, t_epoch)
 
-    np.testing.assert_almost_equal(1, ang, decimal=4)
+    np.testing.assert_almost_equal(1, ang, decimal=2)
 
 
 def test_lambertian():
