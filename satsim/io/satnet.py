@@ -48,7 +48,7 @@ def init_annotation(dirname, sequence, height, width, y_ifov, x_ifov):
     return data
 
 
-def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0,filter_ob=False,snr=None,star_os_pix=None):
+def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0,filter_ob=False,snr=None,star_os_pix=None, metadata={}):
     """Set frame data on annotation object for SatNet.
 
     Args:
@@ -73,6 +73,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
         'num_obs_initial': len(obs),
         'num_obs': len(obs)
     }
+    data['data']['metadata'] = metadata
 
     objs = data['data']['objects'] = []
 
@@ -151,7 +152,7 @@ def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_
 
     # save annotation
     with open(os.path.join(annotation_dir, '{}.json'.format(file_name)), 'w') as json_file:
-        json.dump(meta_data, json_file, indent=None, separators=(',', ':'))
+        json.dump(meta_data, json_file, indent=None, separators=(',', ':'), default=str)
 
     # save annotated images
     if save_jpeg:
