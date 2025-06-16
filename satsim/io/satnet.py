@@ -101,6 +101,12 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
 
         annotation['pixels'] = opix
         annotation['snr'] = osnr
+        if 'ra_obs' in o and 'dec_obs' in o:
+            annotation['ra_obs'] = _cast_to_float(o['ra_obs'])
+            annotation['dec_obs'] = _cast_to_float(o['dec_obs'])
+        if 'ra' in o and 'dec' in o:
+            annotation['ra'] = _cast_to_float(o['ra'])
+            annotation['dec'] = _cast_to_float(o['dec'])
         objs.append(annotation)
 
     if star_os_pix is not None:
@@ -182,6 +188,33 @@ def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_
     if segmentation is not None:
         for key in segmentation:
             tifffile.imwrite(os.path.join(annotation_dir, '{}_{}.tiff'.format(file_name, key)), segmentation[key], dtype='uint16', bigtiff=True, compression='lzw')
+
+
+def write_annotation(dir_name, sat_name, meta_data, frame_num, ssp, save_pickle=False):
+    """Write only annotation and configuration files.
+
+    Args:
+        dir_name: `str`, directory to save files.
+        sat_name: `str`, satellite name.
+        meta_data: `dict`, annotation data from :func:`init_annotation`.
+        frame_num: `int`, current frame number in set.
+        ssp: `dict`, SatSim parameters to be saved alongside the annotation.
+        save_pickle: `bool`, pass through to :func:`save_json`.
+    """
+
+    file_name = '{}.{:04d}'.format(sat_name, frame_num)
+
+    meta_data['data']['file']['dirname'] = Path(dir_name).name
+    meta_data['data']['file']['filename'] = 'undefined'
+
+    annotation_dir = os.path.join(dir_name, 'Annotations')
+    if not os.path.exists(annotation_dir):
+        os.makedirs(annotation_dir, exist_ok=True)
+
+    with open(os.path.join(annotation_dir, f'{file_name}.json'), 'w') as json_file:
+        json.dump(meta_data, json_file, indent=None, separators=(',', ':'), default=str)
+
+    save_json(os.path.join(dir_name, 'config.json'), ssp, save_pickle=save_pickle)
 
 
 def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, min_mv=10, box_size=None, box_pad=0):
