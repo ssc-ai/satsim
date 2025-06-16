@@ -1,6 +1,13 @@
 History
 =======
 
+0.20.0
+---------------------
+
+* Add analytical observations with noise modeling capability.
+* Fix electronic noise casting issue in add_read_noise function.
+
+
 0.19.4
 ---------------------
 
