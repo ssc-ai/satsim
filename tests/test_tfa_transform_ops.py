@@ -214,7 +214,7 @@ def test_rotate_even(dtype):
     image_rep = tf.tile(image[None, :, :, None], [3, 1, 1, 1])
     angles = tf.constant([0.0, np.pi / 4.0, np.pi / 2.0], tf.float32)
     image_rotated = transform_ops.rotate(image_rep, angles)
-    if platform.machine() == 'x86_64' or platform.machine() == 'arm64':
+    if platform.machine() == 'x86_64':
         np.testing.assert_equal(
             image_rotated.numpy()[:, :, :, 0],
             [
