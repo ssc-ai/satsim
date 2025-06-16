@@ -4,7 +4,7 @@ from functools import lru_cache
 
 import numpy as np
 from pygc import great_circle
-from skyfield.api import Topos, Star, Angle, iers2010
+from skyfield.api import Star, Angle, iers2010
 from skyfield.toposlib import _ltude
 from skyfield.relativity import add_aberration, add_deflection
 from skyfield.earthlib import compute_limb_angle
@@ -276,7 +276,7 @@ def get_los_azel(observer, az, el, t, deflection=False, aberration=True, stellar
         star = Star(ra=ra, dec=dec)
         icrf_los = apparent(observer.at(t).observe(star), deflection, True)
         ra, dec, d = icrf_los.radec()
-        el, az, d = icrf_los.altaz()    
+        el, az, d = icrf_los.altaz()
 
     return ra._degrees, dec._degrees, d.km, az, el, icrf_los
 

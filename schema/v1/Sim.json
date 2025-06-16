@@ -135,6 +135,11 @@
             "type": "boolean",
             "default": false
         },
+        "analytical_obs": {
+            "description": "Generate analytical observations instead of images.",
+            "type": "boolean",
+            "default": false
+        },
         "czml_samples": {
             "description": "The number of object position samples to save in the CZML file.",
             "type": "integer",

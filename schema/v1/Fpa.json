@@ -73,6 +73,29 @@
                 }
             }
         },
+        "detection": {
+            "description": "Parameters for synthetic detections.",
+            "type": "object",
+            "properties": {
+                "snr_threshold": {
+                    "description": "SNR threshold for detection.",
+                    "$ref": "types/Float.json"
+                },
+                "pixel_error": {
+                    "description": "Standard deviation of pixel error.",
+                    "$ref": "types/Float.json"
+                },
+                "false_alarm_rate": {
+                    "description": "Probability of false alarm per iteration.",
+                    "$ref": "types/Float.json"
+                },
+                "max_false": {
+                    "description": "Maximum number of false alarms to inject per frame.",
+                    "$ref": "types/Integer.json",
+                    "default": 10
+                }
+            }
+        },
         "psf": {
             "description": "The point spread function of the focal plane array.",
             "$ref": "types/Psf.json"

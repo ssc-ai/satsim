@@ -30,13 +30,16 @@ from satsim.geometry.csvsc import query_by_los as csvsc_query_by_los
 from satsim.geometry.sgp4 import create_sgp4
 from satsim.geometry.ephemeris import create_ephemeris_object
 from satsim.geometry.astrometric import create_topocentric, gen_track, get_los, get_los_azel, GreatCircle
+from skyfield.toposlib import _ltude
 from satsim.geometry.photometric import model_to_mv
 from satsim.geometry.twobody import create_twobody
 from satsim.geometry.observation import create_observation
-from satsim.io.satnet import write_frame, set_frame_annotation, init_annotation
+from satsim.io.satnet import write_frame, write_annotation, set_frame_annotation, init_annotation
 from satsim.io.image import save_apng
 from satsim.io.czml import save_czml
 from satsim.util import tic, toc, MultithreadedTaskQueue, configure_eager, configure_single_gpu, merge_dicts
+from satsim.geometry import analytic_obs
+from satsim.io import analytical
 from satsim.config import transform, save_debug, _transform, save_cache
 from satsim.pipeline import _delta_t, _avg_t
 from satsim import time
@@ -156,7 +159,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
         x_ifov)
 
     astrometrics_list = []
-    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix, segmentation in image_generator(ssp, output_dir, output_debug, dir_debug, with_meta=True, num_sets=1):
+    for fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix, segmentation in image_generator(ssp, dir_name, output_debug, dir_debug, with_meta=True, num_sets=1):
         astrometrics_list.append(astrometrics)
         if fpa_digital is not None:
             snr = signal_to_noise_ratio(fpa_conv_targ, fpa_conv_star + bg_tf + dc_tf, rn_tf)
@@ -188,11 +191,37 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
 
             logger.debug('Finished frame {} of {} in {} sec.'.format(frame_num + 1, num_frames, toc('gen_frame', frame_num)))
         else:
-            if queue is not None:
-                def f():
-                    return None
-                queue.task(f, {}, tag=dir_name)
-            logger.debug('Render mode off. Skipping frame generation.')
+            if ssp['sim'].get('analytical_obs', False):
+                meta_data = set_frame_annotation(
+                    meta_data,
+                    frame_num,
+                    h_fpa_os,
+                    w_fpa_os,
+                    obs_os_pix,
+                    [20 * s_osf, 20 * s_osf],
+                    snr=None,
+                    star_os_pix=None,
+                    metadata=astrometrics,
+                )
+                if queue is not None:
+                    queue.task(
+                        write_annotation,
+                        {
+                            'dir_name': dir_name,
+                            'sat_name': set_name,
+                            'meta_data': copy.deepcopy(meta_data),
+                            'frame_num': frame_num,
+                            'ssp': ssp_orig,
+                            'save_pickle': ssp['sim']['save_pickle'],
+                        },
+                        tag=dir_name,
+                    )
+            else:
+                if queue is not None:
+                    def f():
+                        return None
+                    queue.task(f, {}, tag=dir_name)
+                logger.debug('Render mode off. Skipping frame generation.')
 
     # write movie
     def wait_and_run():
@@ -349,6 +378,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     if 'flip_left_right' not in ssp['fpa']:
         ssp['fpa']['flip_left_right'] = False
 
+    if 'detection' not in ssp['fpa']:
+        ssp['fpa']['detection'] = {
+            'snr_threshold': 0.0,
+            'pixel_error': 0.0,
+            'false_alarm_rate': 0.0,
+            'max_false': 10,
+        }
+    else:
+        ssp['fpa']['detection'].setdefault('snr_threshold', 0.0)
+        ssp['fpa']['detection'].setdefault('pixel_error', 0.0)
+        ssp['fpa']['detection'].setdefault('false_alarm_rate', 0.0)
+        ssp['fpa']['detection'].setdefault('max_false', 10)
+
     star_mode = ssp['geometry']['stars']['mode']
 
     # TODO move defaults to a different file
@@ -410,6 +452,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'save_pickle' not in ssp['sim']:
         ssp['sim']['save_pickle'] = False
+
+    if 'analytical_obs' not in ssp['sim']:
+        ssp['sim']['analytical_obs'] = False
 
     if 'psf_sample_frequency' not in ssp['sim']:
         ssp['sim']['psf_sample_frequency'] = 'once'
@@ -496,9 +541,11 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             # note: stars will track horizontally where zenith is pointed up. focal plane rotation is simulated with the `rotation` variable
             star_rot = ssp['geometry']['site']['gimbal']['rotation']
             track_mode = ssp['geometry']['site']['track']['mode']
-            astrometrics['lat'] = ssp['geometry']['site']['lat']
-            astrometrics['lon'] = ssp['geometry']['site']['lon']
-            astrometrics['alt'] = ssp['geometry']['site'].get('alt', 0)
+            lat = ssp['geometry']['site']['lat']
+            lon = ssp['geometry']['site']['lon']
+            astrometrics['lat'] = float(_ltude(lat, 'latitude', 'N', 'S')) if isinstance(lat, str) else float(lat)
+            astrometrics['lon'] = float(_ltude(lon, 'longitude', 'E', 'W')) if isinstance(lon, str) else float(lon)
+            astrometrics['alt'] = float(ssp['geometry']['site'].get('alt', 0))
             astrometrics['track_mode'] = _parse_track_mode(track_mode, 0, num_frames)
             observer = create_topocentric(astrometrics['lat'], astrometrics['lon'], astrometrics['alt'])
 
@@ -631,10 +678,33 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                                      y_ifov, x_ifov,
                                                                                                      observer, track, star_rot, astrometrics['track_mode'], track_az, track_el)
 
-            # if image rendering is disabled, then return
+            # if image rendering is disabled, optionally generate analytical observations and return
             if ssp['sim']['mode'] == 'none':
+                if ssp['sim'].get('analytical_obs', False):
+                    if 'crop' in ssp['fpa']:
+                        cp = ssp['fpa']['crop']
+                        for opp in obs_os_pix:
+                            opp['rr'] = opp['rr'] - cp['height_offset'] * s_osf
+                            opp['cc'] = opp['cc'] - cp['width_offset'] * s_osf
+                            opp['rrr'] = opp['rrr'] - cp['height_offset']
+                            opp['rcc'] = opp['rcc'] - cp['width_offset']
+
+                    bg_val = float(tf.reduce_mean(bg_tf).numpy()) if hasattr(bg_tf, 'numpy') else float(np.mean(bg_tf))
+                    dc_val = float(tf.reduce_mean(dc_tf).numpy()) if hasattr(dc_tf, 'numpy') else float(np.mean(dc_tf))
+                    rn_val = float(rn)
+                    en_val = float(en)
+                    obs_list = analytic_obs.generate(
+                        ssp,
+                        obs_os_pix,
+                        astrometrics,
+                        bg_val,
+                        dc_val,
+                        rn_val,
+                        en_val,
+                    )
+                    analytical.save(output_dir, frame_num, obs_list)
                 if with_meta:
-                    yield None, frame_num, astrometrics.copy(), None, None, None, None, None, None, None, obs_cache, None, None, None
+                    yield None, frame_num, astrometrics.copy(), obs_os_pix, None, None, None, None, None, None, obs_cache, None, None, None
                 else:
                     yield None
                 continue
@@ -854,6 +924,23 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             else:
                 ground_truth = None
 
+            if ssp['sim'].get('analytical_obs', False):
+                bg_val = float(tf.reduce_mean(crop_bg_tf).numpy()) if hasattr(crop_bg_tf, 'numpy') else float(np.mean(crop_bg_tf))
+                dc_val = float(tf.reduce_mean(crop_dc_tf).numpy()) if hasattr(crop_dc_tf, 'numpy') else float(np.mean(crop_dc_tf))
+                rn_val = float(rn)
+                en_val = float(en)
+
+                obs_list = analytic_obs.generate(
+                    ssp,
+                    obs_os_pix,
+                    astrometrics,
+                    bg_val,
+                    dc_val,
+                    rn_val,
+                    en_val,
+                )
+                analytical.save(output_dir, frame_num, obs_list)
+
             if output_debug:
                 if fpa_os_w_targets is not None:
                     with open(os.path.join(dir_debug, 'fpa_os_{}.pickle'.format(frame_num)), 'wb') as picklefile:
@@ -998,10 +1085,6 @@ def _gen_objects(ssp, render_mode,
                     ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                     obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
 
-            # skip rest if not rendering images
-            if ssp['sim']['mode'] == 'none':
-                continue
-
             o_offset = [0.0, 0.0]
             if 'offset' in o:
                 o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
@@ -1010,7 +1093,26 @@ def _gen_objects(ssp, render_mode,
             az, el = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
 
             try:
-                [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(h_fpa_os, w_fpa_os, y_fov, x_fov, observer, track, [target], [ope], tc_start, [ts_start, ts_mid, ts_end], star_rot, 1, track_mode, offset=o_offset, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
+                [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(
+                    h_fpa_os,
+                    w_fpa_os,
+                    y_fov,
+                    x_fov,
+                    observer,
+                    track,
+                    [target],
+                    [ope],
+                    tc_start,
+                    [ts_start, ts_mid, ts_end],
+                    star_rot,
+                    1,
+                    track_mode,
+                    offset=o_offset,
+                    flipud=ssp['fpa']['flip_up_down'],
+                    fliplr=ssp['fpa']['flip_left_right'],
+                    az=az,
+                    el=el,
+                )
             except Exception:
                 logger.exception("Error propagating target. {}".format(o))
                 continue
@@ -1071,7 +1173,34 @@ def _gen_objects(ssp, render_mode,
             occc = np.concatenate((occc, occ))
             oppp = np.concatenate((oppp, opp))
 
-        obs_os_pix.append({
+        if obs_cache[i] is not None:
+            ra_mid, dec_mid, _, _, _, _ = get_los(
+                observer,
+                target,
+                ts_mid,
+                deflection=False,
+                aberration=True,
+                stellar_aberration=False,
+            )
+            ra_true, dec_true, _, _, _, _ = get_los(
+                observer,
+                target,
+                ts_mid,
+                deflection=False,
+                aberration=False,
+                stellar_aberration=False,
+            )
+            ra_mid = float(ra_mid)
+            dec_mid = float(dec_mid)
+            ra_true = float(ra_true)
+            dec_true = float(dec_true)
+        else:
+            ra_mid = None
+            dec_mid = None
+            ra_true = None
+            dec_true = None
+
+        entry = {
             'rr': orr,
             'cc': occ,
             'pp': opp,
@@ -1082,7 +1211,14 @@ def _gen_objects(ssp, render_mode,
             'id': i + 1,  # 0 is reserved for the background for segmentation
             'object_name': object_name,
             'object_id': object_id,
-        })
+        }
+        if ra_mid is not None and dec_mid is not None:
+            entry['ra_obs'] = ra_mid
+            entry['dec_obs'] = dec_mid
+            entry['ra'] = ra_true
+            entry['dec'] = dec_true
+
+        obs_os_pix.append(entry)
 
     return orrr, occc, oppp, obs_os_pix, obs_model
 
@@ -1165,5 +1301,4 @@ def _parse_start_track_time(track_mode, frame_num, total_frames, ts_collect_star
             return ts_collect_start
         else:
             return ts_start
-
     return ts_collect_start

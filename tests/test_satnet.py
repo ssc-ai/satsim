@@ -19,7 +19,11 @@ def test_annotation():
         'rr': orr,
         'cc': occ,
         'mv': 15,
-        'pe': 100
+        'pe': 100,
+        'ra_obs': 1.0,
+        'dec_obs': -1.0,
+        'ra': 0.5,
+        'dec': -0.5,
     }
 
     a = init_annotation('./', 0, h, w, 2., 3.)
@@ -37,6 +41,11 @@ def test_annotation():
 
     assert(c['y_center'] == (0.55 + 0.75) / 2.)
     assert(c['x_center'] == (0.525 + 0.575) / 2.)
+
+    assert c['ra_obs'] == 1.0
+    assert c['dec_obs'] == -1.0
+    assert c['ra'] == 0.5
+    assert c['dec'] == -0.5
 
     assert(c['seg_id'] == -1)
 
