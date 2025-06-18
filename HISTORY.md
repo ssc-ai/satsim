@@ -1,6 +1,13 @@
 History
 =======
 
+0.20.1
+---------------------
+
+* Refactor two-body propagation to remove `poliastro` dependency.
+* Add object identification fields to analytical observations.
+
+
 0.20.0
 ---------------------
 
