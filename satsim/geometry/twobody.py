@@ -1,19 +1,93 @@
 import numpy as np
-from satsim.geometry.astrometric import load_earth
 
+from astropy import units as u
+from astropy.time import Time
+from skyfield.api import EarthSatellite
 from skyfield.constants import AU_KM, DAY_S
 from skyfield.vectorlib import VectorFunction
-from skyfield.api import EarthSatellite
 
-from poliastro.twobody.propagation import farnocchia, vallado, cowell
-from poliastro.bodies import Earth
-from poliastro.twobody import Orbit
-
-from astropy.time import Time
-from astropy import units as u
+from satsim.geometry.astrometric import load_earth
 
 
 DEFAULT_METHOD = 'vallado'
+
+MU_EARTH = 398600.4418  # km^3 / s^2
+
+
+def _stumpff_C(z):
+    if z > 0:
+        s = np.sqrt(z)
+        return (1 - np.cos(s)) / z
+    elif z < 0:
+        s = np.sqrt(-z)
+        return (np.cosh(s) - 1) / (-z)
+    else:
+        return 0.5
+
+
+def _stumpff_S(z):
+    if z > 0:
+        s = np.sqrt(z)
+        return (s - np.sin(s)) / s ** 3
+    elif z < 0:
+        s = np.sqrt(-z)
+        return (np.sinh(s) - s) / s ** 3
+    else:
+        return 1.0 / 6.0
+
+
+def _propagate_kepler(r0, v0, dt, mu=MU_EARTH, tol=1e-8, max_iter=100):
+    r0 = np.asarray(r0, dtype=float)
+    v0 = np.asarray(v0, dtype=float)
+
+    r0_norm = np.linalg.norm(r0)
+    v0_norm = np.linalg.norm(v0)
+    vr0 = np.dot(r0, v0) / r0_norm
+
+    alpha = 2.0 / r0_norm - v0_norm ** 2 / mu
+
+    if abs(alpha) > tol:
+        x = np.sqrt(mu) * dt * alpha
+    else:
+        x = np.sqrt(mu) * dt / r0_norm
+
+    for _ in range(max_iter):
+        z = alpha * x * x
+        C = _stumpff_C(z)
+        S = _stumpff_S(z)
+
+        F = (
+            r0_norm * vr0 / np.sqrt(mu) * x * x * C
+            + (1 - alpha * r0_norm) * x ** 3 * S
+            + r0_norm * x
+            - np.sqrt(mu) * dt
+        )
+
+        dF = (
+            r0_norm * vr0 / np.sqrt(mu) * x * (1 - z * S)
+            + (1 - alpha * r0_norm) * x * x * C
+            + r0_norm
+        )
+
+        ratio = F / dF
+        x -= ratio
+        if abs(ratio) < tol:
+            break
+
+    z = alpha * x * x
+    C = _stumpff_C(z)
+    S = _stumpff_S(z)
+
+    f = 1 - x * x / r0_norm * C
+    g = dt - x ** 3 * S / np.sqrt(mu)
+    r = f * r0 + g * v0
+    r_norm = np.linalg.norm(r)
+
+    fdot = np.sqrt(mu) / (r_norm * r0_norm) * (z * S - 1) * x
+    gdot = 1 - x * x / r_norm * C
+    v = fdot * r0 + gdot * v0
+
+    return r, v
 
 
 def _to_astropy(t):
@@ -27,15 +101,15 @@ class EarthTwoBodySatellite(VectorFunction):
     center = 399
 
     def __init__(self, position, velocity, epoch, name='EarthTwoBodySatellite', method=DEFAULT_METHOD):
-        """ Constructs a Two-body propagator satellite.
+        """Construct a Two-body propagator satellite.
 
         Args:
-            position: `array`, AstroPy position in ITRF. example: `[-6045, -3490, 2500] * u.km`
-            velocity: `array`, AstroPy velocity in ITRF. example: `[-3.457, 6.618, 2.534] * u.km / u.s`
-            epoch: `Time`, epoch state vector time as Skyfield `Time`
+            position: `array`, AstroPy position in ITRF. example: ``[-6045, -3490, 2500] * u.km``
+            velocity: `array`, AstroPy velocity in ITRF. example: ``[-3.457, 6.618, 2.534] * u.km / u.s``
+            epoch: `Time`, epoch state vector time as Skyfield ``Time``
             name: `string`, object name
             method: `string`, two body propagator algorithm type.
-                Valid types are: 'vallado' (default), 'farnocchia', 'cowell`.
+                The value is currently ignored but kept for API compatibility.
         """
         self.epoch = {
             'position': position,
@@ -45,41 +119,41 @@ class EarthTwoBodySatellite(VectorFunction):
         }
         self.name = name
 
-        if method == 'vallado':
-            self.method = vallado.ValladoPropagator()
-        elif method == 'farnocchia':
-            self.method = farnocchia.FarnocchiaPropagator()
-        else:
-            self.method = cowell.CowellPropagator()
-
-        self.orbit = Orbit.from_vectors(Earth, position, velocity, self.epoch['time'])
+        self.method = method
         self.target = -500000
         # self.target_name = name
 
     def _at(self, t):
         """Compute this satellite's GCRS position and velocity at time `t`."""
         tt = _to_astropy(t)
-        td = tt - self.epoch['time']
+        td = (tt - self.epoch['time']).to(u.s).value
 
-        if td.ndim > 0:
-            rGCRS = np.zeros((3, td.size))
-            vGCRS = np.zeros((3, td.size))
-            for i in range(td.size):
-                o = self.orbit.propagate(td[i], method=self.method)
-                r, v = o.rv()
-                rGCRS[:, i] = r.to(u.km).value
-                vGCRS[:, i] = v.to(u.km / u.s).value
+        if np.ndim(td) > 0:
+            rGCRS = np.zeros((3, len(td)))
+            vGCRS = np.zeros((3, len(td)))
+            for i, d in enumerate(td):
+                r, v = _propagate_kepler(
+                    self.epoch['position'].to_value(u.km),
+                    self.epoch['velocity'].to_value(u.km / u.s),
+                    d,
+                )
+                rGCRS[:, i] = r
+                vGCRS[:, i] = v
         else:
-            o = self.orbit.propagate(td, method=self.method)
-            r, v = o.rv()
-            rGCRS = r.to(u.km).value
-            vGCRS = v.to(u.km / u.s).value
+            r, v = _propagate_kepler(
+                self.epoch['position'].to_value(u.km),
+                self.epoch['velocity'].to_value(u.km / u.s),
+                td,
+            )
+            rGCRS = r
+            vGCRS = v
 
         rGCRS /= AU_KM
         vGCRS /= AU_KM
         vGCRS *= DAY_S
 
-        return rGCRS, vGCRS, rGCRS, [None] * td.size
+        size = np.size(td)
+        return rGCRS, vGCRS, rGCRS, [None] * size
 
     def __str__(self):
         return 'EarthTwoBodySatellite {0} epoch={1}'.format(

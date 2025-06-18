@@ -66,3 +66,22 @@ def test_get_los():
     np.testing.assert_almost_equal(km / 10, 36700 / 10, decimal=0)
     np.testing.assert_almost_equal(az, 133.0, decimal=1)
     np.testing.assert_almost_equal(el, 56.3, decimal=1)
+
+
+def test_propagator_long_term():
+    """Ensure the internal propagator matches SGP4 for short intervals."""
+
+    tle1 = "1 36411U 10008A   15115.45079343  .00000069  00000-0  00000+0 0  9992"
+    tle2 = "2 36411 000.0719 125.6855 0001927 217.7585 256.6121 01.00266852 18866"
+
+    sgp = create_sgp4(tle1, tle2)
+    tb = create_twobody_from_tle(tle1, tle2)
+
+    from skyfield.api import EarthSatellite
+    base_sat = EarthSatellite(tle1, tle2)
+    t1 = base_sat.epoch + 3600.0 / 86400.0  # 1 hour later
+    r0, v0, _, _ = sgp._at(t1)
+    r1, v1, _, _ = tb._at(t1)
+
+    np.testing.assert_allclose(r0, r1, rtol=0, atol=1e-5)
+    np.testing.assert_allclose(v0, v1, rtol=0, atol=1e-5)
