@@ -4,7 +4,7 @@
 
 __author__ = """Alex Cabello"""
 __email__ = 'alexander.cabello@algoritics.com'
-__version__ = '0.21.1'
+__version__ = '0.20.1'
 
 from .satsim import gen_images, gen_multi, image_generator
 from .config import load_json, load_yaml

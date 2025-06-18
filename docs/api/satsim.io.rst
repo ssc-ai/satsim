@@ -9,6 +9,14 @@ satsim.io package
 Submodules
 ----------
 
+satsim.io.analytical module
+---------------------------
+
+.. automodule:: satsim.io.analytical
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.io.czml module
 ---------------------
 

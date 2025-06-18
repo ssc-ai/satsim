@@ -9,6 +9,14 @@ satsim.geometry package
 Submodules
 ----------
 
+satsim.geometry.analytic\_obs module
+------------------------------------
+
+.. automodule:: satsim.geometry.analytic_obs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.geometry.astrometric module
 ----------------------------------
 
