@@ -91,9 +91,16 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
             'senlon': float(astrometrics.get('lon', 0)),
             'senalt': float(astrometrics.get('alt', 0)),
             'expDuration': float(ssp['fpa']['time']['exposure']),
+            'uct': False,
             'createdBy': 'satsim',
             'type': 'OPTICAL'
         })
+
+        if 'object_name' in ob and ob['object_name'] is not None and ob['object_name'] != '':
+            obs_list[-1]['idOnOrbit'] = ob['object_name']
+
+        if 'object_id' in ob and ob['object_id'] is not None and ob['object_id'] != '':
+            obs_list[-1]['satNo'] = ob['object_id']
 
     center_ra = astrometrics.get('ra', 0.0)
     center_dec = astrometrics.get('dec', 0.0)
@@ -114,6 +121,7 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
             'senlon': float(astrometrics.get('lon', 0)),
             'senalt': float(astrometrics.get('alt', 0)),
             'expDuration': float(ssp['fpa']['time']['exposure']),
+            'uct': True,
             'createdBy': 'satsim',
             'type': 'OPTICAL'
         })

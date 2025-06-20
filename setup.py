@@ -22,10 +22,9 @@ requirements = [
     'astropy>=5.2.1,<6',
     'apng>=0.3.4',
     'scipy>=1.10',
-    'tensorflow>=2.4',
+    'tensorflow>=2.4,<=2.15',
     'skyfield>=1.45',
     'sgp4>=2.21',
-    'poliastro>=0.17.0',
     'poppy>=1.0.3',
     'diskcache>=5.0.3',
     'pydash>=4.9.0',
@@ -52,6 +51,7 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
     ],
     description="Satellite observation and scene simulator.",
     entry_points={
@@ -69,6 +69,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/ssc-ai/satsim',
-    version='0.20.0',
+    version='0.20.1',
     zip_safe=False,
 )
