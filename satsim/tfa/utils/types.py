@@ -6,17 +6,31 @@ import importlib
 import numpy as np
 import tensorflow as tf
 
-from packaging.version import Version
-
 # TODO: Remove once https://github.com/tensorflow/tensorflow/issues/44613 is resolved
-if Version(tf.__version__).release >= Version("2.13").release:
-    # New versions of Keras require importing from `keras.src` when
-    # importing internal symbols.
-    from keras.src.engine import keras_tensor
-elif Version(tf.__version__).release >= Version("2.5").release:
-    from keras.engine import keras_tensor
-else:
-    from tensorflow.python.keras.engine import keras_tensor
+# TensorFlow and Keras frequently move the internal location of
+# ``keras_tensor``.  Try a list of known locations so that we work across
+# multiple TensorFlow/Keras versions (e.g. TF 2.5 through 2.16+).
+_KERAS_TENSOR_IMPORT_PATHS = [
+    "keras.src.engine.keras_tensor",  # TF >= 2.13
+    "keras.engine.keras_tensor",      # TF < 2.13
+    "keras.src.backend.keras_tensor",  # Keras 3.x
+    "tensorflow.python.keras.engine.keras_tensor",
+]
+
+keras_tensor = None
+for _path in _KERAS_TENSOR_IMPORT_PATHS:
+    try:
+        keras_tensor = importlib.import_module(_path)
+        break
+    except Exception:
+        continue
+
+if keras_tensor is None:
+    # Fall back to KerasTensor class exposed via tf.keras.__internal__
+    try:
+        from tensorflow.keras.__internal__ import KerasTensor as keras_tensor
+    except Exception:  # pragma: no cover - extremely old TF
+        from tensorflow.python.keras.engine import keras_tensor  # type: ignore
 
 
 Number = Union[

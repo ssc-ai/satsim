@@ -87,3 +87,9 @@ def test_from_4d_image_with_invalid_shape(rank):
 
     with pytest.raises(errors, match="`image` must be 4D tensor"):
         img_utils.from_4D_image(tf.ones(shape=(1, 2, 4, 1, 1)), rank)
+
+
+def test_keras_tensor_import():
+    from satsim.tfa.utils import types
+
+    assert hasattr(types.keras_tensor, "KerasTensor")
