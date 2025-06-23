@@ -1,6 +1,12 @@
 History
 =======
 
+0.20.2
+---------------------
+
+* Refactor keras_tensor import logic to support multiple TensorFlow/Keras versions.
+
+
 0.20.1
 ---------------------
 

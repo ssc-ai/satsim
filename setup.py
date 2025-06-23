@@ -22,7 +22,7 @@ requirements = [
     'astropy>=5.2.1,<6',
     'apng>=0.3.4',
     'scipy>=1.10',
-    'tensorflow>=2.4,<=2.15',
+    'tensorflow>=2.4',
     'skyfield>=1.45',
     'sgp4>=2.21',
     'poppy>=1.0.3',
@@ -69,6 +69,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/ssc-ai/satsim',
-    version='0.20.1',
+    version='0.20.2',
     zip_safe=False,
 )
