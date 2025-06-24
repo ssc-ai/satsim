@@ -29,7 +29,8 @@ from satsim.geometry.sstr7 import query_by_los
 from satsim.geometry.csvsc import query_by_los as csvsc_query_by_los
 from satsim.geometry.sgp4 import create_sgp4
 from satsim.geometry.ephemeris import create_ephemeris_object
-from satsim.geometry.astrometric import create_topocentric, gen_track, get_los, get_los_azel, GreatCircle
+from satsim.geometry.astrometric import create_topocentric, gen_track, get_los, get_los_azel
+from satsim.geometry.greatcircle import GreatCircle
 from skyfield.toposlib import _ltude
 from satsim.geometry.photometric import model_to_mv
 from satsim.geometry.twobody import create_twobody

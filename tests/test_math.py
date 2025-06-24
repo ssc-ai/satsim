@@ -37,7 +37,10 @@ def test_fftconv2_conv2():
 def test_fftconv2_big():
 
     s = 700
-    a = datasets.face(gray=True)
+    try:
+        a = datasets.face(gray=True)
+    except Exception:
+        pytest.skip("Dataset not available")
 
     a = a[0:s,0:s]
     b = np.outer(signal.windows.gaussian(s, 8), signal.windows.gaussian(s, 8))
