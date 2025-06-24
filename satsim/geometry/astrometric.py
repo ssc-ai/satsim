@@ -3,7 +3,6 @@ import os
 from functools import lru_cache
 
 import numpy as np
-from pygc import great_circle
 from skyfield.api import Star, Angle, iers2010
 from skyfield.toposlib import _ltude
 from skyfield.relativity import add_aberration, add_deflection
@@ -29,45 +28,6 @@ SATSIM_MOON = None
 SATSIM_SUN = None
 
 
-class GreatCircle(object):
-    """ A great circle propagated skyfield object."""
-
-    def __init__(self, az, el, heading, velocity, t, observer):
-        """ Constructor.
-
-        Args:
-            az: `float`, starting azimuth or longitude in degrees
-            el: `float`, starting elevation or latitude in degrees
-            heading: `float`, direction in degrees. 0 degrees is north heading
-            velocity: `float`, velocity in degrees per second
-            t: `object`, skyfield time
-            observer: `object`, frame of reference, if `None`, reference is barycenter
-
-        Returns:
-            A `Topos` Skyfield object on the planet Earth
-        """
-        self.az = az
-        self.el = el
-        self.heading = heading
-        self.velocity = velocity
-        self.t = t
-        self.R = 57.29577951308232
-        self.target = None
-        self.observer = observer
-
-    def _observe_from_bcrs(self, observer):
-        t = (observer.t - self.t) * 86400
-        d = t * self.velocity
-        gc = great_circle(distance=d, azimuth=self.heading, latitude=self.el, longitude=self.az, rmajor=self.R, rminor=self.R)
-        if self.observer is not None:
-            ra, dec, _, _, _, _ = get_los_azel(self.observer, gc['longitude'], gc['latitude'], observer.t)
-        else:
-            ra = gc['longitude']
-            dec = gc['latitude']
-
-        s = Star(ra=Angle(degrees=ra), dec=Angle(degrees=dec), parallax_mas=1e-16)
-        vector, vel, t, light_time = s._observe_from_bcrs(observer)
-        return vector, vel, t, None
 
 
 def load_earth():
