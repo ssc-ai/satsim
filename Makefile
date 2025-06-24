@@ -116,7 +116,8 @@ docker: docs dist
 dind:
 	docker run --rm -it -v .:/workspace/ -w /workspace python:3.8-bullseye ./build.sh
 	docker build -t satsim:0.20.2-cuda11.2 -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
-	docker build -t satsim:0.20.2-cuda11.8 -t satsim:0.20.2 -t satsim:latest -f docker/ubuntu22.04_cuda11.8_py3.10.dockerfile .
+	docker build -t satsim:0.20.2-cuda11.8 -f docker/ubuntu22.04_cuda11.8_py3.10.dockerfile .
+	docker build -t satsim:0.20.2-cuda12.5 -t satsim:0.20.2 -t satsim:latest -f docker/ubuntu24.04_cuda12.5_py3.12.dockerfile .
 
 uninstall: clean
 	cat .install.log | xargs rm -rf
