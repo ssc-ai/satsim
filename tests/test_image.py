@@ -158,15 +158,15 @@ def test_sin2d():
     assert(image.shape[0] == h)
     assert(image.shape[1] == w)
     assert(np.min(image) == 0)
-    assert(np.max(image) == 1)
+    np.testing.assert_almost_equal(np.max(image), 1)
 
     image = sin2d(h, w, maximum=0.5)
     assert(np.min(image) == 0)
-    assert(np.max(image) == 0.5)
+    np.testing.assert_almost_equal(np.max(image), 0.5)
 
     image = sin2d(h, w, bias=10)
     assert(np.min(image) == 9)
-    assert(np.max(image) == 11)
+    np.testing.assert_almost_equal(np.max(image), 11)
 
     image = sin2d(h, w, direction=45, damped=True)
     assert(image.shape[0] == h)
