@@ -15,7 +15,7 @@ requirements = [
     'Click>=8.1',
     'Cython>=0.29.0',
     'scikit-image>=0.19.3',
-    'Pillow>=9.0,<10.0',
+    'Pillow>=9.0',
     'numpy>=1.21.0',
     'PyYAML>=6.0',
     'matplotlib>=3.7.0',
@@ -52,6 +52,7 @@ setup(
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
     ],
     description="Satellite observation and scene simulator.",
     entry_points={
