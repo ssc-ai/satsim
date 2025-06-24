@@ -4,7 +4,9 @@ from dateutil import parser
 import numpy as np
 
 from satsim.geometry.sgp4 import create_sgp4
-from satsim.geometry.astrometric import apparent, load_earth, load_sun, load_moon, create_topocentric, get_los, gen_track, query_by_los, GreatCircle, get_los_azel, angle_between, angle_from_los, eci_to_radec, radec_to_eci
+from satsim.geometry.astrometric import apparent, load_earth, load_sun, load_moon, create_topocentric, get_los, gen_track, query_by_los, get_los_azel, angle_between, angle_from_los, eci_to_radec, radec_to_eci
+from satsim.geometry.greatcircle import GreatCircle
+from skyfield.api import Star
 from satsim.geometry.photometric import lambertian_sphere_to_mv
 from satsim import time
 
@@ -207,6 +209,31 @@ def test_angle():
     np.testing.assert_almost_equal(1, ang, decimal=2)
 
 
+def test_get_los_great_circle():
+    t0 = time.utc(2021, 3, 18, 0, 0, 0.0)
+    target = GreatCircle(0, 0, 90, 1.0, t0, None)
+    observer = create_topocentric("20.746111 N", "156.431667 W")
+    t1 = time.utc(2021, 3, 18, 0, 0, 10)
+
+    ra, dec, _, _, _, _ = get_los(observer, target, t1, False, False, False)
+
+    np.testing.assert_almost_equal(10, ra)
+    np.testing.assert_almost_equal(0, dec)
+
+
+def test_get_los_star():
+    observer = create_topocentric("20.746111 N", "156.431667 W")
+    star = Star(ra_hours=0, dec_degrees=0)
+    t = time.utc(2021, 3, 18, 0, 0, 0)
+
+    ra, dec, _, _, _, _ = get_los(observer, star, t, False, True, False)
+    icrf_los = apparent(observer.at(t).observe(star), False, True)
+    ra2, dec2, _ = icrf_los.radec()
+
+    np.testing.assert_almost_equal(ra2._degrees, ra)
+    np.testing.assert_almost_equal(dec2._degrees, dec)
+
+
 def test_lambertian():
 
     mv = lambertian_sphere_to_mv(0.2, 400000000, 5, 180)
@@ -230,5 +257,5 @@ def test_eci_to_radec():
     res = radec_to_eci(296.4388967291422, 51.34809573105908, 24994.512114451572)
 
     np.testing.assert_almost_equal(res[0], 6950.804565599999, decimal=12)
-    assert(res[1] == -13978.469491069998)
-    assert(res[2] == 19519.58868464)
+    np.testing.assert_almost_equal(res[1], -13978.469491069998, decimal=11)
+    np.testing.assert_almost_equal(res[2], 19519.58868464, decimal=12)

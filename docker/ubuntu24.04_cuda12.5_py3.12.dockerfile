@@ -1,5 +1,4 @@
-#FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
-FROM nvidia/cuda@sha256:f6913f3c02f297877f6859d12ff330043c0be668fdad86868c29a239a5a82151
+FROM ubuntu:24.04
 LABEL maintainer="Alexander Cabello <alexander.cabello@algoritics.com>"
 
 # install prereqs
@@ -14,19 +13,17 @@ RUN set -ex; \
     zip \
     unzip \
     vim \
-    wget \
-    libnvinfer8=8.6.1.6-1+cuda11.8 \
-    libnvinfer-plugin8=8.6.1.6-1+cuda11.8
+    wget
 
 # configure locale
 RUN locale-gen en_US.UTF-8
 ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
 
 # upgrade pip
-RUN pip3 --no-cache-dir install --upgrade pip setuptools
+RUN python3 -m pip config set global.break-system-packages true
 
 # install tensorflow that works with installed cuda version
-RUN pip3 --no-cache-dir install tensorflow~=2.13.0
+RUN pip3 --no-cache-dir install tensorflow[and-cuda]~=2.19.0
 
 # copy wheel file
 ENV SATSIM_VERSION='0.20.2'

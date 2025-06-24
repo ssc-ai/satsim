@@ -1,6 +1,14 @@
 History
 =======
 
+0.20.2
+---------------------
+
+* Refactor keras_tensor import logic to support multiple TensorFlow/Keras versions.
+* Refactor great circle into separate module.
+* Reorganize CLI tests to run first to prevent TensorFlow configuration errors.
+
+
 0.20.1
 ---------------------
 
