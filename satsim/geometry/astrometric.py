@@ -28,8 +28,6 @@ SATSIM_MOON = None
 SATSIM_SUN = None
 
 
-
-
 def load_earth():
     """Loads a Skyfield Earth object using the planetary and lunar ephemeris,
     DE 421. The Earth object is loaded once and cached as a singleton in the
@@ -168,6 +166,36 @@ def apparent(p, deflection=False, aberration=True):
     return apparent
 
 
+def _apply_stellar_aberration(observer, ra, dec, az, el, t, deflection):
+    """Apply stellar aberration to RA/Dec coordinates.
+
+    Args:
+        observer: Skyfield observer object
+        ra: Right ascension angle object
+        dec: Declination angle object
+        az: Azimuth angle object
+        el: Elevation angle object
+        t: Skyfield time object
+        deflection: Boolean for deflection correction
+
+    Returns:
+        Tuple of corrected (ra, dec, el, az) values
+    """
+    star = Star(ra=ra, dec=dec)
+    icrf_los = apparent(observer.at(t).observe(star), deflection, True)
+    sa_ra, sa_dec, sa_d = icrf_los.radec()
+    sa_el, sa_az, sa_d = icrf_los.altaz()
+
+    # Adjust the apparent RA and Dec based on stellar aberration
+    # Convert to degrees for arithmetic operations
+    apparent_ra = Angle(degrees=2 * ra.degrees - sa_ra.degrees)
+    apparent_dec = Angle(degrees=2 * dec.degrees - sa_dec.degrees)
+    apparent_el = Angle(degrees=2 * el.degrees - sa_el.degrees)
+    apparent_az = Angle(degrees=2 * az.degrees - sa_az.degrees)
+
+    return apparent_ra, apparent_dec, apparent_el, apparent_az
+
+
 @lru_cache(maxsize=32)
 def get_los(observer, target, t, deflection=False, aberration=True, stellar_aberration=False):
     """Get the apparent line of sight vector from an observer and target in
@@ -179,7 +207,7 @@ def get_los(observer, target, t, deflection=False, aberration=True, stellar_aber
         t: `object`, skyfield time
         deflection: `boolean`, enable deflection adjustment
         aberration: `boolean`, enable aberration of light adjustment for the target
-        stellar_aberration: `boolean`, enable stellar aberration adjustment for a star
+        stellar_aberration: `boolean`, enable stellar aberration adjustment (apparent)
 
     Returns:
         A `tuple`, containing:
@@ -200,10 +228,7 @@ def get_los(observer, target, t, deflection=False, aberration=True, stellar_aber
     el, az, d = icrf_los.altaz()
 
     if stellar_aberration:
-        star = Star(ra=ra, dec=dec)
-        icrf_los = apparent(observer.at(t).observe(star), deflection, True)
-        ra, dec, d = icrf_los.radec()
-        el, az, d = icrf_los.altaz()
+        ra, dec, el, az = _apply_stellar_aberration(observer, ra, dec, az, el, t, deflection)
 
     return ra._degrees, dec._degrees, d.km, az._degrees, el._degrees, icrf_los
 
@@ -233,10 +258,13 @@ def get_los_azel(observer, az, el, t, deflection=False, aberration=True, stellar
     ra, dec, d = icrf_los.radec()
 
     if stellar_aberration:
-        star = Star(ra=ra, dec=dec)
-        icrf_los = apparent(observer.at(t).observe(star), deflection, True)
-        ra, dec, d = icrf_los.radec()
-        el, az, d = icrf_los.altaz()
+        # Convert float values to Angle objects for stellar aberration calculation
+        from skyfield.units import Angle
+        el_angle = Angle(degrees=el)
+        az_angle = Angle(degrees=az)
+        ra, dec, el_angle, az_angle = _apply_stellar_aberration(observer, ra, dec, az_angle, el_angle, t, deflection)
+        el = el_angle.degrees
+        az = az_angle.degrees
 
     return ra._degrees, dec._degrees, d.km, az, el, icrf_los
 
