@@ -460,6 +460,15 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     if 'psf_sample_frequency' not in ssp['sim']:
         ssp['sim']['psf_sample_frequency'] = 'once'
 
+    if 'enable_deflection' not in ssp['sim']:
+        ssp['sim']['enable_deflection'] = False
+
+    if 'enable_light_transit' not in ssp['sim']:
+        ssp['sim']['enable_light_transit'] = True
+
+    if 'enable_stellar_aberration' not in ssp['sim']:
+        ssp['sim']['enable_stellar_aberration'] = True
+
     if star_mode == 'bins':
         star_dn = ssp['geometry']['stars']['mv']['density']
         star_pe = mv_to_pe(zeropoint, ssp['geometry']['stars']['mv']['bins']) * t_exposure
@@ -1179,8 +1188,8 @@ def _gen_objects(ssp, render_mode,
                 observer,
                 target,
                 ts_mid,
-                deflection=False,
-                aberration=True,
+                deflection=ssp['sim']['enable_deflection'],
+                aberration=ssp['sim']['enable_light_transit'],
                 stellar_aberration=False,
             )
             ra_true, dec_true, _, _, _, _ = get_los(
@@ -1240,24 +1249,27 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
                                         y_ifov, x_ifov,
                                         observer, track, star_rot, track_mode, track_az, track_el):
     az, el = _calculate_az_el(ts_collect_start, ts_collect_end, [t_start, t_end], track_az, track_el)
+    enable_deflection = ssp['sim']['enable_deflection']
+    enable_light_transit = ssp['sim']['enable_light_transit']
+    enable_stellar_aberration = ssp['sim']['enable_stellar_aberration']
     if track_mode == 'rate':
         track_target = [track]
-        star_ra0, star_dec0, _, _, _, _ = get_los(observer, track, t_start, deflection=False, aberration=True, stellar_aberration=True)
-        star_ra1, star_dec1, _, _, _, _ = get_los(observer, track, t_end, deflection=False, aberration=True, stellar_aberration=True)
-        ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, t_start, deflection=False, aberration=True, stellar_aberration=False)
-        ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, t_end, deflection=False, aberration=True, stellar_aberration=False)
+        star_ra0, star_dec0, _, _, _, _ = get_los(observer, track, t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
+        star_ra1, star_dec1, _, _, _, _ = get_los(observer, track, t_end, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
+        ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
+        ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, t_end, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
     elif track_mode == 'fixed':
         track_target = []
-        star_ra0, star_dec0, _, _, _, _ = get_los_azel(observer, az[0], el[0], t_start, deflection=False, aberration=True, stellar_aberration=True)
-        star_ra1, star_dec1, _, _, _, _ = get_los_azel(observer, az[1], el[1], t_end, deflection=False, aberration=True, stellar_aberration=True)
-        ra0, dec0, dis0, az0, el0, los0 = get_los_azel(observer, az[0], el[0], t_start, deflection=False, aberration=True, stellar_aberration=False)
-        ra1, dec1, dis1, az1, el1, los1 = get_los_azel(observer, az[1], el[1], t_end, deflection=False, aberration=True, stellar_aberration=False)
+        star_ra0, star_dec0, _, _, _, _ = get_los_azel(observer, az[0], el[0], t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
+        star_ra1, star_dec1, _, _, _, _ = get_los_azel(observer, az[1], el[1], t_end, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
+        ra0, dec0, dis0, az0, el0, los0 = get_los_azel(observer, az[0], el[0], t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
+        ra1, dec1, dis1, az1, el1, los1 = get_los_azel(observer, az[1], el[1], t_end, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
     elif track_mode == 'sidereal':
         track_target = [track]
-        star_ra0, star_dec0, _, _, _, _ = get_los(observer, track, ts_collect_start, deflection=False, aberration=True, stellar_aberration=True)
-        star_ra1, star_dec1, _, _, _, _ = get_los(observer, track, ts_collect_start, deflection=False, aberration=True, stellar_aberration=True)
-        ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, ts_collect_start, deflection=False, aberration=True, stellar_aberration=False)
-        ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, ts_collect_start, deflection=False, aberration=True, stellar_aberration=False)
+        star_ra0, star_dec0, _, _, _, _ = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
+        star_ra1, star_dec1, _, _, _, _ = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
+        ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
+        ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
     else:
         logger.error('Unknown track mode: {}.'.format(track_mode))
 
