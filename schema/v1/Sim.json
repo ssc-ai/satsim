@@ -130,6 +130,21 @@
             "type": "string",
             "default": "once"
         },
+        "enable_deflection": {
+            "description": "Enable target gravitational deflection.",
+            "type": "boolean",
+            "default": false
+        },
+        "enable_light_transit": {
+            "description": "Enable target light time and aberration.",
+            "type": "boolean",
+            "default": true
+        },
+        "enable_stellar_aberration": {
+            "description": "Enable stellar aberration when computing apparent positions.",
+            "type": "boolean",
+            "default": true
+        },        
         "save_pickle": {
             "description": "Save intermediate data as pickle files for debugging.",
             "type": "boolean",

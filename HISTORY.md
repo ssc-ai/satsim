@@ -1,6 +1,13 @@
 History
 =======
 
+0.20.3
+---------------------
+
+* Fix star stellar aberration
+* Add simulation configuration options for deflection, light transit, and stellar aberration
+
+
 0.20.2
 ---------------------
 
