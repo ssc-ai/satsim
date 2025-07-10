@@ -383,7 +383,8 @@ def gen_track_from_wcs(height, width, wcs, observer, targets, t0, tt, origin='ce
     return rr, cc, (r1 - r0) / exposure_time, (c1 - c0) / exposure_time
 
 
-def wcs_from_observer_rate(height, width, y_fov, x_fov, observer, t0, tt, rot, track):
+def wcs_from_observer_rate(height, width, y_fov, x_fov, observer, t0, tt, rot, track,
+                           deflection=False, aberration=True, stellar_aberration=False):
     """Calculate the world coordinate system (WCS) transform from the `observer`
     at times `tt` while rate tracking the object, `track`.
 
@@ -403,13 +404,21 @@ def wcs_from_observer_rate(height, width, y_fov, x_fov, observer, t0, tt, rot, t
     """
     wsc = []
     for t in tt:
-        [ra0,dec0,d0,az0,el0,los0] = get_los(observer, track, t, deflection=False, aberration=True, stellar_aberration=False)
+        [ra0, dec0, d0, az0, el0, los0] = get_los(
+            observer,
+            track,
+            t,
+            deflection=deflection,
+            aberration=aberration,
+            stellar_aberration=stellar_aberration,
+        )
         wcs0 = get_wcs(height, width, y_fov / height, x_fov / width, ra0, dec0, rot)
         wsc.append(wcs0)
     return wsc
 
 
-def wcs_from_observer_fixed(height, width, y_fov, x_fov, observer, tt, rot, az, el):
+def wcs_from_observer_fixed(height, width, y_fov, x_fov, observer, tt, rot, az, el,
+                            deflection=False, aberration=True, stellar_aberration=False):
     """Calculate the world coordinate system (WCS) transform from the `observer`
     at a fixed pointing position based on azimuth and elevation.
 
@@ -428,14 +437,23 @@ def wcs_from_observer_fixed(height, width, y_fov, x_fov, observer, tt, rot, az, 
         A `object`: WCS transform
     """
     wsc = []
-    for t,a,e in zip(tt,az,el):
-        [ra0,dec0,d0,az0,el0,los0] = get_los_azel(observer, a, e, t, deflection=False, aberration=True, stellar_aberration=False)
+    for t, a, e in zip(tt, az, el):
+        [ra0, dec0, d0, az0, el0, los0] = get_los_azel(
+            observer,
+            a,
+            e,
+            t,
+            deflection=deflection,
+            aberration=aberration,
+            stellar_aberration=stellar_aberration,
+        )
         wcs0 = get_wcs(height, width, y_fov / height, x_fov / width, ra0, dec0, rot)
         wsc.append(wcs0)
     return wsc
 
 
-def wcs_from_observer_sidereal(height, width, y_fov, x_fov, observer, t0, tt, rot, track):
+def wcs_from_observer_sidereal(height, width, y_fov, x_fov, observer, t0, tt, rot, track,
+                               deflection=False, aberration=True, stellar_aberration=False):
     """Calculate the world coordinate system (WCS) transform from the `observer`
     at times `tt` while sidereal tracking the object, `track`.
 
@@ -454,7 +472,14 @@ def wcs_from_observer_sidereal(height, width, y_fov, x_fov, observer, t0, tt, ro
         A `object`: WCS transform
     """
     wsc = []
-    [ra0,dec0,d0,az0,el0,los0] = get_los(observer, track, t0, deflection=False, aberration=True, stellar_aberration=False)
+    [ra0, dec0, d0, az0, el0, los0] = get_los(
+        observer,
+        track,
+        t0,
+        deflection=deflection,
+        aberration=aberration,
+        stellar_aberration=stellar_aberration,
+    )
     wcs0 = get_wcs(height, width, y_fov / height, x_fov / width, ra0, dec0, rot)
     for t in tt:
         wsc.append(wcs0)
@@ -462,7 +487,8 @@ def wcs_from_observer_sidereal(height, width, y_fov, x_fov, observer, t0, tt, ro
 
 
 def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightnesses, t0, tt, rot=0, pad_mult=0, track_type='rate',
-              offset=[0,0], flipud=False, fliplr=False, az=None, el=None):
+              offset=[0, 0], flipud=False, fliplr=False, az=None, el=None,
+              deflection=False, aberration=True, stellar_aberration=False):
     """Generates a list of pixel coordinates from the observing focal plane
     array to each satellite in the list, `satellites`. Track mode can be either
     `rate` or `sidereal`.
@@ -486,6 +512,9 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
         fliplr: `boolean`, flip array in left/right direction
         az: `float`, azimuth in degrees for `fixed` tracking
         el: `float`, elevation in degrees for `fixed` tracking
+        deflection: `bool`, include gravitational deflection in astrometry
+        aberration: `bool`, include light transit time effects in astrometry
+        stellar_aberration: `bool`, include stellar aberration in astrometry
 
     Returns:
         A `tuple`, containing:
@@ -497,11 +526,50 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
     """
     # note wcs are based on apparent position of the tracked target
     if track_type == 'rate':
-        wcs = wcs_from_observer_rate(height, width, y_fov, x_fov, observer, t0, tt, rot, track)
+        wcs = wcs_from_observer_rate(
+            height,
+            width,
+            y_fov,
+            x_fov,
+            observer,
+            t0,
+            tt,
+            rot,
+            track,
+            deflection=deflection,
+            aberration=aberration,
+            stellar_aberration=stellar_aberration,
+        )
     elif track_type == 'fixed':
-        wcs = wcs_from_observer_fixed(height, width, y_fov, x_fov, observer, tt, rot, az, el)
+        wcs = wcs_from_observer_fixed(
+            height,
+            width,
+            y_fov,
+            x_fov,
+            observer,
+            tt,
+            rot,
+            az,
+            el,
+            deflection=deflection,
+            aberration=aberration,
+            stellar_aberration=stellar_aberration,
+        )
     else:
-        wcs = wcs_from_observer_sidereal(height, width, y_fov, x_fov, observer, t0, tt, rot, track)
+        wcs = wcs_from_observer_sidereal(
+            height,
+            width,
+            y_fov,
+            x_fov,
+            observer,
+            t0,
+            tt,
+            rot,
+            track,
+            deflection=deflection,
+            aberration=aberration,
+            stellar_aberration=stellar_aberration,
+        )
 
     b = np.asarray(brightnesses)
     visible = satellites
