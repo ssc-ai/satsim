@@ -1122,6 +1122,9 @@ def _gen_objects(ssp, render_mode,
                     fliplr=ssp['fpa']['flip_left_right'],
                     az=az,
                     el=el,
+                    deflection=ssp['sim']['enable_deflection'],
+                    aberration=ssp['sim']['enable_light_transit'],
+                    stellar_aberration=ssp['sim']['enable_stellar_aberration'],
                 )
             except Exception:
                 logger.exception("Error propagating target. {}".format(o))
@@ -1273,7 +1276,28 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
     else:
         logger.error('Unknown track mode: {}.'.format(track_mode))
 
-    [rr0, rr1], [cc0, cc1], drr, dcc, _ = gen_track(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, observer, track, track_target, [0], ts_collect_start, [t_start, t_end], star_rot, 1, track_mode, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], az=az, el=el)
+    [rr0, rr1], [cc0, cc1], drr, dcc, _ = gen_track(
+        h_fpa_pad_os,
+        w_fpa_pad_os,
+        y_fov_pad,
+        x_fov_pad,
+        observer,
+        track,
+        track_target,
+        [0],
+        ts_collect_start,
+        [t_start, t_end],
+        star_rot,
+        1,
+        track_mode,
+        flipud=ssp['fpa']['flip_up_down'],
+        fliplr=ssp['fpa']['flip_left_right'],
+        az=az,
+        el=el,
+        deflection=enable_deflection,
+        aberration=enable_light_transit,
+        stellar_aberration=enable_stellar_aberration,
+    )
     star_tran_os = [-drr, -dcc]  # stars move in the opposite direction of target
     star_rot_rate = 0  # TODO
 
