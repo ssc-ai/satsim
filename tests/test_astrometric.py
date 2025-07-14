@@ -4,7 +4,22 @@ from dateutil import parser
 import numpy as np
 
 from satsim.geometry.sgp4 import create_sgp4
-from satsim.geometry.astrometric import apparent, load_earth, load_sun, load_moon, create_topocentric, get_los, gen_track, query_by_los, get_los_azel, angle_between, angle_from_los, eci_to_radec, radec_to_eci
+from satsim.geometry.astrometric import (
+    apparent,
+    load_earth,
+    load_sun,
+    load_moon,
+    create_topocentric,
+    get_los,
+    gen_track,
+    query_by_los,
+    get_los_azel,
+    angle_between,
+    angle_from_los,
+    eci_to_radec,
+    radec_to_eci,
+    get_analytical_los,
+)
 from satsim.geometry.greatcircle import GreatCircle
 from skyfield.api import Star
 from satsim.geometry.photometric import lambertian_sphere_to_mv
@@ -232,6 +247,26 @@ def test_get_los_star():
 
     np.testing.assert_almost_equal(ra2._degrees, ra)
     np.testing.assert_almost_equal(dec2._degrees, dec)
+
+
+def test_get_los_frames():
+    topo = create_topocentric("20.746111 N", "156.431667 W")
+    sat = create_sgp4(
+        "1 36411U 10008A   15115.45079343  .00000069  00000-0  00000+0 0  9992",
+        "2 36411 000.0719 125.6855 0001927 217.7585 256.6121 01.00266852 18866",
+    )
+    t = time.utc(2015, 5, 5, 13, 26, 43.288)
+
+    ra_b, dec_b, _ = get_analytical_los(topo, sat, t, frame="barycentric")
+    ra_g, dec_g, _ = get_analytical_los(topo, sat, t, frame="geocentric")
+    ra_o, dec_o, _ = get_analytical_los(topo, sat, t, frame="observer")
+
+    np.testing.assert_almost_equal(ra_b, 292.3898647470882, decimal=5)
+    np.testing.assert_almost_equal(dec_b, -3.497503446802312, decimal=5)
+    np.testing.assert_almost_equal(ra_g, 292.3920488720271, decimal=5)
+    np.testing.assert_almost_equal(dec_g, -3.498820404150905, decimal=5)
+    np.testing.assert_almost_equal(ra_o, 292.3921248350655, decimal=5)
+    np.testing.assert_almost_equal(dec_o, -3.4988184445922093, decimal=5)
 
 
 def test_lambertian():
