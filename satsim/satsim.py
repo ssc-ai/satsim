@@ -29,7 +29,13 @@ from satsim.geometry.sstr7 import query_by_los
 from satsim.geometry.csvsc import query_by_los as csvsc_query_by_los
 from satsim.geometry.sgp4 import create_sgp4
 from satsim.geometry.ephemeris import create_ephemeris_object
-from satsim.geometry.astrometric import create_topocentric, gen_track, get_los, get_los_azel
+from satsim.geometry.astrometric import (
+    create_topocentric,
+    gen_track,
+    get_los,
+    get_los_azel,
+    get_analytical_los,
+)
 from satsim.geometry.greatcircle import GreatCircle
 from skyfield.toposlib import _ltude
 from satsim.geometry.photometric import model_to_mv
@@ -456,6 +462,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'analytical_obs' not in ssp['sim']:
         ssp['sim']['analytical_obs'] = False
+
+    if 'analytical_obs_frame' not in ssp['sim']:
+        ssp['sim']['analytical_obs_frame'] = 'geocentric'
 
     if 'psf_sample_frequency' not in ssp['sim']:
         ssp['sim']['psf_sample_frequency'] = 'once'
@@ -1187,13 +1196,11 @@ def _gen_objects(ssp, render_mode,
             oppp = np.concatenate((oppp, opp))
 
         if obs_cache[i] is not None:
-            ra_mid, dec_mid, _, _, _, _ = get_los(
+            ra_mid, dec_mid, _ = get_analytical_los(
                 observer,
                 target,
                 ts_mid,
-                deflection=ssp['sim']['enable_deflection'],
-                aberration=ssp['sim']['enable_light_transit'],
-                stellar_aberration=False,
+                frame=ssp['sim']['analytical_obs_frame']
             )
             ra_true, dec_true, _, _, _, _ = get_los(
                 observer,
@@ -1228,6 +1235,7 @@ def _gen_objects(ssp, render_mode,
         if ra_mid is not None and dec_mid is not None:
             entry['ra_obs'] = ra_mid
             entry['dec_obs'] = dec_mid
+            entry['obs_frame'] = ssp['sim']['analytical_obs_frame']
             entry['ra'] = ra_true
             entry['dec'] = dec_true
 
