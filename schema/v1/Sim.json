@@ -155,6 +155,12 @@
             "type": "boolean",
             "default": false
         },
+        "analytical_obs_frame": {
+            "description": "Reference frame for analytical observations. Valid values: barycentric, geocentric, observer",
+            "type": "string",
+            "enum": ["barycentric", "geocentric", "observer"],
+            "default": "geocentric"
+        },
         "czml_samples": {
             "description": "The number of object position samples to save in the CZML file.",
             "type": "integer",
