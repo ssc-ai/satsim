@@ -104,6 +104,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
         if 'ra_obs' in o and 'dec_obs' in o:
             annotation['ra_obs'] = _cast_to_float(o['ra_obs'])
             annotation['dec_obs'] = _cast_to_float(o['dec_obs'])
+            annotation['obs_frame'] = o.get('obs_frame', 'unknown')
         if 'ra' in o and 'dec' in o:
             annotation['ra'] = _cast_to_float(o['ra'])
             annotation['dec'] = _cast_to_float(o['dec'])

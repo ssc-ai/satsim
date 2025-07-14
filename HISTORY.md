@@ -1,11 +1,17 @@
 History
 =======
 
+0.20.4
+---------------------
+
+* Update analytical observation for specified observation frames. `analytical_obs_frame` can be `barycentric`, `geocentric`, or `observer`.
+
+
 0.20.3
 ---------------------
 
-* Fix star stellar aberration
-* Add simulation configuration options for deflection, light transit, and stellar aberration
+* Fix star stellar aberration.
+* Add simulation configuration options for deflection, light transit, and stellar aberration.
 
 
 0.20.2
