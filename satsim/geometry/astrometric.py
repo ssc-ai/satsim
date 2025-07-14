@@ -269,6 +269,51 @@ def get_los_azel(observer, az, el, t, deflection=False, aberration=True, stellar
     return ra._degrees, dec._degrees, d.km, az, el, icrf_los
 
 
+def get_analytical_los(observer, target, t, frame="observer"):
+    """Return a line of sight in the specified frame for analytical observations.
+
+    Args:
+        observer: `object`, observer as a Skyfield object
+        target: `object`, target as a Skyfield object
+        t: `object`, skyfield time
+        frame: `string`, one of ``barycentric``, ``geocentric`` or ``observer``
+
+    Returns:
+        A `tuple`, containing:
+            ra: right ascension in degrees
+            dec: declination in degrees
+            d: distance between observer and target in km
+    """
+
+    frame = frame.lower()
+
+    # compute light time using apparent LOS from observer to target
+    icrf_los_abr = observer.at(t).observe(target)
+    lt = icrf_los_abr.light_time
+
+    try:
+        if frame == "barycentric":
+            icrf_los = target.at(t - lt) - observer.at(t)
+        elif frame == "geocentric":
+            earth = load_earth()
+            observer_gc = observer - earth
+            target_gc = target - earth
+            icrf_los = target_gc.at(t - lt) - observer_gc.at(t)
+        elif frame == "observer":  # observer frame
+            observer_oc = observer - observer
+            target_oc = target - observer
+            icrf_los = target_oc.at(t - lt) - observer_oc.at(t)
+        else:
+            raise ValueError(f"Unknown frame: {frame}")
+    except Exception:
+        # Handle cases where the observer or target does not support the requested frame
+        icrf_los = icrf_los_abr
+
+    ra, dec, d = icrf_los.radec()
+
+    return ra._degrees, dec._degrees, d.km
+
+
 def query_by_los(height, width, y_fov, x_fov, ra, dec, t0, observer, targets=[], rot=0, pad_mult=0, origin='center', offset=[0,0]):
     """Return objects that are within the minimum and maximum RA and declination
     bounds of the observer's focal plan array with padding, `pad_mult`.
