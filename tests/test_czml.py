@@ -45,3 +45,26 @@ def test_czml():
     for i in range(3, len(d)):
         assert(d[i]['id'] == i - 3)
         assert(len(d[i]['position']['cartesian']) == num_czml_samples * 4)
+
+
+def test_czml_space_observer():
+
+    configure_eager()
+
+    ssp = config.load_json('./tests/config_site_tle_simple.json')
+    ssp, d = config.transform(ssp, max_stages=10, with_debug=True)
+
+    ssp['sim']['czml_samples'] = 5
+    ssp['sim']['mode'] = 'none'
+    ssp['fpa']['num_frames'] = 1
+    ssp['fpa']['time']['exposure'] = 60
+
+    fpa_digital, frame_num, astrometrics, obs_os_pix, fpa_conv_star, fpa_conv_targ, bg_tf, dc_tf, rn_tf, num_shot_noise_samples, obs_cache, ground_truth, star_os_pix, segmentation = next(image_generator(ssp, None, None, None, with_meta=True, num_sets=1))
+    j = save_czml(ssp, obs_cache, [astrometrics], None)
+
+    d = json.loads(j)
+
+    assert d[1]['id'] == 'GS0'
+    # space observer should have a trajectory with multiple points
+    assert len(d[1]['position']['cartesian']) > 3
+    assert d[2]['id'] == 'GS0_FOV'

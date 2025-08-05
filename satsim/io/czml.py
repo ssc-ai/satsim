@@ -11,6 +11,7 @@ from skyfield.vectorlib import VectorFunction
 
 from satsim import time
 from satsim.geometry.astrometric import load_earth, eci_to_ecr
+from satsim.geometry.sgp4 import create_sgp4
 from satsim.vecmath import Quaternion
 
 from czmlpy.core import Document, Packet, Preamble
@@ -66,14 +67,10 @@ def save_czml(ssp, obs_cache, astrometrics, filename):
     # extract site data
     if 'site' in ssp['geometry']:
         site = ssp['geometry']['site']
-        latitude = _ltude(site['lat'], 'latitude', 'N', 'S') * u.deg
-        longitude = _ltude(site['lon'], 'longitude', 'E', 'W') * u.deg
-        alt = site['alt'] * u.km
-
         name = site['name'] if 'name' in site else None
 
         # czml
-        czml_config = site['czml'] if 'czml' in site else {}
+        czml_config = site.get('czml', {})
         label_show = czml_config.get('label_show', False)
         cone_show = czml_config.get('cone_show', True)
         cone_color = czml_config.get('cone_color', [255, 255, 0, 64])
@@ -88,9 +85,23 @@ def save_czml(ssp, obs_cache, astrometrics, filename):
             'range': [x['range'] for x in astrometrics],
         }
 
-        extractor.add_ground_station([latitude, longitude, alt], sensor, label_text=name, label_show=label_show,
-                                     cone_show=cone_show, cone_color=cone_color, billboard_show=billboard_show,
-                                     billboard_image=billboard_image)
+        if 'tle' in site:
+            sat = create_sgp4(site['tle'][0], site['tle'][1])
+            extractor.add_space_station(sat, sensor, label_text=name, label_show=label_show,
+                                        cone_show=cone_show, cone_color=cone_color,
+                                        billboard_show=billboard_show, billboard_image=billboard_image)
+        elif 'tle1' in site:
+            sat = create_sgp4(site['tle1'], site['tle2'])
+            extractor.add_space_station(sat, sensor, label_text=name, label_show=label_show,
+                                        cone_show=cone_show, cone_color=cone_color,
+                                        billboard_show=billboard_show, billboard_image=billboard_image)
+        else:
+            latitude = _ltude(site['lat'], 'latitude', 'N', 'S') * u.deg
+            longitude = _ltude(site['lon'], 'longitude', 'E', 'W') * u.deg
+            alt = site['alt'] * u.km
+            extractor.add_ground_station([latitude, longitude, alt], sensor, label_text=name, label_show=label_show,
+                                         cone_show=cone_show, cone_color=cone_color, billboard_show=billboard_show,
+                                         billboard_image=billboard_image)
 
     # extract objects data
     for i, o in enumerate(ssp['geometry']['obs']['list']):
@@ -305,6 +316,103 @@ class CZMLExtractor:
                     backwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE
                 )
             )
+        )
+        self.packets.append(pckt)
+
+    def add_space_station(
+        self,
+        sat,
+        sensor,
+        id_name=None,
+        id_description=None,
+        label_fill_color=[255, 255, 0, 255],
+        label_outline_color=[255, 255, 0, 255],
+        label_font="16pt Lucida Console",
+        label_text=None,
+        label_show=False,
+        billboard_show=True,
+        billboard_image=PIC_GROUNDSTATION,
+        cone_color=[255, 255, 0, 64],
+        cone_show=True,
+        path_color=[255, 255, 0],
+        path_show=True,
+    ):
+        """Adds a space-based observing platform"""
+
+        if not isinstance(sat, VectorFunction):
+            return
+
+        sat = sat - load_earth()
+
+        gs_id = "GS" + str(self.num_gs)
+
+        cart = []
+        quat = []
+        radius = []
+        for t, q, r in zip(sensor['time'], sensor['quat'], sensor['range']):
+            ts = Time(t)
+            sec = (ts - self.start_epoch).to(u.second).value
+            position, _, _, _ = sat._at(time.from_astropy(ts))
+            position = position * AU_KM * 1000
+            cart += [sec, position[0], position[1], position[2]]
+            quat += [sec, q[0], q[1], q[2], q[3]]
+            radius += [sec, r * 1000]
+
+        pckt = Packet(
+            id=gs_id,
+            name=id_name,
+            description=id_description,
+            availability=TimeInterval(start=self.start_epoch, end=self.end_epoch),
+            position=Position(
+                interpolationDegree=1,
+                interpolationAlgorithm=InterpolationAlgorithms.LINEAR,
+                referenceFrame=ReferenceFrames.INERTIAL,
+                cartesian=cart,
+                epoch=self.start_epoch.datetime.replace(tzinfo=timezone.utc),
+            ),
+            path=Path(
+                show=path_show,
+                width=2,
+                material=Material(solidColor=SolidColorMaterial(color=Color.from_list(path_color))),
+                resolution=120,
+            ),
+            label=Label(show=True),
+            billboard=Billboard(image=billboard_image, show=billboard_show),
+        )
+        self.packets.append(pckt)
+        self.num_gs += 1
+
+        pckt = Packet(
+            id=gs_id + "_FOV",
+            parent=gs_id,
+            position=Position(reference=gs_id + "#position"),
+            orientation=Orientation(
+                unitQuaternion=quat,
+                interpolationDegree=1,
+                interpolationAlgorithm=InterpolationAlgorithms.LINEAR,
+                epoch=self.start_epoch.datetime.replace(tzinfo=timezone.utc),
+                forwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE,
+                backwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE,
+            ),
+            agi_rectangularSensor=RectangularSensor(
+                show=cone_show,
+                showIntersection=False,
+                intersectionColor=Color(rgba=[255, 255, 255, 255]),
+                intersectionWidth=2,
+                portionToDisplay="COMPLETE",
+                lateralSurfaceMaterial=Material(solidColor=SolidColorMaterial(color=Color(rgba=cone_color))),
+                domeSurfaceMaterial=Material(solidColor=SolidColorMaterial(color=Color(rgba=cone_color))),
+                xHalfAngle=np.radians(sensor['x_fov'] / 2),
+                yHalfAngle=np.radians(sensor['y_fov'] / 2),
+                radius=Double(
+                    number=radius,
+                    interpolationDegree=1,
+                    interpolationAlgorithm=InterpolationAlgorithms.LINEAR,
+                    epoch=self.start_epoch.datetime.replace(tzinfo=timezone.utc),
+                    forwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE,
+                    backwardExtrapolationType=ExtrapolationTypes.EXTRAPOLATE,
+                ),
+            ),
         )
         self.packets.append(pckt)
 
