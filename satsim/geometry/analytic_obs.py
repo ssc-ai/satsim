@@ -82,19 +82,32 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
         ra_m = ra_obs + np.random.normal(scale=axis_error * x_ifov) / math.cos(math.radians(dec_obs))
         dec_m = dec_obs + np.random.normal(scale=axis_error * y_ifov)
 
-        obs_list.append({
+        entry = {
             'obTime': astrometrics['time'].strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
             'ra': float(ra_m),
             'declination': float(dec_m),
             'snrEst': float(snr),
-            'senlat': float(astrometrics.get('lat', 0)),
-            'senlon': float(astrometrics.get('lon', 0)),
-            'senalt': float(astrometrics.get('alt', 0)),
             'expDuration': float(ssp['fpa']['time']['exposure']),
             'uct': False,
             'createdBy': 'satsim',
             'type': 'OPTICAL'
-        })
+        }
+        if 'x' in astrometrics:
+            entry.update({
+                'senx': float(astrometrics['x']),
+                'seny': float(astrometrics['y']),
+                'senz': float(astrometrics['z']),
+                'senvelx': float(astrometrics['vx']),
+                'senvely': float(astrometrics['vy']),
+                'senvelz': float(astrometrics['vz']),
+            })
+        else:
+            entry.update({
+                'senlat': float(astrometrics.get('lat', 0)),
+                'senlon': float(astrometrics.get('lon', 0)),
+                'senalt': float(astrometrics.get('alt', 0)),
+            })
+        obs_list.append(entry)
 
         if 'object_name' in ob and ob['object_name'] is not None and ob['object_name'] != '':
             obs_list[-1]['idOnOrbit'] = ob['object_name']
@@ -112,19 +125,32 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
         dec_m = center_dec + r_pix * y_ifov
         ra_m += np.random.normal(scale=axis_error * x_ifov) / math.cos(math.radians(dec_m))
         dec_m += np.random.normal(scale=axis_error * y_ifov)
-        obs_list.append({
+        entry = {
             'obTime': astrometrics['time'].strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
             'ra': float(ra_m),
             'declination': float(dec_m),
             'snrEst': 0.0,
-            'senlat': float(astrometrics.get('lat', 0)),
-            'senlon': float(astrometrics.get('lon', 0)),
-            'senalt': float(astrometrics.get('alt', 0)),
             'expDuration': float(ssp['fpa']['time']['exposure']),
             'uct': True,
             'createdBy': 'satsim',
             'type': 'OPTICAL'
-        })
+        }
+        if 'x' in astrometrics:
+            entry.update({
+                'senx': float(astrometrics['x']),
+                'seny': float(astrometrics['y']),
+                'senz': float(astrometrics['z']),
+                'senvelx': float(astrometrics['vx']),
+                'senvely': float(astrometrics['vy']),
+                'senvelz': float(astrometrics['vz']),
+            })
+        else:
+            entry.update({
+                'senlat': float(astrometrics.get('lat', 0)),
+                'senlon': float(astrometrics.get('lon', 0)),
+                'senalt': float(astrometrics.get('alt', 0)),
+            })
+        obs_list.append(entry)
         count += 1
 
     return obs_list

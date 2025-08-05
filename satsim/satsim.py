@@ -35,6 +35,7 @@ from satsim.geometry.astrometric import (
     get_los,
     get_los_azel,
     get_analytical_los,
+    load_earth,
 )
 from satsim.geometry.greatcircle import GreatCircle
 from skyfield.toposlib import _ltude
@@ -555,18 +556,28 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         ts_collect_end = time.utc_from_list(tt, t_frame * num_frames)
 
         # site
+        site_mode = None
         if 'site' in ssp['geometry']:
 
             # note: stars will track horizontally where zenith is pointed up. focal plane rotation is simulated with the `rotation` variable
             star_rot = ssp['geometry']['site']['gimbal']['rotation']
             track_mode = ssp['geometry']['site']['track']['mode']
-            lat = ssp['geometry']['site']['lat']
-            lon = ssp['geometry']['site']['lon']
-            astrometrics['lat'] = float(_ltude(lat, 'latitude', 'N', 'S')) if isinstance(lat, str) else float(lat)
-            astrometrics['lon'] = float(_ltude(lon, 'longitude', 'E', 'W')) if isinstance(lon, str) else float(lon)
-            astrometrics['alt'] = float(ssp['geometry']['site'].get('alt', 0))
             astrometrics['track_mode'] = _parse_track_mode(track_mode, 0, num_frames)
-            observer = create_topocentric(astrometrics['lat'], astrometrics['lon'], astrometrics['alt'])
+
+            if 'tle' in ssp['geometry']['site']:
+                observer = create_sgp4(ssp['geometry']['site']['tle'][0], ssp['geometry']['site']['tle'][1])
+                site_mode = 'space'
+            elif 'tle1' in ssp['geometry']['site']:
+                observer = create_sgp4(ssp['geometry']['site']['tle1'], ssp['geometry']['site']['tle2'])
+                site_mode = 'space'
+            else:
+                lat = ssp['geometry']['site']['lat']
+                lon = ssp['geometry']['site']['lon']
+                astrometrics['lat'] = float(_ltude(lat, 'latitude', 'N', 'S')) if isinstance(lat, str) else float(lat)
+                astrometrics['lon'] = float(_ltude(lon, 'longitude', 'E', 'W')) if isinstance(lon, str) else float(lon)
+                astrometrics['alt'] = float(ssp['geometry']['site'].get('alt', 0))
+                observer = create_topocentric(astrometrics['lat'], astrometrics['lon'], astrometrics['alt'])
+                site_mode = 'ground'
 
             if 'tle' in ssp['geometry']['site']['track']:
                 track = create_sgp4(ssp['geometry']['site']['track']['tle'][0], ssp['geometry']['site']['track']['tle'][1])
@@ -672,6 +683,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             t_start_star = t_start
             t_end_star = t_end
             t_frame_track_start = _parse_start_track_time(track_mode, frame_num, num_frames, ts_collect_start, ts_start)
+
+            # sensor position and velocity
+            if site_mode == 'space':
+                ts_mid = time.mid(ts_start, ts_end)
+                eci_sv = (observer - load_earth()).at(ts_mid)
+                pos = eci_sv.position.km
+                vel = eci_sv.velocity.km_per_s
+                astrometrics['x'] = float(pos[0])
+                astrometrics['y'] = float(pos[1])
+                astrometrics['z'] = float(pos[2])
+                astrometrics['vx'] = float(vel[0])
+                astrometrics['vy'] = float(vel[1])
+                astrometrics['vz'] = float(vel[2])
 
             # calculate object pixels
             r_obs_os, c_obs_os, pe_obs_os, obs_os_pix, obs_model = _gen_objects(ssp, render_mode,

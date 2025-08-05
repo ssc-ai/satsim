@@ -184,7 +184,12 @@ def _apply_stellar_aberration(observer, ra, dec, az, el, t, deflection):
     star = Star(ra=ra, dec=dec)
     icrf_los = apparent(observer.at(t).observe(star), deflection, True)
     sa_ra, sa_dec, sa_d = icrf_los.radec()
-    sa_el, sa_az, sa_d = icrf_los.altaz()
+
+    try:
+        sa_el, sa_az, sa_d = icrf_los.altaz()
+    except Exception:
+        sa_az = Angle(degrees=0.0)
+        sa_el = Angle(degrees=0.0)
 
     # Adjust the apparent RA and Dec based on stellar aberration
     # Convert to degrees for arithmetic operations
@@ -225,7 +230,11 @@ def get_los(observer, target, t, deflection=False, aberration=True, stellar_aber
         icrf_los = (target - observer).at(t)
 
     ra, dec, d = icrf_los.radec()
-    el, az, d = icrf_los.altaz()
+    try:
+        el, az, d = icrf_los.altaz()
+    except Exception:
+        az = Angle(degrees=0.0)
+        el = Angle(degrees=0.0)
 
     if stellar_aberration:
         ra, dec, el, az = _apply_stellar_aberration(observer, ra, dec, az, el, t, deflection)

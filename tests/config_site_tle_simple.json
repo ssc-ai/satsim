@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "sim": {
+    "mode": "fftconv2p",
+    "spacial_osf": 1,
+    "temporal_osf": 1,
+    "padding": 0,
+    "samples": 1
+  },
+  "fpa": {
+    "height": 10,
+    "width": 10,
+    "y_fov": 1.0,
+    "x_fov": 1.0,
+    "dark_current": 0,
+    "gain": 1,
+    "bias": 0,
+    "zeropoint": 20,
+    "a2d": {
+      "response": "linear",
+      "fwc": 1000,
+      "gain": 1,
+      "bias": 0,
+      "dtype": "uint16"
+    },
+    "noise": { "read": 0, "electronic": 0 },
+    "psf": { "mode": "gaussian", "eod": 0.5 },
+    "time": { "exposure": 1.0, "gap": 0.0 },
+    "num_frames": 1
+  },
+  "background": { "stray": {"mode": "none"}, "galactic": 0 },
+  "geometry": {
+    "time": [2015,1,1,0,0,0],
+    "site": {
+      "tle1": "1 37168U 10048A   15115.45079343  .00003419  00000-0  18056-3 0  9997",
+      "tle2": "2 37168  97.7781  90.4142 0086116 212.8391 262.6197 15.13064320804554",
+      "gimbal": {"mode": "wcs", "rotation": 0},
+      "track": {
+        "mode": "rate",
+        "tle1": "1 36411U 10008A   15115.45079343  .00000069  00000-0  00000+0 0  9992",
+        "tle2": "2 36411 000.0719 125.6855 0001927 217.7585 256.6121 01.00266852 18866"
+      }
+    },
+    "stars": { "mode": "none", "motion": {"mode": "none"} },
+    "obs": { "mode": "list", "list": [] }
+  }
+}

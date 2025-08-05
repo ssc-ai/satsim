@@ -62,6 +62,27 @@ def test_analytical_observations():
     assert isinstance(data[0]['senlon'], float)
 
 
+def test_analytical_observations_site_tle():
+    ssp = config.load_json('./tests/config_site_tle_simple.json')
+    ssp['sim']['analytical_obs'] = True
+    ssp['fpa']['detection'] = {
+        'snr_threshold': 0.0,
+        'pixel_error': 0.5,
+        'false_alarm_rate': 1.0,
+        'max_false': 1
+    }
+    queue = MultithreadedTaskQueue()
+    set_name = _gen_name('analytical_tle')
+    dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True, queue=queue, set_name=set_name)
+    queue.waitUntilEmpty()
+
+    obs_dir = os.path.join(dirname, 'AnalyticalObservations')
+    files = [f for f in os.listdir(obs_dir) if f.endswith('.json')]
+    with open(os.path.join(obs_dir, files[0])) as f:
+        data = json.load(f)
+    assert 'senx' in data[0] and 'senvelx' in data[0]
+
+
 def test_analytical_observations_threshold():
     ssp = config.load_json('./tests/config_static.json')
     ssp['sim']['analytical_obs'] = True

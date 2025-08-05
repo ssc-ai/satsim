@@ -31,6 +31,19 @@
                     "description": "The altitude of the site in km.",
                     "$ref": "types/Float.json"
                 },
+                "tle": {
+                    "description": "The TLE describing a space-based observer as an array of two strings.",
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "tle1": {
+                    "description": "The first line of the TLE describing a space-based observer.",
+                    "type": "string"
+                },
+                "tle2": {
+                    "description": "The second line of the TLE describing a space-based observer.",
+                    "type": "string"
+                },
                 "gimbal": {
                     "mode": {
                         "description": "The gimbal mode.",

@@ -77,13 +77,26 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     hdr['OBJCTDEC'] = dec
     hdr['TELTKRA']  = get_or_default('ra_rate')
     hdr['TELTKDEC'] = get_or_default('dec_rate')
-    hdr['CENTAZ']   = get_or_default('az')
-    hdr['CENTALT']  = get_or_default('el')
+    az_val = get_or_default('az')
+    az_val = 0 if az_val != az_val else az_val
+    el_val = get_or_default('el')
+    el_val = 0 if el_val != el_val else el_val
+    hdr['CENTAZ']   = az_val
+    hdr['CENTALT']  = el_val
     hdr['TELHA']    = ''
     hdr['LST']      = ''
     hdr['AIRMASS']  = 0
-    hdr['SITELAT']  = get_or_default('lat')
-    hdr['SITELONG'] = get_or_default('lon')
+    if 'x' in astrometrics if astrometrics is not None else False:
+        hdr['SITEX'] = get_or_default('x', 0)
+        hdr['SITEY'] = get_or_default('y', 0)
+        hdr['SITEZ'] = get_or_default('z', 0)
+        hdr['SITEVX'] = get_or_default('vx', 0)
+        hdr['SITEVY'] = get_or_default('vy', 0)
+        hdr['SITEVZ'] = get_or_default('vz', 0)
+    else:
+        hdr['SITELAT']  = get_or_default('lat')
+        hdr['SITELONG'] = get_or_default('lon')
+        hdr['SITEALT']  = get_or_default('alt')
     hdr['ORCHCOMM'] = orchcomm
     hdr['INSTRUME'] = ''
     hdr['FILTER']   = ''
