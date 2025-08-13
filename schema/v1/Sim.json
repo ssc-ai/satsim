@@ -144,6 +144,16 @@
             "description": "Enable stellar aberration when computing apparent positions.",
             "type": "boolean",
             "default": true
+        },
+        "enable_fov_filter": {
+            "description": "Enable pre-propagation field-of-view culling for targets to skip propagating those well outside the padded FOV.",
+            "type": "boolean",
+            "default": false
+        },
+        "fov_filter_radius": {
+            "description": "Optional override for the padded FOV half-diagonal used by the FOV filter, in degrees. If omitted, the radius is computed from the sensor FOV and padding.",
+            "type": "number",
+            "minimum": 0
         },        
         "save_pickle": {
             "description": "Save intermediate data as pickle files for debugging.",
