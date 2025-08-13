@@ -1,6 +1,12 @@
 History
 =======
 
+0.21.1
+---------------------
+
+* Add field of view pre-filter to cull objects for performance. Controlled by `enable_fov_filter` and optional `fov_filter_radius` (degrees).
+
+
 0.21.0
 ---------------------
 
