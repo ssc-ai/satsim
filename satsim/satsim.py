@@ -36,6 +36,7 @@ from satsim.geometry.astrometric import (
     get_los_azel,
     get_analytical_los,
     load_earth,
+    optimized_angle_from_los_cosine,
 )
 from satsim.geometry.greatcircle import GreatCircle
 from skyfield.toposlib import _ltude
@@ -478,6 +479,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'enable_stellar_aberration' not in ssp['sim']:
         ssp['sim']['enable_stellar_aberration'] = True
+
+    if 'enable_fov_filter' not in ssp['sim']:
+        ssp['sim']['enable_fov_filter'] = False
+
+    if 'fov_filter_radius' not in ssp['sim']:
+        ssp['sim']['fov_filter_radius'] = None
 
     if star_mode == 'bins':
         star_dn = ssp['geometry']['stars']['mv']['density']
@@ -1060,6 +1067,55 @@ def _gen_objects(ssp, render_mode,
     ts_mid = time.utc_from_list(tt, t_start + 0.5 * (t_end - t_start))
     ts_end = time.utc_from_list(tt, t_end)
 
+    enable_deflection = ssp['sim']['enable_deflection']
+    enable_light_transit = ssp['sim']['enable_light_transit']
+    enable_stellar_aberration = ssp['sim']['enable_stellar_aberration']
+    enable_fov_filter = ssp['sim'].get('enable_fov_filter', False)
+    fov_filter_radius = ssp['sim'].get('fov_filter_radius')
+
+    az_arr = None
+    el_arr = None
+    ra_c = None
+    dec_c = None
+    fov_half_diag_pad_cos = None
+
+    if enable_fov_filter:
+        if track_mode == 'fixed':
+            ra_c, dec_c, _, _, _, _ = get_los_azel(
+                observer,
+                az_arr[1],
+                el_arr[1],
+                ts_mid,
+                deflection=enable_deflection,
+                aberration=enable_light_transit,
+                stellar_aberration=enable_stellar_aberration,
+            )
+        else:
+            ra_c, dec_c, _, _, _, _ = get_los(
+                observer,
+                track,
+                ts_mid,
+                deflection=enable_deflection,
+                aberration=enable_light_transit,
+                stellar_aberration=enable_stellar_aberration,
+            )
+
+        if fov_filter_radius is not None:
+            fov_half_diag_pad = fov_filter_radius
+        else:
+            y_ifov_os = y_fov / h_fpa_os
+            x_ifov_os = x_fov / w_fpa_os
+            y_fov_pad = y_fov + h_pad_os * y_ifov_os
+            x_fov_pad = x_fov + w_pad_os * x_ifov_os
+            fov_half_diag_pad = 0.5 * math.sqrt(y_fov_pad ** 2 + x_fov_pad ** 2)
+
+        # Convert angle threshold to cosine for efficient comparison
+        fov_half_diag_pad_cos = math.cos(math.radians(fov_half_diag_pad))
+    else:
+        fov_half_diag_pad = None
+        fov_half_diag_pad_cos = None
+        ra_c = dec_c = None
+
     for i, o in enumerate(obs):
 
         # TODO support in frame events
@@ -1128,12 +1184,41 @@ def _gen_objects(ssp, render_mode,
                     ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                     obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
 
+            if az_arr is None:
+                az_arr, el_arr = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
+                if enable_fov_filter:
+                    if track_mode == 'fixed':
+                        ra_c, dec_c, _, _, _, _ = get_los_azel(
+                            observer,
+                            az_arr[1],
+                            el_arr[1],
+                            ts_mid,
+                            deflection=enable_deflection,
+                            aberration=enable_light_transit,
+                            stellar_aberration=enable_stellar_aberration,
+                        )
+                    else:
+                        ra_c, dec_c, _, _, _, _ = get_los(
+                            observer,
+                            track,
+                            ts_mid,
+                            deflection=enable_deflection,
+                            aberration=enable_light_transit,
+                            stellar_aberration=enable_stellar_aberration,
+                        )
+
             o_offset = [0.0, 0.0]
             if 'offset' in o:
                 o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
 
             target = obs_cache[i][0]
-            az, el = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
+            if enable_fov_filter:
+                # Determine the center line-of-sight of the sensor at mid-exposure
+                # Skip propagation if target is outside the padded field of view
+                # Use cosine comparison for efficiency (cos decreases as angle increases)
+                cos_ang = optimized_angle_from_los_cosine(observer, target, ra_c, dec_c, ts_mid)
+                if cos_ang < fov_half_diag_pad_cos:
+                    continue
 
             try:
                 [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(
@@ -1153,11 +1238,11 @@ def _gen_objects(ssp, render_mode,
                     offset=o_offset,
                     flipud=ssp['fpa']['flip_up_down'],
                     fliplr=ssp['fpa']['flip_left_right'],
-                    az=az,
-                    el=el,
-                    deflection=ssp['sim']['enable_deflection'],
-                    aberration=ssp['sim']['enable_light_transit'],
-                    stellar_aberration=ssp['sim']['enable_stellar_aberration'],
+                    az=az_arr,
+                    el=el_arr,
+                    deflection=enable_deflection,
+                    aberration=enable_light_transit,
+                    stellar_aberration=enable_stellar_aberration,
                 )
             except Exception:
                 logger.exception("Error propagating target. {}".format(o))

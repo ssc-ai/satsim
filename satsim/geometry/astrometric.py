@@ -761,3 +761,45 @@ def radec_to_eci(ra, dec, d=0):
     z = r * np.sin(dec)
 
     return x, y, z
+
+
+def optimized_angle_from_los_cosine(observer, target, ra_c, dec_c, ts_mid):
+    """Calculate the cosine of the angle between observer-to-target and observer-to-RA/Dec lines of sight.
+
+    This is a highly optimized version that directly computes position vectors and avoids
+    expensive Skyfield operations like observe() and separation_from(). Returns cosine
+    for efficient threshold comparisons without arccos operations.
+
+    Args:
+        observer: Skyfield object representing the observer
+        target: Skyfield object representing the target
+        ra_c: float, right ascension in degrees
+        dec_c: float, declination in degrees
+        ts_mid: Skyfield Time object
+
+    Returns:
+        float: cosine of the angle (range [-1, 1])
+    """
+    try:
+        earth = load_earth()
+        observer_pos = (observer - earth).at(ts_mid).position.km
+        target_pos = (target - earth).at(ts_mid).position.km
+
+        los_to_target = target_pos - observer_pos
+        los_to_target_norm = los_to_target / np.linalg.norm(los_to_target)
+
+    except (TypeError, AttributeError):
+        # Fallback for Star objects or other types that don't support position arithmetic
+        observer_at_time = observer.at(ts_mid)
+        target_apparent = observer_at_time.observe(target)
+        target_ra, target_dec, _ = target_apparent.radec()
+
+        target_x, target_y, target_z = radec_to_eci(target_ra.degrees, target_dec.degrees, 1.0)
+        los_to_target_norm = np.array([target_x, target_y, target_z])
+
+    los_x, los_y, los_z = radec_to_eci(ra_c, dec_c, 1.0)
+    los_radec_norm = np.array([los_x, los_y, los_z])
+
+    cos_angle = np.clip(np.dot(los_to_target_norm, los_radec_norm), -1.0, 1.0)
+
+    return cos_angle
