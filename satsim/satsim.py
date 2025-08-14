@@ -1242,7 +1242,7 @@ def _gen_objects(ssp, render_mode,
                     el=el_arr,
                     deflection=enable_deflection,
                     aberration=enable_light_transit,
-                    stellar_aberration=enable_stellar_aberration,
+                    stellar_aberration=False,  # disable stellar aberration for target
                 )
             except Exception:
                 logger.exception("Error propagating target. {}".format(o))
@@ -1413,7 +1413,7 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         el=el,
         deflection=enable_deflection,
         aberration=enable_light_transit,
-        stellar_aberration=enable_stellar_aberration,
+        stellar_aberration=False,
     )
     star_tran_os = [-drr, -dcc]  # stars move in the opposite direction of target
     star_rot_rate = 0  # TODO
