@@ -1,6 +1,12 @@
 History
 =======
 
+0.21.2
+---------------------
+
+* Fix stellar aberration being applied to target incorrectly.
+
+
 0.21.1
 ---------------------
 
