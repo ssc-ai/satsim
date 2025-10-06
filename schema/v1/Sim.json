@@ -126,7 +126,7 @@
             "default": false
         },
         "psf_sample_frequency": {
-            "description": "The frequency to regenerate a new PSF. Useful when turbulant_atmosphere should be resampled. Valid values: once, collect, frame",
+            "description": "The frequency to regenerate a new PSF. Useful when turbulaet_atmosphere should be resampled. Valid values: once, collect, frame",
             "type": "string",
             "default": "once"
         },

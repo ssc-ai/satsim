@@ -124,7 +124,7 @@ def test_gen_poppy_with_atmosphere():
                 ]
             }
         ],
-        "turbulant_atmosphere": {
+        "turbulent_atmosphere": {
             "Cn2": 1.7e-15,
             "propagation_distance": 3000,
             "zones": 5
