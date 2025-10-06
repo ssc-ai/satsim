@@ -41,6 +41,7 @@ from satsim.geometry.astrometric import (
 from satsim.geometry.greatcircle import GreatCircle
 from skyfield.toposlib import _ltude
 from satsim.geometry.photometric import model_to_mv
+from satsim.geometry.shadow import earth_shadow_umbra_mask
 from satsim.geometry.twobody import create_twobody
 from satsim.geometry.observation import create_observation
 from satsim.io.satnet import write_frame, write_annotation, set_frame_annotation, init_annotation
@@ -1277,6 +1278,15 @@ def _gen_objects(ssp, render_mode,
             pe_func = (lambda x, t: mv_to_pe(zeropoint, model_to_mv(observer, target, o['model'], time.utc_from_list(tt, _avg_t(t)))) * _delta_t(t))
 
         opp = pe_func(opp, ott)
+
+        # Apply Earth umbra shadow mask if enabled for the simulation
+        if target is not None and ssp.get('sim', {}).get('enable_earth_shadow', False):
+            t_mid = time.utc_from_list(tt, _avg_t(ott))
+            mask = earth_shadow_umbra_mask(target, t_mid)
+            # Ensure mask aligns with opp samples
+            if mask.shape[0] == opp.shape[0]:
+                opp = opp * mask
+
         avg_pe = np.sum(opp) / (t_end - t_start)
         avg_mv = pe_to_mv(zeropoint, avg_pe)
 

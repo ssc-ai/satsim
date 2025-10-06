@@ -176,6 +176,11 @@
             "type": "integer",
             "minimum": 1,
             "default": 10
+        },
+        "enable_earth_shadow": {
+            "description": "Enable Earth umbra shadowing (zero target brightness when in Earth umbra).",
+            "type": "boolean",
+            "default": false
         }
     }
 }
