@@ -123,3 +123,7 @@ examples/*/**/images*
 
 # npm
 node_modules/
+
+# internal
+internal/
+.test_output/

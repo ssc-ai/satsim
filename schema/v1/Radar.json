@@ -1,0 +1,100 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/Radar.json",
+    "title": "Radar",
+    "description": "Analytical radar sensor configuration for SatSim.",
+    "type": "object",
+    "properties": {
+        "tx_power": {
+            "description": "Transmit power in watts.",
+            "$ref": "types/Float.json"
+        },
+        "tx_frequency": {
+            "description": "Transmit frequency in Hz.",
+            "$ref": "types/Float.json"
+        },
+        "antenna_diameter": {
+            "description": "Effective antenna diameter in meters.",
+            "$ref": "types/Float.json"
+        },
+        "efficiency": {
+            "description": "Antenna efficiency (0-1).",
+            "$ref": "types/Float.json"
+        },
+        "field_of_view": {
+            "description": "Radar field-of-view definition (rectangular az/el limits).",
+            "type": "object",
+            "properties": {
+                "azimuth": {
+                    "description": "Azimuth limits [min, max] in degrees.",
+                    "type": "array",
+                    "items": { "$ref": "types/Float.json" },
+                    "minItems": 2,
+                    "maxItems": 2
+                },
+                "elevation": {
+                    "description": "Elevation limits [min, max] in degrees.",
+                    "type": "array",
+                    "items": { "$ref": "types/Float.json" },
+                    "minItems": 2,
+                    "maxItems": 2
+                }
+            }
+        },
+        "slew_rate": {
+            "description": "Maximum steering rate in degrees per second (optional).",
+            "$ref": "types/Float.json"
+        },
+        "range_limits": {
+            "description": "Optional hard range limits [min, max] in kilometers.",
+            "type": "array",
+            "items": { "$ref": "types/Float.json" },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "detection": {
+            "description": "Radar detection and noise parameters.",
+            "type": "object",
+            "properties": {
+                "min_detectable_power": {
+                    "description": "Receiver minimum detectable signal (W).",
+                    "$ref": "types/Float.json"
+                },
+                "snr_threshold": {
+                    "description": "Optional SNR threshold for detection.",
+                    "$ref": "types/Float.json"
+                },
+                "angle_error": {
+                    "description": "Std dev of az/el error in degrees.",
+                    "$ref": "types/Float.json"
+                },
+                "range_error": {
+                    "description": "Std dev of range error in kilometers.",
+                    "$ref": "types/Float.json"
+                },
+                "range_rate_error": {
+                    "description": "Std dev of range-rate error in kilometers per second.",
+                    "$ref": "types/Float.json"
+                },
+                "false_alarm_rate": {
+                    "description": "Probability of false alarm per dwell.",
+                    "$ref": "types/Float.json"
+                }
+            }
+        },
+        "time": {
+            "description": "Timing for radar observations.",
+            "type": "object",
+            "properties": {
+                "dwell": {
+                    "description": "Dwell (integration) time per frame in seconds.",
+                    "$ref": "types/Float.json"
+                }
+            }
+        },
+        "num_frames": {
+            "description": "Number of frames (dwells) to simulate.",
+            "$ref": "types/Integer.json"
+        }
+    }
+}

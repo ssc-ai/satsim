@@ -13,6 +13,10 @@
             "description": "The focal plane array parameters.",
             "$ref": "Fpa.json"
         },
+        "radar": {
+            "description": "Analytical radar parameters.",
+            "$ref": "Radar.json"
+        },
         "background": {
             "description": "The background parameters.",
             "$ref": "Background.json"
@@ -22,5 +26,9 @@
             "$ref": "Geometry.json"
         }
     },
-    "required": ["sim", "fpa", "background", "geometry"]
+    "required": ["sim", "background", "geometry"],
+    "oneOf": [
+        { "required": ["fpa"] },
+        { "required": ["radar"] }
+    ]
 }
