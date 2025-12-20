@@ -1,6 +1,14 @@
 History
 =======
 
+0.22.0
+---------------------
+
+* Add analytical RADAR observations.
+* Batched SGP4 propagation with FOV pre-filtering to speed large catalogs.
+* Add profiling for image generation pipeline and object timing logs. Controlled by `enable_profiler`.
+
+
 0.21.2
 ---------------------
 

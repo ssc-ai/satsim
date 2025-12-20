@@ -26,12 +26,12 @@ RUN python3 -m pip config set global.break-system-packages true
 RUN pip3 --no-cache-dir install tensorflow[and-cuda]~=2.19.0
 
 # copy wheel file
-ENV SATSIM_VERSION='0.21.2'
-COPY dist/satsim-0.21.2-py2.py3-none-any.whl /tmp
+ENV SATSIM_VERSION='0.22.0'
+COPY dist/satsim-0.22.0-py2.py3-none-any.whl /tmp
 
 # install satsim wheel file together with jupyterlab so dependency compatibility are resolved
 RUN pip3 --no-cache-dir install \
-        tmp/satsim-0.21.2-py2.py3-none-any.whl \
+        tmp/satsim-0.22.0-py2.py3-none-any.whl \
         jupyterlab \
         scikit-learn \
         virtualenv

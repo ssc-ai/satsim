@@ -19,6 +19,7 @@ Subpackages
    satsim.io
    satsim.math
    satsim.pipeline
+   satsim.radar
    satsim.tfa
    satsim.time
    satsim.util
