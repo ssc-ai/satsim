@@ -70,4 +70,3 @@ def earth_shadow_umbra_mask(target, t):
     mask = np.where(in_umbra, 0.0, 1.0)
 
     return mask
-

@@ -89,4 +89,3 @@ def test_earth_shadow_umbra_mask_vectorized_time():
     assert mask.shape[0] == 3
     # All three are anti-sun, so all umbra
     assert np.all(mask == 0.0)
-

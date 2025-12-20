@@ -25,6 +25,7 @@ from .monostatic import (
 
 logger = logging.getLogger(__name__)
 
+
 def _format_ob_time(t) -> str:
     """Format a Skyfield time as an ISO-8601 UTC timestamp with microseconds."""
     return t.utc_datetime().strftime('%Y-%m-%dT%H:%M:%S.%fZ')

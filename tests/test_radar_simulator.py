@@ -277,6 +277,7 @@ def test_simulate_filters_by_fov_and_range(monkeypatch):
         'azimuth': [0.0, 1.0],
         'elevation': [0.0, 1.0],
     }
+
     # LOS reports outside FOV
     def fake_get_los_sim(observer, target, t, deflection=False, aberration=False, stellar_aberration=False):
         return 0.0, 0.0, 100.0, 90.0, 45.0, None
