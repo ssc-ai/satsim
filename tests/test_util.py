@@ -6,7 +6,7 @@ import time
 
 import numpy as np
 
-from satsim.util.timer import tic, toc, get_timing
+from satsim.util.timer import tic, toc, get_timing, Profiler
 from satsim.util.thread import ThreadedTaskQueue, MultithreadedTaskQueue
 from satsim.util.system import get_semantic_version
 from satsim.util.python import merge_dicts
@@ -158,6 +158,84 @@ def test_merge_into_empty_dict():
     expected = {'a': 1, 'b': {'x': 10}}
     merge_dicts(d1, d2)
     assert d1 == expected
+
+
+class _DummyLogger:
+    def __init__(self):
+        self.debug_messages = []
+        self.warning_messages = []
+
+    def debug(self, message):
+        self.debug_messages.append(message)
+
+    def warning(self, message):
+        self.warning_messages.append(message)
+
+
+def test_profiler_disabled_noop():
+    logger = _DummyLogger()
+    profiler = Profiler(enabled=False, logger=logger, prefix='Disabled')
+
+    with profiler.time('noop'):
+        time.sleep(0.001)
+
+    assert profiler.start('start') is None
+    assert profiler.stop('stop', None) == 0.0
+    profiler.set_metric('count', 1)
+    profiler.add_metric('count', 2)
+    profiler.log(order_times=['noop'], order_metrics=['count'])
+
+    assert profiler.times == {}
+    assert profiler.metrics == {}
+    assert logger.debug_messages == []
+
+
+def test_profiler_timing_and_metrics():
+    logger = _DummyLogger()
+    profiler = Profiler(enabled=True, logger=logger, prefix='Profile')
+
+    with profiler.time('step'):
+        time.sleep(0.001)
+
+    start = profiler.start('accum')
+    time.sleep(0.001)
+    duration1 = profiler.stop('accum', start)
+
+    start = profiler.start('accum')
+    time.sleep(0.001)
+    duration2 = profiler.stop('accum', start, accumulate=True)
+
+    profiler.set_metric('count', 1)
+    profiler.add_metric('count', 2)
+    profiler.log(order_times=['step', 'accum'], order_metrics=['count'])
+
+    assert 'step' in profiler.times
+    assert 'accum' in profiler.times
+    assert profiler.times['accum'] >= duration1
+    assert profiler.times['accum'] >= duration2
+    assert profiler.metrics['count'] == 3
+    assert logger.debug_messages
+    assert 'Profile:' in logger.debug_messages[-1]
+    assert 'step=' in logger.debug_messages[-1]
+    assert 'count=3' in logger.debug_messages[-1]
+
+
+def test_profiler_from_sim_deprecation():
+    logger = _DummyLogger()
+    sim = {'profile_objects': True}
+
+    profiler = Profiler.from_sim(sim, logger=logger, prefix='Deprecated')
+    assert profiler.enabled is True
+    assert sim.get('_profile_objects_warned') is True
+    assert len(logger.warning_messages) == 1
+
+    profiler = Profiler.from_sim(sim, logger=logger, prefix='Deprecated')
+    assert profiler.enabled is True
+    assert len(logger.warning_messages) == 1
+
+    sim = {'profile_objects': True, 'enable_profiler': False}
+    profiler = Profiler.from_sim(sim, logger=logger, prefix='Disabled')
+    assert profiler.enabled is False
 
 # cannot run these more than once
 # def test_configure_eager():
