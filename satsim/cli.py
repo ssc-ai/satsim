@@ -50,7 +50,7 @@ def version(ctx):
     return 0
 
 
-@main.command(help='Run simulation from configuration file.')
+@main.command(help='Run simulation from configuration file (auto-detects radar vs EO).')
 @click.option('-d', '--device', default='0', type=str, help='GPU device ids to utilize. example: 0,1,3,4')
 @click.option('-r', '--memory', default=None, type=int, help='GPU maximum memory limit in megabytes per process.')
 @click.option('-j', '--jobs', default=1, type=int, help='Allow N jobs at once per GPU device.')
@@ -76,7 +76,6 @@ def run(ctx, device, memory, jobs, mode, output_dir, config_file, output_interme
     from satsim import load_yaml, load_json, __version__
 
     logger.info('SatSim version {}.'.format(__version__))
-    logger.info('Running Tensorflow backend in {} mode.'.format(mode))
 
     ssp = {}
     if config_file.endswith('.yml'):
@@ -91,6 +90,16 @@ def run(ctx, device, memory, jobs, mode, output_dir, config_file, output_interme
         logger.error('File type unknown. Config file must be .json or .yml type.')
         sys.exit(1)
 
+    # If config contains a radar block, dispatch to radar simulator
+    if isinstance(ssp, dict) and 'radar' in ssp:
+        from satsim.radar import simulate_from_file
+        logger.info('Detected radar configuration. Dispatching to radar simulator.')
+        out_dir = simulate_from_file(config_file, output_dir)
+        logger.info('Saved radar observations to: {}'.format(out_dir))
+        return 0
+
+    # Otherwise, run EO/optical pipeline as before
+    logger.info('Running Tensorflow backend in {} mode.'.format(mode))
     ssp['sim']['samples'] = math.ceil(ssp['sim']['samples'] / total_jobs)
 
     if mode == 'eager':

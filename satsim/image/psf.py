@@ -145,11 +145,15 @@ def gen_from_poppy_configuration(height, width, y_ifov, x_ifov, s_osf, config):
         else:
             osys.add_pupil(getattr(module, c['type'])(**c['kwargs']))
 
-    if 'turbulant_atmosphere' in config:
-        turbulant_atmosphere = config['turbulant_atmosphere']
-        Cn2 = turbulant_atmosphere['Cn2'] * u.m**(-2 / 3)
-        L = turbulant_atmosphere['propagation_distance'] * u.m
-        nz = turbulant_atmosphere['zones']
+    # fix for misspelled key
+    if 'turbulant_atmosphere' in config and 'turbulent_atmosphere' not in config:
+        config['turbulent_atmosphere'] = config['turbulant_atmosphere']
+
+    if 'turbulent_atmosphere' in config:
+        turbulent_atmosphere = config['turbulent_atmosphere']
+        Cn2 = turbulent_atmosphere['Cn2'] * u.m**(-2 / 3)
+        L = turbulent_atmosphere['propagation_distance'] * u.m
+        nz = turbulent_atmosphere['zones']
         dz = L / nz
         for i in range(nz + 1):
             if i == 0 or i == nz:

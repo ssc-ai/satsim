@@ -38,7 +38,7 @@
                         "type": "object"
                     }
                 },
-                "turbulant_atmosphere": {
+                "turbulent_atmosphere": {
                     "description": "The POPPY turbulant atmosphere.",
                     "properties": {
                         "Cn2": {
@@ -87,7 +87,7 @@
                             ]
                         }
                     ],
-                    "turbulant_atmosphere": {
+                    "turbulent_atmosphere": {
                         "Cn2": 1.7e-15,
                         "propagation_distance": 3000,
                         "zones": 5

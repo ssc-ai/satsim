@@ -5,20 +5,19 @@
     "description": "Common properties for obs objects.",
     "type": ["object"],
     "oneOf": [
-        {
-            "required": ["mv"]
-        },
-        {
-            "required": ["pe"]
-        },
-        {
-            "required": ["model"]
-        }
+        { "required": ["mv"] },
+        { "required": ["pe"] },
+        { "required": ["model"] },
+        { "required": ["rcs"] }
     ],
     "properties": {
         "name": {
             "description": "Name of the object.",
             "type": "string"
+        },
+        "rcs": {
+            "description": "Radar cross-section in square meters.",
+            "$ref": "Float.json"
         },
         "mv": {
             "description": "The brightness of the object in visual magnitude.",

@@ -45,7 +45,7 @@ setup(
     author="Alex Cabello",
     author_email='alexander.cabello@algoritics.com',
     classifiers=[
-        'Development Status :: 4 - Beta ',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Natural Language :: English',
         'Programming Language :: Python :: 3.8',
@@ -70,6 +70,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/ssc-ai/satsim',
-    version='0.21.2',
+    version='0.22.0',
     zip_safe=False,
 )

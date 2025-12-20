@@ -13,6 +13,10 @@
             "description": "The observing site.",
             "type": "object",
             "properties": {
+                "name": {
+                    "description": "The name/identifier of the observing site or sensor.",
+                    "type": "string"
+                },
                 "lat": {
                     "description": "The latitude of the site.",
                     "type": "string",

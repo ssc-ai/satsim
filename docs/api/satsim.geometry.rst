@@ -89,6 +89,14 @@ satsim.geometry.sgp4 module
    :undoc-members:
    :show-inheritance:
 
+satsim.geometry.shadow module
+-----------------------------
+
+.. automodule:: satsim.geometry.shadow
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.geometry.sprite module
 -----------------------------
 

@@ -126,7 +126,7 @@
             "default": false
         },
         "psf_sample_frequency": {
-            "description": "The frequency to regenerate a new PSF. Useful when turbulant_atmosphere should be resampled. Valid values: once, collect, frame",
+            "description": "The frequency to regenerate a new PSF. Useful when turbulaet_atmosphere should be resampled. Valid values: once, collect, frame",
             "type": "string",
             "default": "once"
         },
@@ -176,6 +176,16 @@
             "type": "integer",
             "minimum": 1,
             "default": 10
+        },
+        "enable_earth_shadow": {
+            "description": "Enable Earth umbra shadowing (zero target brightness when in Earth umbra).",
+            "type": "boolean",
+            "default": false
+        },
+        "enable_profiler": {
+            "description": "Enable timing profiler logs for object processing and the image generation pipeline.",
+            "type": "boolean",
+            "default": false
         }
     }
 }
