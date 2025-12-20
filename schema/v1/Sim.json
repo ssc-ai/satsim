@@ -181,6 +181,11 @@
             "description": "Enable Earth umbra shadowing (zero target brightness when in Earth umbra).",
             "type": "boolean",
             "default": false
+        },
+        "enable_profiler": {
+            "description": "Enable timing profiler logs for object processing and the image generation pipeline.",
+            "type": "boolean",
+            "default": false
         }
     }
 }
