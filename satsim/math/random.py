@@ -57,7 +57,7 @@ def gen_sample(type='uniform', seed=None, negate=0.0, **kwargs):
     rng = np.random.RandomState(seed)
 
     invert_sign = False
-    if negate > 0 and np.random.uniform(low=0.0, high=1.0) < negate:
+    if negate > 0 and rng.uniform(low=0.0, high=1.0) < negate:
         invert_sign = True
 
     f = getattr(rng, type)

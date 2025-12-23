@@ -8,6 +8,10 @@
         "$sample": {
             "description": "The numpy random sample function name.",
             "type": "string"
+        },
+        "seed": {
+            "description": "Seed for deterministic sampling of this field.",
+            "type": "integer"
         }
     },
     "required": ["$sample"],

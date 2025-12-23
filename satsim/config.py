@@ -9,6 +9,7 @@ import importlib
 import collections
 import operator
 import functools
+import numpy as np
 import diskcache
 
 from satsim.math.random import gen_sample
@@ -16,6 +17,53 @@ from satsim.math.random import gen_sample
 logger = logging.getLogger(__name__)
 caches = {}
 _config = {}
+_SEED_MAX = 2 ** 32
+
+
+def _resolve_seed(param):
+    """Resolve a seed value from a `$sample` parameter.
+
+    Handles literal seeds and seeds defined via nested config structures
+    (including `$ref` and `$sample`), returning the resolved seed or `None`.
+    """
+    if 'seed' not in param:
+        return None
+
+    seed = param['seed']
+    if seed is None:
+        return None
+
+    if isinstance(seed, (dict, list)):
+        seed_param = {'seed': seed}
+        seed_param = _ref(seed_param, _config)
+        seed_param = _transform(seed_param)
+        seed = seed_param['seed']
+
+    return seed
+
+
+def _apply_seed_tree(param, rng):
+    """Populate missing `seed` fields for nested `$sample` entries.
+
+    Uses the provided RNG to generate deterministic per-node seeds, without
+    overriding explicit seeds.
+    """
+    if isinstance(param, dict):
+        if _has_rkey(param, '$sample'):
+            if 'seed' not in param or param['seed'] is None:
+                param['seed'] = int(rng.randint(0, _SEED_MAX))
+
+        for k, v in param.items():
+            if k == 'seed':
+                continue
+            if isinstance(v, (dict, list)):
+                _apply_seed_tree(v, rng)
+    elif isinstance(param, list):
+        for v in param:
+            if isinstance(v, (dict, list)):
+                _apply_seed_tree(v, rng)
+
+    return param
 
 
 def parse_function(param):
@@ -190,6 +238,9 @@ def parse_random_sample(param):
         x = parse_random_sample(p)
         # x will a list of length 5, i.e. x == [7,5,8,5,1]
 
+    If `seed` is provided, the random sample will be deterministic for that
+    field only.
+
     Args:
         param: `dict`, random sample parameter
 
@@ -198,27 +249,45 @@ def parse_random_sample(param):
     """
     compat_name = _rkey(param, '$sample')
     stype, rtype = param[compat_name].split('.')
+    seed = _resolve_seed(param)
 
     if stype == 'random':
 
         # handle special types first
         if rtype == 'choice':
+            rng = np.random.RandomState(seed)
             c = param['choices']
-            return c[gen_sample('randint', low=0, high=len(c))]
+            choice = copy.deepcopy(c[rng.randint(0, len(c))])
+            if seed is not None:
+                _apply_seed_tree(choice, rng)
+            return _transform(parse_param(choice))
         # elif rtype == 'bins': #TODO
         #     return param
         elif rtype == 'list':
             samples = []
+            rng = None
+            if seed is not None:
+                rng = np.random.RandomState(seed)
+                length_param = _apply_seed_tree(copy.deepcopy(param['length']), rng)
+                list_length = parse_param(length_param)
+            else:
+                list_length = parse_param(param['length'])
             if 'list' in param:  # backward compat
                 logger.warning('Deprecated list replacement. Use $sample keyword inline instead.')
-                for i in range(parse_param(param['length'])):
-                    samples.append(_transform(copy.deepcopy(param['list'])))
+                for i in range(list_length):
+                    value = copy.deepcopy(param['list'])
+                    if seed is not None:
+                        _apply_seed_tree(value, rng)
+                    samples.append(_transform(parse_param(value)))
                 param['list'] = samples
                 del param[compat_name]
                 del param['length']
             else:
-                for i in range(parse_param(param['length'])):
-                    samples.append(_transform(copy.deepcopy(param['value'])))
+                for i in range(list_length):
+                    value = copy.deepcopy(param['value'])
+                    if seed is not None:
+                        _apply_seed_tree(value, rng)
+                    samples.append(_transform(parse_param(value)))
                 del param[compat_name]
                 param = samples
 
@@ -226,6 +295,8 @@ def parse_random_sample(param):
 
         # everything else is numpy random
         else:
+            if seed is not None:
+                _apply_seed_tree(param, np.random.RandomState(seed))
             del param[compat_name]
             param = _ref(param, _config)
             param = _transform(param)

@@ -41,6 +41,17 @@ def test_random_sample():
     assert(gen_sample(type='uniform', negate=1.0, low=0, high=0.0001) < 0)
 
 
+def test_seed_is_local():
+
+    np.random.seed(123)
+    expected = np.random.uniform()
+    np.random.seed(123)
+    gen_sample(type='uniform', seed=42, negate=0.5, low=0.0, high=1.0)
+    actual = np.random.uniform()
+
+    assert(actual == expected)
+
+
 def test_lognormal():
 
     dist = lognormal(mu=1.0, sigma=1.0, size=100000, mu_mode='median')

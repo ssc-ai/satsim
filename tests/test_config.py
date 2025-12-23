@@ -3,6 +3,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
 
 import os
+import copy
 import numpy as np
 
 from satsim import config
@@ -117,6 +118,35 @@ def test_dynamic_json():
 
     t = config.transform(c, max_stages=2, with_debug=False)
     assert(config._has_rkey_deep(t, '$sample') is False)
+
+
+def test_sample_seed_choice_deterministic():
+
+    param = {
+        "$sample": "random.choice",
+        "choices": [1, 2, 3],
+        "seed": 7
+    }
+
+    first = config.parse_random_sample(copy.deepcopy(param))
+    second = config.parse_random_sample(copy.deepcopy(param))
+
+    assert(first == second)
+
+
+def test_sample_seed_list_deterministic():
+
+    param = {
+        "$sample": "random.list",
+        "seed": 7,
+        "length": 3,
+        "value": {"$sample": "random.uniform", "low": 0.0, "high": 1.0}
+    }
+
+    first = config.parse_random_sample(copy.deepcopy(param))
+    second = config.parse_random_sample(copy.deepcopy(param))
+
+    np.testing.assert_allclose(first, second)
 
 
 def test_generator_json(config_file='./tests/config_generator.json'):
