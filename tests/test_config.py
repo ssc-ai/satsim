@@ -5,6 +5,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflo
 import os
 import copy
 import numpy as np
+import pytest
 
 from satsim import config
 
@@ -241,6 +242,33 @@ def test_function_pipeline():
 
     c = config._transform(c, eval_python=True)
     assert(config._has_rkey_deep(c, '$pipeline') is False)
+
+
+def test_sample_simplex():
+
+    pytest.importorskip("opensimplex")
+
+    param = {
+        "$sample": "random.simplex",
+        "size": [8, 6],
+        "sigma": 1.0,
+        "scale": 16.0,
+        "octaves": 2,
+        "seed": 11
+    }
+
+    out = config.parse_random_sample(copy.deepcopy(param))
+    assert(out.shape == (8, 6))
+
+    stripe = config.parse_random_sample({
+        "$sample": "random.simplex_stripe",
+        "size": [8, 6],
+        "axis": "row",
+        "seed": 4
+    })
+
+    assert(stripe.shape == (8, 6))
+    np.testing.assert_allclose(stripe[:, 0], stripe[:, 1])
 
 
 def test_function():

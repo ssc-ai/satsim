@@ -214,7 +214,8 @@ def parse_generator(param):
 def parse_random_sample(param):
     """Parses a random sample parameter and returns a sample. The value of
     the key `$sample` should be the format `random.DISTRIBUTION`, where
-    `DISTRIBUTION` is a NumPy random distribution. For example::
+    `DISTRIBUTION` is a NumPy random distribution or a custom type such as
+    `simplex` or `simplex_stripe`. For example::
 
         p = { "$sample": "random.uniform", "low": 5.0, "high": 22.0 }
         x = parse_random_sample(p)
