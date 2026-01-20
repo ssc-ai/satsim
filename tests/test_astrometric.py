@@ -19,6 +19,7 @@ from satsim.geometry.astrometric import (
     eci_to_radec,
     radec_to_eci,
     get_analytical_los,
+    wcs_from_observer_rate,
 )
 from satsim.geometry.greatcircle import GreatCircle
 from skyfield.api import Star
@@ -247,6 +248,75 @@ def test_get_los_star():
 
     np.testing.assert_almost_equal(ra2._degrees, ra)
     np.testing.assert_almost_equal(dec2._degrees, dec)
+
+
+def test_track_pointing_light_transit_toggle():
+    """Pointing should shift when light transit correction is toggled."""
+    observer = create_topocentric("20.746111 N", "156.431667 W")
+    sat = create_sgp4(
+        "1 36411U 10008A   15115.45079343  .00000069  00000-0  00000+0 0  9992",
+        "2 36411 000.0719 125.6855 0001927 217.7585 256.6121 01.00266852 18866",
+    )
+    t0 = time.utc(2015, 5, 5, 13, 26, 43.288)
+    tt = [t0, time.utc(2015, 5, 5, 13, 26, 48.288)]
+
+    wcs_on = wcs_from_observer_rate(512, 512, 1, 1, observer, t0, tt, 0, sat, aberration=True)
+    wcs_off = wcs_from_observer_rate(512, 512, 1, 1, observer, t0, tt, 0, sat, aberration=False)
+
+    ra_on, dec_on = wcs_on[0].wcs.crval
+    ra_off, dec_off = wcs_off[0].wcs.crval
+
+    assert abs(ra_on - ra_off) > 1e-7 or abs(dec_on - dec_off) > 1e-7
+
+
+def test_target_light_transit_applied_when_tracking_correction_disabled():
+    """Target aberration should still apply even if pointing correction is disabled."""
+    observer = create_topocentric("20.746111 N", "156.431667 W")
+    sat = create_sgp4(
+        "1 36411U 10008A   15115.45079343  .00000069  00000-0  00000+0 0  9992",
+        "2 36411 000.0719 125.6855 0001927 217.7585 256.6121 01.00266852 18866",
+    )
+    t0 = time.utc(2015, 5, 5, 13, 26, 43.288)
+    t_start = t0
+    t_end = time.utc(2015, 5, 5, 13, 26, 48.288)
+
+    (rr_on, _), (cc_on, _), _, _, _ = gen_track(
+        512,
+        512,
+        1,
+        1,
+        observer,
+        sat,
+        [sat],
+        [1000],
+        t0,
+        [t_start, t_end],
+        rot=0,
+        track_type='rate',
+        deflection=False,
+        aberration=True,  # target aberration on
+        track_aberration=False,  # pointing correction off
+    )
+
+    (rr_off, _), (cc_off, _), _, _, _ = gen_track(
+        512,
+        512,
+        1,
+        1,
+        observer,
+        sat,
+        [sat],
+        [1000],
+        t0,
+        [t_start, t_end],
+        rot=0,
+        track_type='rate',
+        deflection=False,
+        aberration=False,  # target aberration off
+        track_aberration=False,  # pointing correction still off
+    )
+
+    assert not np.allclose(rr_on, rr_off) or not np.allclose(cc_on, cc_off)
 
 
 def test_get_los_frames():
