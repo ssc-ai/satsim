@@ -1,6 +1,12 @@
 History
 =======
 
+0.22.1
+---------------------
+
+* Add light transit correction toggle for pointing. Set `light_transit_correction` in `track`. Default is `true`.
+
+
 0.22.0
 ---------------------
 
