@@ -1,4 +1,4 @@
-"""Tests for tracker light transit toggle."""
+"""Tests for tracker apparent toggle."""
 
 from satsim import config, time
 from satsim.geometry.sgp4 import create_sgp4
@@ -8,7 +8,7 @@ from satsim.satsim import _calculate_star_position_and_motion
 def _compute_boresight(enable_light_transit):
     """Return boresight RA/Dec for a simple site/track config."""
     ssp = config.load_json('./tests/config_site_tle_simple.json')
-    ssp['geometry']['site']['track']['light_transit_correction'] = enable_light_transit
+    ssp['geometry']['site']['track']['track_apparent'] = enable_light_transit
 
     # Ensure defaults used by the tracker are present
     ssp['sim'].setdefault('enable_deflection', False)
@@ -74,12 +74,12 @@ def _compute_boresight(enable_light_transit):
     return astrometrics['ra'], astrometrics['dec']
 
 
-def test_track_pointing_changes_with_light_transit_toggle():
+def test_track_pointing_changes_with_apparent_toggle():
     ra_on, dec_on = _compute_boresight(True)
     ra_off, dec_off = _compute_boresight(False)
 
     ra_diff = abs(ra_on - ra_off)
     dec_diff = abs(dec_on - dec_off)
 
-    # Light transit correction should shift pointing slightly
+    # Apparent tracking should shift pointing slightly
     assert ra_diff > 1e-7 or dec_diff > 1e-7
