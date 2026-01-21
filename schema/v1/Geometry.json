@@ -69,8 +69,8 @@
                                     "type": "string",
                                     "enum": ["rate", "sidereal", "fixed", "rate-sidereal"]
                                 },
-                                "light_transit_correction": {
-                                    "description": "Apply light time and aberration corrections for tracker pointing.",
+                                "track_apparent": {
+                                    "description": "Use apparent (deflection + aberration) corrections for tracker pointing.",
                                     "type": "boolean",
                                     "default": true
                                 },
@@ -100,8 +100,8 @@
                                     "type": "string",
                                     "enum": ["rate", "sidereal"]
                                 },
-                                "light_transit_correction": {
-                                    "description": "Apply light time and aberration corrections for tracker pointing.",
+                                "track_apparent": {
+                                    "description": "Use apparent (deflection + aberration) corrections for tracker pointing.",
                                     "type": "boolean",
                                     "default": true
                                 },
@@ -128,8 +128,8 @@
                                     "type": "string",
                                     "enum": ["fixed"]
                                 },
-                                "light_transit_correction": {
-                                    "description": "Apply light time and aberration corrections for tracker pointing.",
+                                "track_apparent": {
+                                    "description": "Use apparent (deflection + aberration) corrections for tracker pointing.",
                                     "type": "boolean",
                                     "default": true
                                 },

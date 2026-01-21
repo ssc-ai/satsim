@@ -295,7 +295,7 @@ def test_target_light_transit_applied_when_tracking_correction_disabled():
         track_type='rate',
         deflection=False,
         aberration=True,  # target aberration on
-        track_aberration=False,  # pointing correction off
+        track_apparent=False,  # pointing correction off
     )
 
     (rr_off, _), (cc_off, _), _, _, _ = gen_track(
@@ -313,7 +313,7 @@ def test_target_light_transit_applied_when_tracking_correction_disabled():
         track_type='rate',
         deflection=False,
         aberration=False,  # target aberration off
-        track_aberration=False,  # pointing correction still off
+        track_apparent=False,  # pointing correction still off
     )
 
     assert not np.allclose(rr_on, rr_off) or not np.allclose(cc_on, cc_off)
