@@ -27,6 +27,7 @@ from satsim.image.render import render_piecewise, render_full
 from satsim.geometry.draw import gen_line, gen_line_from_endpoints, gen_curve_from_points
 from satsim.geometry.random import gen_random_points
 from satsim.geometry.sstr7 import query_by_los
+from satsim.geometry import gcvs5
 from satsim.geometry.csvsc import query_by_los as csvsc_query_by_los
 from satsim.geometry.sgp4 import (
     create_satrec,
@@ -409,6 +410,17 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         ssp['fpa']['detection'].setdefault('max_false', 10)
 
     star_mode = ssp['geometry']['stars']['mode']
+    gcvs5_cfg = ssp['geometry']['stars'].get('gcvs5')
+    gcvs5_catalog = None
+    gcvs5_state = None
+    gcvs5_enabled = False
+    if star_mode == 'sstr7' and gcvs5_cfg and gcvs5_cfg.get('enabled', False):
+        gcvs5_cfg = gcvs5.normalize_config(gcvs5_cfg)
+        gcvs5_catalog = gcvs5.load_gcvs5_catalog(
+            gcvs5_cfg['path'],
+            gcvs5_cfg['mag_systems'],
+        )
+        gcvs5_enabled = True
 
     # TODO move defaults to a different file
     if 'velocity_units' in ssp['sim']:
@@ -681,6 +693,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         else:
             r_stars_os, c_stars_os, m_stars_os = [], [], []
             pe_stars_os = []
+        m_stars_os_base = None
+        variable_stars = None
 
         # gen psf
         if ssp['sim']['psf_sample_frequency'] == 'collect':
@@ -740,6 +754,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             t_end = t_start + t_exposure
             ts_start = time.utc_from_list(tt, t_start)
             ts_end = time.utc_from_list(tt, t_end)
+            ts_mid = time.mid(ts_start, ts_end)
+            t_jd = float(time.to_astropy(ts_mid).jd)
             t_start_star = t_start
             t_end_star = t_end
             t_frame_track_start = _parse_start_track_time(track_mode, frame_num, num_frames, ts_collect_start, ts_start)
@@ -825,7 +841,15 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     elif star_mode == 'csv':
                         r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
 
-                    pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
+                    m_stars_os_base = np.asarray(m_stars_os, dtype=float)
+                    if gcvs5_enabled and star_mode == 'sstr7':
+                        gcvs5_state = gcvs5.prepare_gcvs5_state(
+                            ra_stars,
+                            dec_stars,
+                            m_stars_os_base,
+                            gcvs5_catalog,
+                            gcvs5_cfg,
+                        )
                     t_start_star = 0.0
                     t_end_star = t_exposure
                     if ssp['sim']['star_catalog_query_mode'] == 'frame':
@@ -837,6 +861,34 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     r_stars_os, c_stars_os, star_bounds = apply_wrap_around(h_fpa_pad_os, w_fpa_pad_os, r_stars_os, c_stars_os, t_start, t_end, star_rot_rate, star_tran_os, star_bounds)
 
             logger.debug('Number of stars {}.'.format(len(r_stars_os)))
+
+            if star_mode in ('sstr7', 'csv'):
+                if m_stars_os_base is None:
+                    m_stars_os_base = np.asarray(m_stars_os, dtype=float)
+
+                variable_stars = np.full(m_stars_os_base.shape, False, dtype=object)
+
+                if gcvs5_enabled and star_mode == 'sstr7' and gcvs5_state is not None:
+                    variable_stars = gcvs5.get_variable_flags(
+                        m_stars_os_base,
+                        gcvs5_catalog,
+                        gcvs5_state,
+                        gcvs5_cfg,
+                    )
+                    m_stars_os = gcvs5.apply_gcvs5_variability(
+                        m_stars_os_base,
+                        ra_stars,
+                        dec_stars,
+                        t_jd,
+                        gcvs5_catalog,
+                        gcvs5_state,
+                        gcvs5_cfg,
+                        frame_index=frame_num,
+                    )
+                else:
+                    m_stars_os = m_stars_os_base
+
+                pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
 
             t_start_star = tf.cast(t_start_star, tf.float32)
             t_end_star = tf.cast(t_end_star, tf.float32)
@@ -1003,6 +1055,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
             if ssp['sim']['star_annotation_threshold'] is not False:
                 pes_stars_os = pe_stars_os / t_exposure
+                if variable_stars is None:
+                    variable_stars = np.full(np.asarray(m_stars_os).shape, False, dtype=object)
                 star_os_pix = {
                     'h': crop_h_fpa_os,
                     'w': crop_w_fpa_os,
@@ -1012,6 +1066,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     'cc': c_stars_os,
                     'pe': pes_stars_os,
                     'mv': m_stars_os if m_stars_os is not None else pe_to_mv(zeropoint, pes_stars_os),
+                    'variable': variable_stars,
                     'ra': ra_stars,
                     'dec': dec_stars,
                     'seg_id': seg_id_stars,

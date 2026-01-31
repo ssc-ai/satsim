@@ -209,6 +209,53 @@
                     "description": "The path to the star catalog is `mode` is `sstr7` or `csv`.",
                     "type": "string"
                 },
+                "gcvs5": {
+                    "description": "GCVS5 variability augmentation settings (only used with `mode` = `sstr7`).",
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "description": "Enable variability augmentation using GCVS5.",
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "path": {
+                            "description": "Path to `gcvs5.txt`.",
+                            "type": "string"
+                        },
+                        "match_radius_arcsec": {
+                            "description": "Cone search radius for GCVS matches, in arcseconds.",
+                            "$ref": "types/Float.json",
+                            "default": 5.0
+                        },
+                        "template": {
+                            "description": "Light curve template selection.",
+                            "type": "string",
+                            "enum": ["auto", "sin", "saw", "eclipse"],
+                            "default": "auto"
+                        },
+                        "missing_period_mode": {
+                            "description": "Behavior when period is missing.",
+                            "type": "string",
+                            "enum": ["constant", "random"],
+                            "default": "constant"
+                        },
+                        "missing_period_seed": {
+                            "description": "Seed for deterministic missing-period sampling.",
+                            "type": "integer"
+                        },
+                        "mag_system": {
+                            "description": "Filter by a single magnitude system (e.g., \"V\").",
+                            "type": "string"
+                        },
+                        "mag_systems": {
+                            "description": "Filter by a list of magnitude systems (e.g., [\"V\", \"Hp\"]).",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
                 "motion": {
                     "description": "Injects artificial star motion.",
                     "properties": {

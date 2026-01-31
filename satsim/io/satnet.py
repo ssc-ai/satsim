@@ -111,7 +111,25 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
         objs.append(annotation)
 
     if star_os_pix is not None:
-        star_annotations = _generate_star_annotations(star_os_pix['h'], star_os_pix['w'], star_os_pix['h_pad'], star_os_pix['w_pad'], star_os_pix['rr'], star_os_pix['cc'], star_os_pix['pe'], star_os_pix['mv'], star_os_pix['t_start'], star_os_pix['t_end'], star_os_pix['rot'], star_os_pix['tran'], star_os_pix['ra'], star_os_pix['dec'], star_os_pix['seg_id'], star_os_pix['min_mv'])
+        star_annotations = _generate_star_annotations(
+            star_os_pix['h'],
+            star_os_pix['w'],
+            star_os_pix['h_pad'],
+            star_os_pix['w_pad'],
+            star_os_pix['rr'],
+            star_os_pix['cc'],
+            star_os_pix['pe'],
+            star_os_pix['mv'],
+            star_os_pix['t_start'],
+            star_os_pix['t_end'],
+            star_os_pix['rot'],
+            star_os_pix['tran'],
+            star_os_pix['ra'],
+            star_os_pix['dec'],
+            star_os_pix['seg_id'],
+            star_os_pix['min_mv'],
+            variable=star_os_pix.get('variable'),
+        )
         objs.extend(star_annotations)
 
     return data
@@ -218,7 +236,7 @@ def write_annotation(dir_name, sat_name, meta_data, frame_num, ssp, save_pickle=
     save_json(os.path.join(dir_name, 'config.json'), ssp, save_pickle=save_pickle)
 
 
-def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, min_mv=10, box_size=None, box_pad=0):
+def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, min_mv=10, box_size=None, box_pad=0, variable=None):
     """Generates the star annotation data from the SatSim internal star data. Data is typically in oversampled pixel space.
 
     Args:
@@ -248,6 +266,12 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
         seg_id_stars = np.full_like(r_stars_os, -1, dtype=int)
 
     mask = tf.math.less_equal(m_stars_os, min_mv)
+    mask_np = mask.numpy() if hasattr(mask, "numpy") else np.asarray(mask)
+    variable_masked = None
+    if variable is None:
+        variable_masked = [False] * int(np.sum(mask_np))
+    else:
+        variable_masked = np.asarray(variable, dtype=object)[mask_np].tolist()
 
     h_minus_1 = height - 1.0
     w_minus_1 = width - 1.0
@@ -268,13 +292,23 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
     cc = np.stack([cc0, ccm, cc1], axis=1) - w_pad_os
 
     objs = []
-    for r, c, pe, mv, ra, dec, sid in zip(rr, cc, pe_stars_os[mask], m_stars_os[mask], ra_stars[mask], dec_stars[mask], seg_id_stars[mask]):
+    for r, c, pe, mv, ra, dec, sid, var in zip(
+        rr,
+        cc,
+        pe_stars_os[mask],
+        m_stars_os[mask],
+        ra_stars[mask],
+        dec_stars[mask],
+        seg_id_stars[mask],
+        variable_masked,
+    ):
         if np.isnan(r).any() or np.isnan(c).any():
             continue
         annotation = _annotate_object(height, width, r, c, mv, pe.numpy(), sid, True, box_size, box_pad, "Star", 2)
         if annotation is not None:
             annotation['ra'] = _cast_to_float(ra)
             annotation['dec'] = _cast_to_float(dec)
+            annotation['variable'] = var
             objs.append(annotation)
 
     return objs
