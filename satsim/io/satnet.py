@@ -138,7 +138,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
     return data
 
 
-def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_time, time_stamp, ssp, show_obs_boxes=True, astrometrics=None, save_pickle=False, dtype='uint16', save_jpeg=True, ground_truth=None, ground_truth_min=None, show_star_boxes=False, segmentation=None):
+def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_time, time_stamp, ssp, show_obs_boxes=True, astrometrics=None, save_pickle=False, dtype='uint16', save_jpeg=True, ground_truth=None, ground_truth_min=None, show_star_boxes=False, segmentation=None, fits_compression=None):
     """Write image and annotation files compatible with SatNet. In addition,
     writes annotated images and SatSim configuration file for reference.
 
@@ -157,6 +157,7 @@ def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_
         ground_truth_min: `float`, set any value less than this number in ground_truth to 0
         show_star_boxes: `boolean`, draw boudning boxes around stars
         segmentation: `dict`, if not None, segmentation maps
+        fits_compression: `string`: FITS compression type ('none', 'gzip', 'gzip2', 'rice', 'hcompress', 'plio')
     """
 
     file_name = '{}.{:04d}'.format(sat_name, frame_num)
@@ -176,7 +177,16 @@ def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_
         os.makedirs(annotatedimg_dir, exist_ok=True)
 
     # save fits
-    fits.save(os.path.join(image_dir, '{}.fits'.format(file_name)), fpa_digital, exposure_time, time_stamp, overwrite=True, astrometrics=astrometrics, dtype=dtype)
+    fits.save(
+        os.path.join(image_dir, '{}.fits'.format(file_name)),
+        fpa_digital,
+        exposure_time,
+        time_stamp,
+        overwrite=True,
+        astrometrics=astrometrics,
+        dtype=dtype,
+        fits_compression=fits_compression,
+    )
 
     # save annotation
     with open(os.path.join(annotation_dir, '{}.json'.format(file_name)), 'w') as json_file:

@@ -17,6 +17,7 @@ requirements = [
     'scikit-image>=0.19.3',
     'Pillow>=9.0',
     'numpy>=1.21.0',
+    'opensimplex>=0.4.0',
     'PyYAML>=6.0',
     'matplotlib>=3.7.0',
     'astropy>=5.2.1,<6',

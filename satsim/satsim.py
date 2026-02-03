@@ -200,6 +200,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     'astrometrics': astrometrics,
                     'save_pickle': ssp['sim']['save_pickle'],
                     'dtype': a2d_dtype,
+                    'fits_compression': ssp['sim']['fits_compression'],
                     'save_jpeg': ssp['sim']['save_jpeg'],
                     'ground_truth': ground_truth,
                     'segmentation': segmentation,
@@ -461,6 +462,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'save_jpeg' not in ssp['sim']:
         ssp['sim']['save_jpeg'] = True
+
+    if 'fits_compression' not in ssp['sim']:
+        ssp['sim']['fits_compression'] = 'none'
 
     if 'save_movie' not in ssp['sim']:
         ssp['sim']['save_movie'] = ssp['sim']['save_jpeg']

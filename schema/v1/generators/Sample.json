@@ -8,6 +8,10 @@
         "$sample": {
             "description": "The numpy random sample function name.",
             "type": "string"
+        },
+        "seed": {
+            "description": "Seed for deterministic sampling of this field.",
+            "type": "integer"
         }
     },
     "required": ["$sample"],
@@ -40,6 +44,23 @@
                 { "exposure": 3.0, "gap": 2.5 },
                 { "exposure": 5.0, "gap": 2.5 }
             ]
-        }        
+        },
+        {
+            "$sample": "random.simplex",
+            "size": [400, 600],
+            "sigma": 2.0,
+            "scale": 64.0,
+            "octaves": 4,
+            "seed": 123
+        },
+        {
+            "$sample": "random.simplex_stripe",
+            "size": [400, 600],
+            "axis": "col",
+            "sigma": 0.5,
+            "scale": 256.0,
+            "octaves": 3,
+            "seed": 321
+        }
     ]
 }

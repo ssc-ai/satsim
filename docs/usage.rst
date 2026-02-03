@@ -71,6 +71,8 @@ future versions.
 Most numeric parameters can be replaced with a `$sample` key, which SatSim
 will use to randomly sample a value base on the desired distribution. Any NumPy
 random distributions can be specified. For the list, see `NumPy`_.
+You can also provide a `seed` inside a `$sample` dictionary to make that field
+deterministic without affecting other samples.
 
 .. _NumPy: https://docs.scipy.org/doc/numpy/reference/routines.random.html#distributions
 
