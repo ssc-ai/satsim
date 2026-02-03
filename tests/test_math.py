@@ -8,7 +8,7 @@ from scipy import signal
 import tensorflow as tf
 import pytest
 
-from satsim.math import fftconv2, fftconv2p, fftshift, signal_to_noise_ratio, conv2, mean_degrees, diff_degrees, interp_degrees
+from satsim.math import fftconv2, fftconv2p, fftshift, signal_to_noise_ratio, aperture_signal_to_noise_ratio, conv2, mean_degrees, diff_degrees, interp_degrees
 from satsim.util import configure_eager
 from satsim.math.interpolate import lagrange
 
@@ -87,6 +87,52 @@ def test_snr():
     snr = signal_to_noise_ratio(x,y,2)
 
     np.testing.assert_array_almost_equal(snr.numpy(), [0, 9.712858, 5.897678, 0, 0, 0, 0])
+
+
+def test_aperture_snr_scalar_inputs():
+
+    signal = 100.0
+    background = 20.0
+    noise = 10.0
+    mask = np.array([[True, True], [True, True]])
+
+    snr = aperture_signal_to_noise_ratio(signal, background, noise, mask)
+
+    expected_signal = signal * 4
+    expected_background = background * 4
+    expected_rn = noise * noise * 4
+    expected = expected_signal / np.sqrt(expected_signal + expected_background + expected_rn)
+
+    np.testing.assert_allclose(snr, expected, rtol=1e-12)
+
+
+def test_aperture_snr_array_inputs():
+
+    signal = np.array([[1.0, 2.0], [3.0, 4.0]])
+    background = np.array([[0.5, 0.5], [0.5, 0.5]])
+    noise = np.array([[1.0, 1.0], [1.0, 1.0]])
+    mask = np.array([[True, False], [True, True]])
+
+    snr = aperture_signal_to_noise_ratio(signal, background, noise, mask)
+
+    expected_signal = 1.0 + 3.0 + 4.0
+    expected_background = 0.5 * 3
+    expected_rn = 1.0 * 1.0 * 3
+    expected = expected_signal / np.sqrt(expected_signal + expected_background + expected_rn)
+
+    np.testing.assert_allclose(snr, expected, rtol=1e-12)
+
+
+def test_aperture_snr_empty_mask():
+
+    signal = np.array([[1.0, 2.0], [3.0, 4.0]])
+    background = 0.5
+    noise = 1.0
+    mask = np.array([[False, False], [False, False]])
+
+    snr = aperture_signal_to_noise_ratio(signal, background, noise, mask)
+
+    assert snr is None
 
 
 def test_degree_wrap():

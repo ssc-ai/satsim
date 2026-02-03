@@ -101,6 +101,8 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
 
         annotation['pixels'] = opix
         annotation['snr'] = osnr
+        if 'snr_aperture' in o:
+            annotation['snr_aperture'] = _cast_to_float(o['snr_aperture']) if o['snr_aperture'] is not None else None
         if 'ra_obs' in o and 'dec_obs' in o:
             annotation['ra_obs'] = _cast_to_float(o['ra_obs'])
             annotation['dec_obs'] = _cast_to_float(o['dec_obs'])
@@ -127,6 +129,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
             star_os_pix['ra'],
             star_os_pix['dec'],
             star_os_pix['seg_id'],
+            star_os_pix.get('snr_aperture'),
             star_os_pix['min_mv'],
             variable=star_os_pix.get('variable'),
         )
@@ -236,7 +239,7 @@ def write_annotation(dir_name, sat_name, meta_data, frame_num, ssp, save_pickle=
     save_json(os.path.join(dir_name, 'config.json'), ssp, save_pickle=save_pickle)
 
 
-def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, min_mv=10, box_size=None, box_pad=0, variable=None):
+def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, snr_aperture=None, min_mv=10, box_size=None, box_pad=0, variable=None):
     """Generates the star annotation data from the SatSim internal star data. Data is typically in oversampled pixel space.
 
     Args:
@@ -255,6 +258,7 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
         ra_stars: `list`, RA position for each stars
         dec_star: `list`, declination position for each stars
         seg_id_stars: `list`, segmentation ids for each star
+        snr_aperture: `list`, aperture SNR for each star
         min_mv: `float`, minimum magnitude brightness to annotate
         box_size: `[int, int]`, box size in row,col pixels
         box_pad: `int`, amount of pad to add to each side of box
@@ -272,6 +276,10 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
         variable_masked = [False] * int(np.sum(mask_np))
     else:
         variable_masked = np.asarray(variable, dtype=object)[mask_np].tolist()
+    if snr_aperture is None:
+        snr_aperture_masked = [None] * int(np.sum(mask_np))
+    else:
+        snr_aperture_masked = np.asarray(snr_aperture, dtype=object)[mask_np].tolist()
 
     h_minus_1 = height - 1.0
     w_minus_1 = width - 1.0
@@ -292,7 +300,7 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
     cc = np.stack([cc0, ccm, cc1], axis=1) - w_pad_os
 
     objs = []
-    for r, c, pe, mv, ra, dec, sid, var in zip(
+    for r, c, pe, mv, ra, dec, sid, var, snr_ap in zip(
         rr,
         cc,
         pe_stars_os[mask],
@@ -301,6 +309,7 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
         dec_stars[mask],
         seg_id_stars[mask],
         variable_masked,
+        snr_aperture_masked,
     ):
         if np.isnan(r).any() or np.isnan(c).any():
             continue
@@ -309,6 +318,8 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
             annotation['ra'] = _cast_to_float(ra)
             annotation['dec'] = _cast_to_float(dec)
             annotation['variable'] = var
+            if snr_aperture is not None:
+                annotation['snr_aperture'] = _cast_to_float(snr_ap) if snr_ap is not None else None
             objs.append(annotation)
 
     return objs

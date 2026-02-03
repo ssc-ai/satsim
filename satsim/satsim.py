@@ -17,7 +17,7 @@ import numpy as np
 from astropy import units as u
 from sgp4.api import SatrecArray
 
-from satsim.math import signal_to_noise_ratio, mean_degrees, diff_degrees, interp_degrees
+from satsim.math import signal_to_noise_ratio, aperture_signal_to_noise_ratio, mean_degrees, diff_degrees, interp_degrees
 from satsim.geometry.transform import rotate_and_translate, apply_wrap_around
 from satsim.geometry.sprite import load_sprite_from_file
 from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch, crop
@@ -1010,6 +1010,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                             segmentation['object_segmentation'][fpa_segmentation > min_dn] = ob['id']
                             logger.debug('Generated object segmentation {}, {} mv.'.format(ob['id'], ob['mv']))
 
+            snr_aperture_stars = None
+
             # cropped sensor
             crop_bg_tf = bg_tf
             crop_dc_tf = dc_tf
@@ -1053,6 +1055,56 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     opp['rrr'] = opp['rrr'] - cp['height_offset']
                     opp['rcc'] = opp['rcc'] - cp['width_offset']
 
+            if segmentation is not None:
+                def _to_numpy(value):
+                    if hasattr(value, 'numpy'):
+                        return value.numpy()
+                    return np.asarray(value)
+
+                signal_targ_np = _to_numpy(fpa_conv_targ)
+                signal_star_np = _to_numpy(fpa_conv_star)
+                bg_np = _to_numpy(crop_bg_tf)
+                dc_np = _to_numpy(crop_dc_tf)
+                rn_np = _to_numpy(crop_rn_tf)
+
+                background_np = bg_np + dc_np
+
+                if ssp['sim']['calculate_snr']:
+                    targ_signal_np = signal_targ_np
+                    star_signal_np = signal_star_np
+                    targ_background_np = background_np + signal_star_np
+                    star_background_np = background_np + signal_targ_np
+                else:
+                    combined_np = signal_star_np + signal_targ_np
+                    targ_signal_np = combined_np
+                    star_signal_np = combined_np
+                    targ_background_np = background_np
+                    star_background_np = background_np
+
+                if ssp['sim']['num_shot_noise_samples'] is not None:
+                    snr_scale = math.sqrt(ssp['sim']['num_shot_noise_samples'])
+                else:
+                    snr_scale = 1.0
+
+                obj_segmentation = segmentation.get('object_segmentation')
+                if obj_segmentation is not None:
+                    for ob in obs_os_pix:
+                        mask = obj_segmentation == ob['id']
+                        snr_aperture = aperture_signal_to_noise_ratio(targ_signal_np, targ_background_np, rn_np, mask)
+                        ob['snr_aperture'] = float(snr_aperture * snr_scale) if snr_aperture is not None else None
+
+                star_segmentation = segmentation.get('star_segmentation')
+                if star_segmentation is not None and seg_id_stars is not None:
+                    snr_by_star_id = {}
+                    for sid in np.unique(star_segmentation):
+                        if sid <= 0:
+                            continue
+                        mask = star_segmentation == sid
+                        snr_aperture = aperture_signal_to_noise_ratio(star_signal_np, star_background_np, rn_np, mask)
+                        snr_by_star_id[int(sid)] = float(snr_aperture * snr_scale) if snr_aperture is not None else None
+                    seg_ids = np.asarray(seg_id_stars, dtype=int)
+                    snr_aperture_stars = [snr_by_star_id.get(int(sid)) if sid > 0 else None for sid in seg_ids]
+
             if ssp['sim']['star_annotation_threshold'] is not False:
                 pes_stars_os = pe_stars_os / t_exposure
                 if variable_stars is None:
@@ -1070,6 +1122,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     'ra': ra_stars,
                     'dec': dec_stars,
                     'seg_id': seg_id_stars,
+                    'snr_aperture': snr_aperture_stars,
                     't_start': t_start_star,
                     't_end': t_end_star,
                     'rot': star_rot_rate,
