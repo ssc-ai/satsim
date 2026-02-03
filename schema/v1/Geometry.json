@@ -69,6 +69,11 @@
                                     "type": "string",
                                     "enum": ["rate", "sidereal", "fixed", "rate-sidereal"]
                                 },
+                                "track_apparent": {
+                                    "description": "Use apparent (deflection + aberration) corrections for tracker pointing.",
+                                    "type": "boolean",
+                                    "default": true
+                                },
                                 "tle": {
                                     "description": "The TLE SGP4 orbit as an array.",
                                     "type": "array",
@@ -95,6 +100,11 @@
                                     "type": "string",
                                     "enum": ["rate", "sidereal"]
                                 },
+                                "track_apparent": {
+                                    "description": "Use apparent (deflection + aberration) corrections for tracker pointing.",
+                                    "type": "boolean",
+                                    "default": true
+                                },
                                 "position": {
                                     "description": "The ECI position of the two body orbit in km.",
                                     "type": "array"
@@ -117,6 +127,11 @@
                                     "description": "The track mode.",
                                     "type": "string",
                                     "enum": ["fixed"]
+                                },
+                                "track_apparent": {
+                                    "description": "Use apparent (deflection + aberration) corrections for tracker pointing.",
+                                    "type": "boolean",
+                                    "default": true
                                 },
                                 "az": {
                                     "description": "The start and stop azimuth of the fixed observer.",

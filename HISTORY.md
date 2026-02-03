@@ -1,6 +1,19 @@
 History
 =======
 
+0.22.2
+---------------------
+
+* Rename tracking pointing toggle from `light_transit_correction` to `track_apparent` in config and APIs.
+* Add graceful fallback to geometric LOS when apparent LOS computation fails.
+
+
+0.22.1
+---------------------
+
+* Add light transit correction toggle for pointing. Set `light_transit_correction` in `track`. Default is `true`.
+
+
 0.22.0
 ---------------------
 

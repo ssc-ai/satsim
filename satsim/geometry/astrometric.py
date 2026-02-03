@@ -1,5 +1,6 @@
 """Tests for `satsim.geometry.astrometric` package."""
 import os
+import logging
 from functools import lru_cache
 
 import numpy as np
@@ -22,6 +23,8 @@ from astropy import units as u
 
 from satsim.geometry.wcs import get_min_max_ra_dec, get_wcs
 
+
+logger = logging.getLogger(__name__)
 
 SATSIM_EARTH = None
 SATSIM_MOON = None
@@ -225,7 +228,11 @@ def get_los(observer, target, t, deflection=False, aberration=True, stellar_aber
     """
 
     if deflection or aberration:
-        icrf_los = apparent(observer.at(t).observe(target), deflection, aberration)
+        try:
+            icrf_los = apparent(observer.at(t).observe(target), deflection, aberration)
+        except Exception as exc:
+            logger.warning('Apparent LOS failed; falling back to geometric LOS: %s', exc)
+            icrf_los = (target - observer).at(t)
     else:
         icrf_los = (target - observer).at(t)
 
@@ -336,7 +343,7 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, t0, observer, targets=[],
         dec: `float`, declination of origin (center or corner [0,0])
         t0: `Time`, Skyfield `Time` representing the time
         observer: `object`, the observer as a Skyfield object
-        targets: `list`, list of objects to test if in bounds
+        targets: `list`, list of objects to convert into pixel coordinates
         rot: `float`, rotation of the focal plane in degrees
         pad_mult: `float`, padding multiplier
         origin: `string`, corner or center
@@ -366,16 +373,17 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, t0, observer, targets=[],
 
 
 def gen_track_from_wcs(height, width, wcs, observer, targets, t0, tt, origin='center',
-                       offset=[0,0], flipud=False, fliplr=False):
+                       offset=[0,0], flipud=False, fliplr=False,
+                       deflection=False, aberration=True):
     """Generates a list of pixel coordinates on the observing focal plane
-    array for each object in the list, `target`. Target is tracked based on
-    `wcs0` and `wcs1`.
+    array for each object in `targets`. The WCS list encodes the tracking
+    solution and must align with the times in `tt`.
 
     Args:
         height: `int`, height in number of pixels
         width: `int`, width in number of pixels
-        wcs: `list`, list of AstroPy world coordinate system object used to
-            transform world to pixel coordinates at `t_start`
+        wcs: `list`, list of AstroPy world coordinate system objects used to
+            transform world to pixel coordinates at each time in `tt`
         observer: `object`, the observer as a Skyfield object
         targets: `list`, list of objects to test if in bounds
         t0: `Time`, Skyfield `Time` representing the track start time
@@ -384,6 +392,8 @@ def gen_track_from_wcs(height, width, wcs, observer, targets, t0, tt, origin='ce
         offset: `float`, array specifying [row, col] offset in pixels
         flipud: `boolean`, flip array in up/down direction
         fliplr: `boolean`, flip array in left/right direction
+        deflection: `bool`, include deflection when computing target astrometry
+        aberration: `bool`, include light-time aberration when computing target astrometry
 
     Returns:
         A `tuple`, containing:
@@ -398,7 +408,13 @@ def gen_track_from_wcs(height, width, wcs, observer, targets, t0, tt, origin='ce
 
         rra0, ddec0, = [], []
         for s in targets:
-            [sra, sdec, dist, az, el, los] = get_los(observer, s, t)
+            [sra, sdec, dist, az, el, los] = get_los(
+                observer,
+                s,
+                t,
+                deflection=deflection,
+                aberration=aberration,
+            )
             rra0.append(sra)
             ddec0.append(sdec)
 
@@ -542,7 +558,7 @@ def wcs_from_observer_sidereal(height, width, y_fov, x_fov, observer, t0, tt, ro
 
 def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightnesses, t0, tt, rot=0, pad_mult=0, track_type='rate',
               offset=[0, 0], flipud=False, fliplr=False, az=None, el=None,
-              deflection=False, aberration=True, stellar_aberration=False):
+              deflection=False, aberration=True, stellar_aberration=False, track_apparent=True):
     """Generates a list of pixel coordinates from the observing focal plane
     array to each satellite in the list, `satellites`. Track mode can be either
     `rate` or `sidereal`.
@@ -567,8 +583,9 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
         az: `float`, azimuth in degrees for `fixed` tracking
         el: `float`, elevation in degrees for `fixed` tracking
         deflection: `bool`, include gravitational deflection in astrometry
-        aberration: `bool`, include light transit time effects in astrometry
+        aberration: `bool`, include light transit time effects when computing target astrometry
         stellar_aberration: `bool`, include stellar aberration in astrometry
+        track_apparent: `bool`, use apparent (deflection + aberration) tracking solution
 
     Returns:
         A `tuple`, containing:
@@ -579,6 +596,9 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
             b: `float`, list of brightnesses of each target in Mv
     """
     # note wcs are based on apparent position of the tracked target
+    track_deflection = deflection if track_apparent is True else False
+    track_aberration = aberration if track_apparent is True else False
+
     if track_type == 'rate':
         wcs = wcs_from_observer_rate(
             height,
@@ -590,8 +610,8 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
             tt,
             rot,
             track,
-            deflection=deflection,
-            aberration=aberration,
+            deflection=track_deflection,
+            aberration=track_aberration,
             stellar_aberration=stellar_aberration,
         )
     elif track_type == 'fixed':
@@ -605,8 +625,8 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
             rot,
             az,
             el,
-            deflection=deflection,
-            aberration=aberration,
+            deflection=track_deflection,
+            aberration=track_aberration,
             stellar_aberration=stellar_aberration,
         )
     else:
@@ -620,8 +640,8 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
             tt,
             rot,
             track,
-            deflection=deflection,
-            aberration=aberration,
+            deflection=track_deflection,
+            aberration=track_aberration,
             stellar_aberration=stellar_aberration,
         )
 
@@ -632,7 +652,21 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
     # [cmin, cmax, wcs] = get_min_max_ra_dec(height, width, y_fov / height, x_fov / width, ra, dec, rot, pad_mult, 'center', offset)
     # visible, idx, wcs = query_by_los(height, width, y_fov, x_fov, ra, dec, t_start, observer, satellites, rot, pad_mult)
 
-    return gen_track_from_wcs(height, width, wcs, observer, visible, t0, tt, 'center', offset=offset, flipud=flipud, fliplr=fliplr) + (b,)
+    return gen_track_from_wcs(
+        height,
+        width,
+        wcs,
+        observer,
+        visible,
+        t0,
+        tt,
+        'center',
+        offset=offset,
+        flipud=flipud,
+        fliplr=fliplr,
+        deflection=deflection,
+        aberration=aberration
+    ) + (b,)
 
 
 def angle_between(observer, object_a, object_b, t):
