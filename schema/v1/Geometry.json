@@ -121,6 +121,50 @@
                             "required": ["mode", "position", "velocity", "epoch"]
                         },
                         {
+                            "description": "Track an explicit RA/Dec series.",
+                            "properties": {
+                                "mode": {
+                                    "description": "The track mode.",
+                                    "type": "string",
+                                    "enum": ["radec"]
+                                },
+                                "track_apparent": {
+                                    "description": "Use apparent (deflection + aberration) corrections for tracker pointing.",
+                                    "type": "boolean",
+                                    "default": true
+                                },
+                                "ra": {
+                                    "description": "Right ascension in degrees. Can be a scalar or a vector across the collection time.",
+                                    "oneOf": [
+                                        {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "types/Float.json"
+                                            }
+                                        },
+                                        {
+                                            "$ref": "types/Float.json"
+                                        }
+                                    ]
+                                },
+                                "dec": {
+                                    "description": "Declination in degrees. Can be a scalar or a vector across the collection time.",
+                                    "oneOf": [
+                                        {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "types/Float.json"
+                                            }
+                                        },
+                                        {
+                                            "$ref": "types/Float.json"
+                                        }
+                                    ]
+                                }
+                            },
+                            "required": ["mode", "ra", "dec"]
+                        },
+                        {
                             "description": "Fixed gimbal.",
                             "properties": {
                                 "mode": {

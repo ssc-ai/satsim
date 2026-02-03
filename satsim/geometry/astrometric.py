@@ -285,6 +285,49 @@ def get_los_azel(observer, az, el, t, deflection=False, aberration=True, stellar
     return ra._degrees, dec._degrees, d.km, az, el, icrf_los
 
 
+def get_los_radec(observer, ra, dec, t, deflection=False, aberration=True, stellar_aberration=False):
+    """Get the apparent line of sight vector from an observer based on RA/Dec.
+
+    Args:
+        observer: `object`, observer as a Skyfield object
+        ra: `float`, right ascension in degrees
+        dec: `float`, declination in degrees
+        t: `object`, skyfield time
+        deflection: `boolean`, enable deflection adjustment
+        aberration: `boolean`, enable aberration of light adjustment for the target
+        stellar_aberration: `boolean`, enable stellar aberration adjustment (apparent)
+
+    Returns:
+        A `tuple`, containing:
+            ra: right ascension in degrees
+            dec: declination in degrees
+            d: distance between observer and target in km
+            az: azimuth angle in degrees
+            el: elevation angle in degrees
+            icrf_los: LOS as skyfield ICRF object
+    """
+    star = Star(ra=Angle(degrees=ra), dec=Angle(degrees=dec))
+
+    icrf_los = observer.at(t).observe(star)
+    if deflection or aberration:
+        try:
+            icrf_los = apparent(icrf_los, deflection, aberration)
+        except Exception as exc:
+            logger.warning('Apparent LOS failed; falling back to geometric LOS: %s', exc)
+
+    ra_ang, dec_ang, d = icrf_los.radec()
+    try:
+        el_ang, az_ang, _ = icrf_los.altaz()
+    except Exception:
+        az_ang = Angle(degrees=0.0)
+        el_ang = Angle(degrees=0.0)
+
+    if stellar_aberration:
+        ra_ang, dec_ang, el_ang, az_ang = _apply_stellar_aberration(observer, ra_ang, dec_ang, az_ang, el_ang, t, deflection)
+
+    return ra_ang.degrees, dec_ang.degrees, d.km, az_ang.degrees, el_ang.degrees, icrf_los
+
+
 def get_analytical_los(observer, target, t, frame="observer"):
     """Return a line of sight in the specified frame for analytical observations.
 
@@ -556,12 +599,39 @@ def wcs_from_observer_sidereal(height, width, y_fov, x_fov, observer, t0, tt, ro
     return wsc
 
 
+def wcs_from_radec(height, width, y_fov, x_fov, tt, rot, ra, dec):
+    """Calculate the world coordinate system (WCS) transform for explicit
+    RA/Dec pointings at each time in `tt`.
+
+    Args:
+        height: `int`, height in number of pixels
+        width: `int`, width in number of pixels
+        y_fov: `float`, y fov in degrees
+        x_fov: `float`, x fov in degrees
+        tt: `list`, list of Skyfield `Time` representing observation times
+        rot: `float`, rotation of the focal plane in degrees
+        ra: `list`, right ascension in degrees for each time in `tt`
+        dec: `list`, declination in degrees for each time in `tt`
+
+    Returns:
+        A `object`: WCS transform
+    """
+    if len(ra) != len(tt) or len(dec) != len(tt):
+        raise ValueError("ra/dec length must match tt for radec tracking")
+
+    wsc = []
+    for r, d in zip(ra, dec):
+        wcs0 = get_wcs(height, width, y_fov / height, x_fov / width, r, d, rot)
+        wsc.append(wcs0)
+    return wsc
+
+
 def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightnesses, t0, tt, rot=0, pad_mult=0, track_type='rate',
-              offset=[0, 0], flipud=False, fliplr=False, az=None, el=None,
+              offset=[0, 0], flipud=False, fliplr=False, az=None, el=None, ra=None, dec=None,
               deflection=False, aberration=True, stellar_aberration=False, track_apparent=True):
     """Generates a list of pixel coordinates from the observing focal plane
-    array to each satellite in the list, `satellites`. Track mode can be either
-    `rate` or `sidereal`.
+    array to each satellite in the list, `satellites`. Track mode can be one of
+    `rate`, `sidereal`, `fixed`, or `radec`.
 
     Args:
         height: `int`, height in number of pixels
@@ -576,12 +646,14 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
         tt: `list`, list of Skyfield `Time` representing observation times
         rot: `float`, rotation of the focal plane in degrees
         pad_mult: `float`, padding multiplier (unused)
-        track_type: `string`, `rate` or `sidereal`
+        track_type: `string`, `rate`, `sidereal`, `fixed`, or `radec`
         offset: `float`, array specifying [row, col] offset in pixels
         flipud: `boolean`, flip array in up/down direction
         fliplr: `boolean`, flip array in left/right direction
         az: `float`, azimuth in degrees for `fixed` tracking
         el: `float`, elevation in degrees for `fixed` tracking
+        ra: `list`, right ascension in degrees for `radec` tracking
+        dec: `list`, declination in degrees for `radec` tracking
         deflection: `bool`, include gravitational deflection in astrometry
         aberration: `bool`, include light transit time effects when computing target astrometry
         stellar_aberration: `bool`, include stellar aberration in astrometry
@@ -628,6 +700,19 @@ def gen_track(height, width, y_fov, x_fov, observer, track, satellites, brightne
             deflection=track_deflection,
             aberration=track_aberration,
             stellar_aberration=stellar_aberration,
+        )
+    elif track_type == 'radec':
+        if ra is None or dec is None:
+            raise ValueError("ra/dec must be provided for radec tracking")
+        wcs = wcs_from_radec(
+            height,
+            width,
+            y_fov,
+            x_fov,
+            tt,
+            rot,
+            ra,
+            dec,
         )
     else:
         wcs = wcs_from_observer_sidereal(

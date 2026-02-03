@@ -105,6 +105,35 @@ def test_gen_track():
     np.testing.assert_almost_equal(cc1[0], 256.)
     assert(b[0] == 1000.)
 
+    ra_radec, dec_radec, km_radec, az_radec, el_radec, _ = get_los(observer, sat, t_start)
+    ra_radec2, dec_radec2, km_radec2, az_radec2, el_radec2, _ = get_los(observer, sat, t_end)
+
+    (rr0, rr1), (cc0, cc1), dr, dc, b = gen_track(
+        512,
+        512,
+        1,
+        1,
+        observer,
+        sat,
+        [sat],
+        [1000],
+        t0,
+        [t_start, t_end],
+        rot=0,
+        pad_mult=0,
+        track_type='radec',
+        offset=[0, 0],
+        ra=[ra_radec, ra_radec2],
+        dec=[dec_radec, dec_radec2],
+    )
+
+    assert(len(rr0) == 1)
+    np.testing.assert_almost_equal(rr0[0], 256.)
+    np.testing.assert_almost_equal(cc0[0], 256.)
+    np.testing.assert_almost_equal(rr1[0], 256.)
+    np.testing.assert_almost_equal(cc1[0], 256.)
+    assert(b[0] == 1000.)
+
     (rr0, rr1), (cc0, cc1), dr, dc, b = gen_track(512, 512, 1, 1, observer, sat, [sat], [1000], t0, [t_start, t_end], rot=0, pad_mult=0, track_type='sidereal', offset=[0,0])
 
     assert(len(rr0) == 1)

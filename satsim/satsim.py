@@ -41,6 +41,7 @@ from satsim.geometry.astrometric import (
     gen_track,
     get_los,
     get_los_azel,
+    get_los_radec,
     get_analytical_los,
     load_earth,
     optimized_angle_from_los_cosine,
@@ -612,7 +613,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 observer = create_topocentric(astrometrics['lat'], astrometrics['lon'], astrometrics['alt'])
                 site_mode = 'ground'
 
-            if 'tle' in ssp['geometry']['site']['track']:
+            if track_mode == 'radec':
+                track = None
+            elif 'tle' in ssp['geometry']['site']['track']:
                 track = create_sgp4(ssp['geometry']['site']['track']['tle'][0], ssp['geometry']['site']['track']['tle'][1])
             elif 'tle1' in ssp['geometry']['site']['track']:
                 track = create_sgp4(ssp['geometry']['site']['track']['tle1'], ssp['geometry']['site']['track']['tle2'])
@@ -625,6 +628,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             astrometrics['object'] = pydash.objects.get(ssp, 'geometry.site.track.name', '')
             track_az = pydash.objects.get(ssp, 'geometry.site.track.az', 0)
             track_el = pydash.objects.get(ssp, 'geometry.site.track.el', 0)
+            track_ra = pydash.objects.get(ssp, 'geometry.site.track.ra', None)
+            track_dec = pydash.objects.get(ssp, 'geometry.site.track.dec', None)
             track_apparent = pydash.objects.get(ssp, 'geometry.site.track.track_apparent', True)
 
             if type(track_az) is not list:
@@ -663,7 +668,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 astrometrics['track_mode'],
                 track_az,
                 track_el,
-                track_apparent,
+                track_apparent=track_apparent,
+                track_ra=track_ra,
+                track_dec=track_dec,
             )
         else:
             observer = None
@@ -672,6 +679,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             track_mode = None
             track_az = None
             track_el = None
+            track_ra = None
+            track_dec = None
             ssp['sim']['star_catalog_query_mode'] = 'at_start'
 
         if ssp['sim']['temporal_osf'] == 'auto':
@@ -779,6 +788,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                     obs, obs_cache, batch_cache,
                                                                                     t_frame_track_start, ts_collect_end, t_start, t_end, tt,
                                                                                     observer, track, track_az, track_el,
+                                                                                    track_ra, track_dec,
                                                                                     zeropoint, s_osf,
                                                                                     h_fpa_os, w_fpa_os,
                                                                                     h_pad_os, w_pad_os,
@@ -797,7 +807,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                                          y_fov_pad, x_fov_pad,
                                                                                                          y_fov, x_fov,
                                                                                                          y_ifov, x_ifov,
-                                                                                                         observer, track, star_rot, astrometrics['track_mode'], track_az, track_el, track_apparent)
+                                                                                                         observer, track, star_rot, astrometrics['track_mode'], track_az, track_el,
+                                                                                                         track_apparent=track_apparent,
+                                                                                                         track_ra=track_ra,
+                                                                                                         track_dec=track_dec)
 
             # if image rendering is disabled, optionally generate analytical observations and return
             if ssp['sim']['mode'] == 'none':
@@ -1330,7 +1343,7 @@ def _batch_sgp4_fov_filter(obs, obs_cache, active_flags, updated_flags, has_even
 def _gen_objects(ssp, render_mode,
                  obs, obs_cache, batch_cache,
                  tc_start, tc_end, t_start, t_end, tt,
-                 observer, track, track_az, track_el,
+                 observer, track, track_az, track_el, track_ra, track_dec,
                  zeropoint, s_osf,
                  h_fpa_os, w_fpa_os,
                  h_pad_os, w_pad_os,
@@ -1361,13 +1374,15 @@ def _gen_objects(ssp, render_mode,
 
     az_arr = None
     el_arr = None
+    ra_arr = None
+    dec_arr = None
     ra_c = None
     dec_c = None
     fov_half_diag_pad_cos = None
 
-    if enable_fov_filter:
-        if track_mode == 'fixed':
-            az_arr, el_arr = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
+    if track_mode == 'fixed':
+        az_arr, el_arr = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
+        if enable_fov_filter:
             ra_c, dec_c, _, _, _, _ = get_los_azel(
                 observer,
                 az_arr[1],
@@ -1377,16 +1392,32 @@ def _gen_objects(ssp, render_mode,
                 aberration=track_aberration,
                 stellar_aberration=enable_stellar_aberration,
             )
-        else:
-            ra_c, dec_c, _, _, _, _ = get_los(
-                observer,
-                track,
-                ts_mid,
-                deflection=track_deflection,
-                aberration=track_aberration,
-                stellar_aberration=enable_stellar_aberration,
-            )
+    elif track_mode == 'radec':
+        ra_arr, dec_arr = _calculate_apparent_ra_dec(
+            tc_start,
+            tc_end,
+            [ts_start, ts_mid, ts_end],
+            track_ra,
+            track_dec,
+            observer,
+            deflection=track_deflection,
+            aberration=track_aberration,
+            stellar_aberration=False,
+        )
+        if enable_fov_filter:
+            ra_c = float(ra_arr[1])
+            dec_c = float(dec_arr[1])
+    elif enable_fov_filter:
+        ra_c, dec_c, _, _, _, _ = get_los(
+            observer,
+            track,
+            ts_mid,
+            deflection=track_deflection,
+            aberration=track_aberration,
+            stellar_aberration=enable_stellar_aberration,
+        )
 
+    if enable_fov_filter:
         if fov_filter_radius is not None:
             fov_half_diag_pad = fov_filter_radius
         else:
@@ -1517,29 +1548,6 @@ def _gen_objects(ssp, render_mode,
                     ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                     obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
 
-            if az_arr is None:
-                az_arr, el_arr = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
-                if enable_fov_filter and ra_c is None:
-                    if track_mode == 'fixed':
-                        ra_c, dec_c, _, _, _, _ = get_los_azel(
-                            observer,
-                            az_arr[1],
-                            el_arr[1],
-                            ts_mid,
-                            deflection=track_deflection,
-                            aberration=track_aberration,
-                            stellar_aberration=enable_stellar_aberration,
-                        )
-                    else:
-                        ra_c, dec_c, _, _, _, _ = get_los(
-                            observer,
-                            track,
-                            ts_mid,
-                            deflection=track_deflection,
-                            aberration=track_aberration,
-                            stellar_aberration=enable_stellar_aberration,
-                        )
-
             o_offset = [0.0, 0.0]
             if 'offset' in o:
                 o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
@@ -1575,6 +1583,8 @@ def _gen_objects(ssp, render_mode,
                         fliplr=ssp['fpa']['flip_left_right'],
                         az=az_arr,
                         el=el_arr,
+                        ra=ra_arr,
+                        dec=dec_arr,
                         deflection=enable_deflection,
                         aberration=enable_light_transit,
                         track_apparent=track_apparent,  # enable apparent correction in pointing
@@ -1718,14 +1728,96 @@ def _calculate_az_el(tc_start, tc_end, t_curr, track_az, track_el):
     return az, el
 
 
+def _coerce_track_series(values):
+    if values is None:
+        return None
+    if isinstance(values, np.ndarray):
+        values = values.tolist()
+    if isinstance(values, (list, tuple)):
+        return [float(v) for v in values]
+    return [float(values)]
+
+
+def _unwrap_degrees_series(values):
+    unwrapped = [values[0]]
+    for v in values[1:]:
+        unwrapped.append(unwrapped[-1] + diff_degrees(unwrapped[-1], v))
+    return np.asarray(unwrapped, dtype=float)
+
+
+def _interp_track_series(values, t_curr, t_start, t_end, is_angle=False):
+    if len(values) == 1 or t_start.tt == t_end.tt:
+        return np.asarray([values[0]] * len(t_curr), dtype=float)
+
+    t_vals = np.asarray([t.tt for t in t_curr], dtype=float)
+
+    if len(values) == 2:
+        if is_angle:
+            return interp_degrees(t_vals, t_start.tt, t_end.tt, values[0], values[1])
+        return np.interp(t_vals, [t_start.tt, t_end.tt], [values[0], values[1]])
+
+    frac = (t_vals - t_start.tt) / (t_end.tt - t_start.tt)
+    frac = np.clip(frac, 0.0, 1.0)
+    xx = np.linspace(0.0, 1.0, len(values))
+
+    if is_angle:
+        values = _unwrap_degrees_series(values)
+        return np.interp(frac, xx, values) % 360.0
+
+    return np.interp(frac, xx, values)
+
+
+def _calculate_ra_dec(tc_start, tc_end, t_curr, track_ra, track_dec):
+    ra_vals = _coerce_track_series(track_ra)
+    dec_vals = _coerce_track_series(track_dec)
+
+    if ra_vals is None or dec_vals is None:
+        raise ValueError('track.ra and track.dec must be provided for radec tracking')
+
+    if len(ra_vals) != len(dec_vals):
+        if len(ra_vals) == 1:
+            ra_vals = ra_vals * len(dec_vals)
+        elif len(dec_vals) == 1:
+            dec_vals = dec_vals * len(ra_vals)
+        else:
+            raise ValueError('track.ra and track.dec lengths must match for radec tracking')
+
+    ra = _interp_track_series(ra_vals, t_curr, tc_start, tc_end, is_angle=True)
+    dec = _interp_track_series(dec_vals, t_curr, tc_start, tc_end, is_angle=False)
+
+    return ra, dec
+
+
+def _calculate_apparent_ra_dec(tc_start, tc_end, t_curr, track_ra, track_dec, observer,
+                               deflection=False, aberration=True, stellar_aberration=False):
+    raw_ra, raw_dec = _calculate_ra_dec(tc_start, tc_end, t_curr, track_ra, track_dec)
+
+    ra_vals = []
+    dec_vals = []
+    for r, d, t in zip(raw_ra, raw_dec, t_curr):
+        ra_i, dec_i, _, _, _, _ = get_los_radec(
+            observer,
+            float(r),
+            float(d),
+            t,
+            deflection=deflection,
+            aberration=aberration,
+            stellar_aberration=stellar_aberration,
+        )
+        ra_vals.append(ra_i)
+        dec_vals.append(dec_i)
+
+    return np.asarray(ra_vals, dtype=float), np.asarray(dec_vals, dtype=float)
+
+
 def _calculate_star_position_and_motion(ssp, astrometrics,
                                         ts_collect_start, ts_collect_end, t_start, t_end, t_exposure,
                                         h_fpa_pad_os, w_fpa_pad_os,
                                         y_fov_pad, x_fov_pad,
                                         y_fov, x_fov,
                                         y_ifov, x_ifov,
-                                        observer, track, star_rot, track_mode, track_az, track_el, track_apparent=True):
-    az, el = _calculate_az_el(ts_collect_start, ts_collect_end, [t_start, t_end], track_az, track_el)
+                                        observer, track, star_rot, track_mode, track_az, track_el,
+                                        track_apparent=True, track_ra=None, track_dec=None):
     enable_deflection = ssp['sim']['enable_deflection']
     enable_light_transit = ssp['sim']['enable_light_transit']
     enable_stellar_aberration = ssp['sim']['enable_stellar_aberration']
@@ -1734,6 +1826,11 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         enable_deflection = False
         enable_light_transit = False
 
+    az = None
+    el = None
+    ra_vals = None
+    dec_vals = None
+
     if track_mode == 'rate':
         track_target = [track]
         star_ra0, star_dec0, _, _, _, _ = get_los(observer, track, t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
@@ -1741,6 +1838,7 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
         ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, t_end, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
     elif track_mode == 'fixed':
+        az, el = _calculate_az_el(ts_collect_start, ts_collect_end, [t_start, t_end], track_az, track_el)
         track_target = []
         star_ra0, star_dec0, _, _, _, _ = get_los_azel(observer, az[0], el[0], t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
         star_ra1, star_dec1, _, _, _, _ = get_los_azel(observer, az[1], el[1], t_end, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
@@ -1752,6 +1850,51 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         star_ra1, star_dec1, _, _, _, _ = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
         ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
         ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
+    elif track_mode == 'radec':
+        track_target = []
+        raw_ra, raw_dec = _calculate_ra_dec(ts_collect_start, ts_collect_end, [t_start, t_end], track_ra, track_dec)
+        ra0, dec0, dis0, az0, el0, _ = get_los_radec(
+            observer,
+            float(raw_ra[0]),
+            float(raw_dec[0]),
+            t_start,
+            deflection=enable_deflection,
+            aberration=enable_light_transit,
+            stellar_aberration=False,
+        )
+        ra1, dec1, dis1, az1, el1, _ = get_los_radec(
+            observer,
+            float(raw_ra[1]),
+            float(raw_dec[1]),
+            t_end,
+            deflection=enable_deflection,
+            aberration=enable_light_transit,
+            stellar_aberration=False,
+        )
+        if enable_stellar_aberration:
+            star_ra0, star_dec0, _, _, _, _ = get_los_radec(
+                observer,
+                float(raw_ra[0]),
+                float(raw_dec[0]),
+                t_start,
+                deflection=enable_deflection,
+                aberration=enable_light_transit,
+                stellar_aberration=True,
+            )
+            star_ra1, star_dec1, _, _, _, _ = get_los_radec(
+                observer,
+                float(raw_ra[1]),
+                float(raw_dec[1]),
+                t_end,
+                deflection=enable_deflection,
+                aberration=enable_light_transit,
+                stellar_aberration=True,
+            )
+        else:
+            star_ra0, star_dec0 = ra0, dec0
+            star_ra1, star_dec1 = ra1, dec1
+        ra_vals = np.array([ra0, ra1], dtype=float)
+        dec_vals = np.array([dec0, dec1], dtype=float)
     else:
         logger.error('Unknown track mode: {}.'.format(track_mode))
 
@@ -1771,8 +1914,10 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         track_mode,
         flipud=ssp['fpa']['flip_up_down'],
         fliplr=ssp['fpa']['flip_left_right'],
-        az=az,
-        el=el,
+        az=az if track_mode == 'fixed' else None,
+        el=el if track_mode == 'fixed' else None,
+        ra=ra_vals if track_mode == 'radec' else None,
+        dec=dec_vals if track_mode == 'radec' else None,
         deflection=enable_deflection,
         aberration=enable_light_transit,
         track_apparent=track_apparent,
