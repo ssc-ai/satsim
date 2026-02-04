@@ -86,3 +86,11 @@ def test_simplex_stripe_axis():
 
     stripe_row = simplex_stripe(size=(8, 6), axis='row', seed=5)
     np.testing.assert_allclose(stripe_row[:, 0], stripe_row[:, 1])
+
+
+def test_simplex_center():
+
+    pytest.importorskip("opensimplex")
+
+    img = simplex(size=(64, 64), sigma=0.1, center=1.0, seed=3)
+    np.testing.assert_allclose(np.mean(img), 1.0, atol=1e-3)

@@ -271,6 +271,82 @@ def test_sample_simplex():
     np.testing.assert_allclose(stripe[:, 0], stripe[:, 1])
 
 
+def test_compound_operator_default_add():
+
+    param = {
+        "$compound": [1, 2, 3]
+    }
+
+    out = config.parse_param(copy.deepcopy(param), run_compound=True)
+    assert(out == 6)
+
+
+def test_compound_operator_default_multiply():
+
+    param = {
+        "$compound": [2, 3],
+        "$operator": "multiply"
+    }
+
+    out = config.parse_param(copy.deepcopy(param), run_compound=True)
+    assert(out == 6)
+
+
+def test_compound_operator_item_override():
+
+    param = {
+        "$compound": [
+            2,
+            {
+                "$operator": "multiply",
+                "$sample": "random.uniform",
+                "low": 3.0,
+                "high": 3.0,
+                "seed": 7
+            }
+        ],
+        "$operator": "add"
+    }
+
+    out = config.parse_param(copy.deepcopy(param), run_compound=True)
+    assert(out == 6.0)
+
+
+def test_compound_operator_invalid():
+
+    param = {
+        "$compound": [1, 2],
+        "$operator": "invalid"
+    }
+
+    with pytest.raises(ValueError, match='Unsupported compound operator'):
+        config.parse_param(copy.deepcopy(param), run_compound=True)
+
+
+def test_sample_size_ref_list():
+
+    c = {
+        "version": 1,
+        "sim": {},
+        "fpa": {
+            "height": 4,
+            "width": 3,
+            "gain": {
+                "$sample": "random.normal",
+                "loc": 0.0,
+                "scale": 1.0,
+                "size": [
+                    {"$ref": "fpa.height"},
+                    {"$ref": "fpa.width"}
+                ]
+            }
+        }
+    }
+
+    t = config.transform(copy.deepcopy(c), max_stages=1)
+    assert(t["fpa"]["gain"].shape == (4, 3))
+
+
 def test_function():
 
     c = config.load_json('./tests/config_function.json')
