@@ -304,6 +304,56 @@ def parse_random_sample(param):
             return gen_sample(rtype, **param)
 
 
+def _normalize_compound_operator(op):
+    if op is None:
+        return 'add'
+
+    op_norm = str(op).strip().lower()
+    if op_norm in {'add', '+', 'sum'}:
+        return 'add'
+    if op_norm in {'multiply', 'mul', '*', 'product'}:
+        return 'multiply'
+
+    raise ValueError('Unsupported compound operator: {}'.format(op))
+
+
+def _evaluate_compound(param, dirname, eval_python):
+    compound_key = _rkey(param, '$compound')
+    operator_key = _rkey(param, '$operator') if _has_rkey(param, '$operator') else None
+    default_op = _normalize_compound_operator(param[operator_key] if operator_key else 'add')
+
+    items = param[compound_key]
+    if len(items) == 0:
+        return items
+
+    acc = None
+    for item in items:
+        item_op = default_op
+        item_value = item
+
+        if isinstance(item_value, dict) and _has_rkey(item_value, '$operator'):
+            item_op_key = _rkey(item_value, '$operator')
+            item_op = _normalize_compound_operator(item_value[item_op_key])
+            item_value = copy.deepcopy(item_value)
+            del item_value[item_op_key]
+
+        item_value = parse_param(item_value, dirname, run_generator=True, eval_python=eval_python, run_compound=False)
+        item_value = _transform(item_value, dirname, run_generator=True, eval_python=eval_python, run_compound=False)
+
+        if acc is None:
+            acc = item_value
+            continue
+
+        if item_op == 'add':
+            acc = acc + item_value
+        elif item_op == 'multiply':
+            acc = acc * item_value
+        else:
+            raise ValueError('Unsupported compound operator: {}'.format(item_op))
+
+    return acc
+
+
 def parse_param(param, dirname=None, run_generator=False, eval_python=False, run_compound=False):
     """Parses a parameter and recursively parses any children parameters.
 
@@ -326,20 +376,26 @@ def parse_param(param, dirname=None, run_generator=False, eval_python=False, run
     # traverse dict
     if isinstance(param, dict):
         if _has_rkey(param, '$sample'):
+            if _has_rkey(param, '$operator') and not run_compound:
+                return param
             return parse_random_sample(param)
         elif _has_rkey(param, '$file'):
             with open(os.path.join(dirname, param[_rkey(param, '$file')]), 'rb') as f:
                 return pickle.load(f)
         elif run_generator and '$function' in param:
+            if _has_rkey(param, '$operator') and not run_compound:
+                return param
             val = parse_function(param)()
             save_cache(param, val)
             return val
         elif run_generator and _has_rkey(param, '$generator'):
+            if _has_rkey(param, '$operator') and not run_compound:
+                return param
             return parse_generator(param[_rkey(param, '$generator')])
         elif eval_python and _has_rkey(param, '$pipeline'):
             return parse_function_pipeline(param[_rkey(param, '$pipeline')])
         elif run_compound and _has_rkey(param, '$compound'):
-            val = functools.reduce(lambda x, y: x + y, param['$compound'])
+            val = _evaluate_compound(param, dirname, eval_python)
             save_cache(param, val)
             return val
         else:
@@ -521,10 +577,17 @@ def _ref(config, original):
                 config[k] = functools.reduce(operator.getitem, keys, original)
             else:
                 config[k] = _ref(v, original)
-        elif isinstance(v, list):  # TODO make this recursive
-            for k2 in v:
-                if isinstance(k2, dict):
-                    _ref(k2, original)
+        elif isinstance(v, list):
+            for idx, item in enumerate(v):
+                if isinstance(item, dict):
+                    if _has_rkey(item, '$ref'):
+                        name = _rkey(item, '$ref')
+                        keys = item[name].split('.')
+                        v[idx] = functools.reduce(operator.getitem, keys, original)
+                    else:
+                        _ref(item, original)
+                elif isinstance(item, list):
+                    _ref({'_list': item}, original)
 
     return config
 
