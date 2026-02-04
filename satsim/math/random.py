@@ -1,6 +1,7 @@
 from __future__ import division, print_function, absolute_import
 
 import numpy as np
+import opensimplex
 
 
 def gen_samples_from_bins(bins, density, mult=1.):
@@ -162,11 +163,6 @@ def simplex(size=(1, 1), sigma=1.0, scale=64.0, octaves=4, persistence=0.5,
     if sigma < 0:
         raise ValueError('sigma must be >= 0')
 
-    try:
-        import opensimplex
-    except ImportError as e:
-        raise ImportError('Missing dependency: opensimplex. Install with `pip install opensimplex`.') from e
-
     opensimplex.seed(_simplex_seed(seed))
 
     x = (np.arange(width, dtype=np.float64) + float(x0)) / float(scale)
@@ -215,11 +211,6 @@ def simplex_stripe(size=(1, 1), axis='col', sigma=1.0, scale=256.0, octaves=3,
     axis = axis.lower().strip()
     if axis not in {'col', 'row'}:
         raise ValueError("axis must be 'col' or 'row'")
-
-    try:
-        import opensimplex
-    except ImportError as e:
-        raise ImportError('Missing dependency: opensimplex. Install with `pip install opensimplex`.') from e
 
     opensimplex.seed(_simplex_seed(seed))
 
