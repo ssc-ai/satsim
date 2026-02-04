@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://ssc-ai.github.io/satsim/schema/v1/generators/Compound.json",
     "title": "Compound",
-    "description": "The base schema for a property that runs multiple python function to generate compatible data and adds them together.",
+    "description": "The base schema for a property that runs multiple python function to generate compatible data and combines them together. Items may include an optional $operator to override the default combination.",
     "type": "object",
     "properties": {
         "$compound": {
@@ -10,6 +10,10 @@
             "items": {
                 "$ref": "Function.json"
             }
+        },
+        "$operator": {
+            "description": "Default operator to combine compound items. Supported: add, multiply.",
+            "type": "string"
         }
     },
     "required": ["$compound"],
@@ -41,7 +45,8 @@
                         "direction": 60
                     }
                 }
-            ]
+            ],
+            "$operator": "add"
         }
     ]
 }
