@@ -555,3 +555,48 @@ def test_apply_gcvs5_variability_missing_mode_skip():
     base_mag = np.array([11.0])
     out = gcvs5.apply_gcvs5_variability(base_mag, [0.0], [0.0], 2450000.0, catalog, state, cfg, frame_index=0)
     assert np.isclose(out[0], base_mag[0])
+
+
+def test_get_variable_flags_basic():
+    base_mag = np.array([10.0, 11.0])
+    out = gcvs5.get_variable_flags(base_mag, None, None, None)
+    assert (out == np.array([False, False], dtype=object)).all()
+
+
+def test_get_variable_flags_with_catalog():
+    catalog = gcvs5.load_gcvs5_catalog(FIXTURE, None)
+    idx = 1  # RT And, eclipsing with valid range
+    base_mag = np.array([(catalog.max_mag[idx] + catalog.min_mag[idx]) / 2.0])
+    state = gcvs5.Gcvs5State(
+        match_idx=np.array([idx], dtype=int),
+        phase_offset=np.array([0.0], dtype=float),
+        missing_phase=np.array([np.nan], dtype=float),
+    )
+    cfg = gcvs5.normalize_config({"enabled": True, "template": "auto"})
+    out = gcvs5.get_variable_flags(base_mag, catalog, state, cfg)
+    assert out[0] == "eclipse"
+
+
+def test_get_variable_flags_invalid_range():
+    catalog = _make_catalog(max_mag_limit=np.array(["<"], dtype=object))
+    base_mag = np.array([11.0])
+    state = gcvs5.Gcvs5State(
+        match_idx=np.array([0], dtype=int),
+        phase_offset=np.array([0.0], dtype=float),
+        missing_phase=np.array([np.nan], dtype=float),
+    )
+    out = gcvs5.get_variable_flags(base_mag, catalog, state, {"template": "auto"})
+    assert out[0] is False
+
+
+def test_get_variable_flags_explicit_template():
+    catalog = gcvs5.load_gcvs5_catalog(FIXTURE, None)
+    idx = 1  # RT And
+    base_mag = np.array([(catalog.max_mag[idx] + catalog.min_mag[idx]) / 2.0])
+    state = gcvs5.Gcvs5State(
+        match_idx=np.array([idx], dtype=int),
+        phase_offset=np.array([0.0], dtype=float),
+        missing_phase=np.array([np.nan], dtype=float),
+    )
+    out = gcvs5.get_variable_flags(base_mag, catalog, state, {"template": "sin"})
+    assert out[0] == "sin"
