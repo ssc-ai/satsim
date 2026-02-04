@@ -87,7 +87,6 @@ def lognormal_mu_sigma(mu=1.0, sigma=1.0, size=1, mu_mode='median', seed=None):
     Returns:
         A `ndarray` or `scalar`, the drawn samples from log-normal distribution
     """
-    print("lognormal_mu_sigma called", mu, sigma, size, mu_mode, seed)
     if mu_mode == 'mean':
         lmu = np.log(sigma * sigma / np.sqrt(mu * mu + sigma * sigma))
     else:
