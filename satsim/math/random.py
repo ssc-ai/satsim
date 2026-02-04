@@ -135,7 +135,7 @@ def _simplex_seed(seed):
 
 def simplex(size=(1, 1), sigma=1.0, scale=64.0, octaves=4, persistence=0.5,
             lacunarity=2.0, seed=None, x0=0.0, y0=0.0, normalize=True,
-            dtype=np.float32, shape=None):
+            center=0.0, dtype=np.float32, shape=None):
     """Generate a 2D OpenSimplex fractal Brownian motion (fBm) map.
 
     Args:
@@ -149,6 +149,7 @@ def simplex(size=(1, 1), sigma=1.0, scale=64.0, octaves=4, persistence=0.5,
         x0: `float`, x coordinate offset in pixels
         y0: `float`, y coordinate offset in pixels
         normalize: `bool`, zero-mean and scale to std = sigma
+        center: `float`, output mean value after normalization
         dtype: numpy dtype
 
     Returns:
@@ -192,12 +193,16 @@ def simplex(size=(1, 1), sigma=1.0, scale=64.0, octaves=4, persistence=0.5,
     else:
         out *= float(sigma)
 
+    if center != 0.0:
+        out += float(center)
+
     return out.astype(dtype, copy=False)
 
 
 def simplex_stripe(size=(1, 1), axis='col', sigma=1.0, scale=256.0, octaves=3,
                    persistence=0.6, lacunarity=2.0, seed=None, coord_offset=0.0,
-                   const_coord=0.0, normalize=True, dtype=np.float32, shape=None):
+                   const_coord=0.0, normalize=True, center=0.0, dtype=np.float32,
+                   shape=None):
     """Generate column or row stripe maps using OpenSimplex fBm."""
     height, width = _simplex_shape(size=size, shape=shape)
 
@@ -243,6 +248,9 @@ def simplex_stripe(size=(1, 1), axis='col', sigma=1.0, scale=256.0, octaves=3,
         else:
             line *= float(sigma)
 
+        if center != 0.0:
+            line += float(center)
+
         out = np.tile(line[None, :], (height, 1))
 
     else:
@@ -269,6 +277,9 @@ def simplex_stripe(size=(1, 1), axis='col', sigma=1.0, scale=256.0, octaves=3,
                 line.fill(0.0)
         else:
             line *= float(sigma)
+
+        if center != 0.0:
+            line += float(center)
 
         out = np.tile(line[:, None], (1, width))
 
