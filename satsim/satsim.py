@@ -1232,6 +1232,9 @@ def _gen_psf(ssp, height, width, y_ifov, x_ifov, s_osf):
             psf_os = gen_from_poppy_configuration(height / s_osf, width / s_osf, y_ifov, x_ifov, s_osf, ssp['fpa']['psf'])
             save_cache(ssp['fpa']['psf'], psf_os)
             psf_os = tf.cast(psf_os, tf.float32)
+        elif ssp['fpa']['psf']['mode'] == 'none':
+            logger.debug('PSF disabled (mode=none).')
+            psf_os = None
 
     return psf_os
 
