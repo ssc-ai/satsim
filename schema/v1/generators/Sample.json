@@ -51,7 +51,8 @@
             "sigma": 2.0,
             "scale": 64.0,
             "octaves": 4,
-            "seed": 123
+            "seed": 123,
+            "center": 0.0
         },
         {
             "$sample": "random.simplex_stripe",
@@ -60,7 +61,8 @@
             "sigma": 0.5,
             "scale": 256.0,
             "octaves": 3,
-            "seed": 321
+            "seed": 321,
+            "center": 0.0
         }
     ]
 }
