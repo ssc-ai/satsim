@@ -59,7 +59,7 @@ from satsim.io.czml import save_czml
 from satsim.util import tic, toc, MultithreadedTaskQueue, configure_eager, configure_single_gpu, merge_dicts, Profiler
 from satsim.geometry import analytic_obs
 from satsim.io import analytical
-from satsim.config import transform, save_debug, _transform, save_cache
+from satsim.config import transform, save_debug, _transform, save_cache, _ref, _has_rkey_deep
 from satsim.pipeline import _delta_t, _avg_t
 from satsim import time
 
@@ -109,9 +109,24 @@ def gen_multi(ssp, eager=True, output_dir='./', input_dir='./', device=None, mem
 
         logger.info('Generating set {} of {} on process {}.'.format(set_num + 1, n, pid))
 
+        misc_param = None
+        misc_candidate = pydash.objects.get(ssp, 'fpa.noise.misc', None)
+        if isinstance(misc_candidate, (dict, list)):
+            for key in ('$sample', '$generator', '$function', '$compound'):
+                if _has_rkey_deep(misc_candidate, key):
+                    misc_param = copy.deepcopy(misc_candidate)
+                    break
+
         # transform the original satsim parameters (eval any random sampling)
         # do a deep copy to preserve the original configuration
         tssp, issp = transform(copy.deepcopy(ssp), input_dir, with_debug=True)
+
+        if misc_param is not None:
+            if 'fpa' in tssp:
+                tssp['fpa'].setdefault('noise', {})
+                tssp['fpa']['noise']['_misc_param'] = misc_param
+
+        tssp['_input_dir'] = input_dir
 
         # run the transformed parameters
         dir_name = gen_images(tssp, eager, output_dir, set_num, queue=queue, output_debug=output_debug, set_name=folder_name)
@@ -334,6 +349,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     """
     tic('init')
     logger.debug('Initializing variables.')
+
+    misc_param_cfg = None
+    if 'fpa' in ssp and 'noise' in ssp['fpa']:
+        misc_param_cfg = ssp['fpa']['noise'].pop('_misc_param', None)
 
     # evaluate any python pipelines
     ssp = _transform(ssp, output_dir, False, True)
@@ -736,6 +755,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         _en = tf.cast(en, tf.float32)
         rn_tf = tf.math.sqrt(_rn * _rn + _en * _en)
 
+        misc_param = None
+        misc_tf_static = None
+        input_dir = ssp.get('_input_dir', './')
+        if misc_param_cfg is not None:
+            if isinstance(misc_param_cfg, (dict, list)):
+                misc_param = misc_param_cfg
+            else:
+                misc_tf_static = tf.cast(misc_param_cfg, tf.float32)
+        elif 'fpa' in ssp and 'noise' in ssp['fpa']:
+            misc_static = ssp['fpa']['noise'].get('misc')
+            if misc_static is not None:
+                misc_tf_static = tf.cast(misc_static, tf.float32)
+
         # gen frame and yield
         for frame_num in range(num_frames):
             frame_profiler = pipeline_profiler.child('Frame {} profile'.format(frame_num + 1))
@@ -943,6 +975,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 else:
                     fpa_conv_noise = fpa_conv
                 fpa, rn_gt = add_read_noise(fpa_conv_noise, rn, en)
+                if misc_param is not None:
+                    misc_val = _eval_misc_noise(ssp, misc_param, frame_num, input_dir)
+                    if misc_val is not None:
+                        fpa = fpa + tf.cast(misc_val, tf.float32)
+                elif misc_tf_static is not None:
+                    fpa = fpa + misc_tf_static
 
             # analog to digital
             with frame_profiler.time('a2d'):
@@ -1237,6 +1275,38 @@ def _gen_psf(ssp, height, width, y_ifov, x_ifov, s_osf):
             psf_os = None
 
     return psf_os
+
+
+def _offset_seed_tree(value, offset):
+    if offset == 0:
+        return value
+
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == 'seed' and isinstance(item, numbers.Real) and not isinstance(item, bool):
+                value[key] = item + offset
+            else:
+                _offset_seed_tree(item, offset)
+    elif isinstance(value, list):
+        for item in value:
+            _offset_seed_tree(item, offset)
+
+    return value
+
+
+def _eval_misc_noise(ssp, misc_param, frame_num, input_dir='.'):
+    if misc_param is None:
+        return None
+
+    misc_container = {'misc': copy.deepcopy(misc_param)}
+    _ref(misc_container, ssp)
+
+    _offset_seed_tree(misc_container['misc'], frame_num)
+
+    misc_container = _transform(misc_container, input_dir, run_generator=True, eval_python=False, run_compound=True)
+    misc_container = _transform(misc_container, input_dir, run_generator=False, eval_python=False, run_compound=True)
+
+    return misc_container['misc']
 
 
 def _extract_tle_lines(obs_entry):

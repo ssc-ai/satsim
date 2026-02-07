@@ -70,6 +70,10 @@
                 "electronic": {
                     "description": "The electronic noise of the focal plane array.",
                     "$ref": "types/Float.json"
+                },
+                "misc": {
+                    "description": "Additional noise term regenerated per frame.",
+                    "$ref": "types/Float.json"
                 }
             }
         },
