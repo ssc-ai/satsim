@@ -6,6 +6,20 @@
     "type": ["object"],
     "oneOf": [
         {
+            "description": "No PSF convolution.",
+            "properties": {
+                "mode": {
+                    "const": "none"
+                }
+            },
+            "required": ["mode"],
+            "examples": [
+                {
+                    "mode": "none"
+                }
+            ]
+        },
+        {
             "description": "A Gaussian PSF.",
             "properties": {
                 "mode": {
