@@ -49,6 +49,14 @@ satsim.geometry.ephemeris module
    :undoc-members:
    :show-inheritance:
 
+satsim.geometry.gcvs5 module
+----------------------------
+
+.. automodule:: satsim.geometry.gcvs5
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.geometry.greatcircle module
 ----------------------------------
 

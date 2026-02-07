@@ -3,7 +3,9 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
 
 import os
+import copy
 import numpy as np
+import pytest
 
 from satsim import config
 
@@ -119,6 +121,35 @@ def test_dynamic_json():
     assert(config._has_rkey_deep(t, '$sample') is False)
 
 
+def test_sample_seed_choice_deterministic():
+
+    param = {
+        "$sample": "random.choice",
+        "choices": [1, 2, 3],
+        "seed": 7
+    }
+
+    first = config.parse_random_sample(copy.deepcopy(param))
+    second = config.parse_random_sample(copy.deepcopy(param))
+
+    assert(first == second)
+
+
+def test_sample_seed_list_deterministic():
+
+    param = {
+        "$sample": "random.list",
+        "seed": 7,
+        "length": 3,
+        "value": {"$sample": "random.uniform", "low": 0.0, "high": 1.0}
+    }
+
+    first = config.parse_random_sample(copy.deepcopy(param))
+    second = config.parse_random_sample(copy.deepcopy(param))
+
+    np.testing.assert_allclose(first, second)
+
+
 def test_generator_json(config_file='./tests/config_generator.json'):
 
     c = config.load_json(config_file)
@@ -211,6 +242,109 @@ def test_function_pipeline():
 
     c = config._transform(c, eval_python=True)
     assert(config._has_rkey_deep(c, '$pipeline') is False)
+
+
+def test_sample_simplex():
+
+    pytest.importorskip("opensimplex")
+
+    param = {
+        "$sample": "random.simplex",
+        "size": [8, 6],
+        "sigma": 1.0,
+        "scale": 16.0,
+        "octaves": 2,
+        "seed": 11
+    }
+
+    out = config.parse_random_sample(copy.deepcopy(param))
+    assert(out.shape == (8, 6))
+
+    stripe = config.parse_random_sample({
+        "$sample": "random.simplex_stripe",
+        "size": [8, 6],
+        "axis": "row",
+        "seed": 4
+    })
+
+    assert(stripe.shape == (8, 6))
+    np.testing.assert_allclose(stripe[:, 0], stripe[:, 1])
+
+
+def test_compound_operator_default_add():
+
+    param = {
+        "$compound": [1, 2, 3]
+    }
+
+    out = config.parse_param(copy.deepcopy(param), run_compound=True)
+    assert(out == 6)
+
+
+def test_compound_operator_default_multiply():
+
+    param = {
+        "$compound": [2, 3],
+        "$operator": "multiply"
+    }
+
+    out = config.parse_param(copy.deepcopy(param), run_compound=True)
+    assert(out == 6)
+
+
+def test_compound_operator_item_override():
+
+    param = {
+        "$compound": [
+            2,
+            {
+                "$operator": "multiply",
+                "$sample": "random.uniform",
+                "low": 3.0,
+                "high": 3.0,
+                "seed": 7
+            }
+        ],
+        "$operator": "add"
+    }
+
+    out = config.parse_param(copy.deepcopy(param), run_compound=True)
+    assert(out == 6.0)
+
+
+def test_compound_operator_invalid():
+
+    param = {
+        "$compound": [1, 2],
+        "$operator": "invalid"
+    }
+
+    with pytest.raises(ValueError, match='Unsupported compound operator'):
+        config.parse_param(copy.deepcopy(param), run_compound=True)
+
+
+def test_sample_size_ref_list():
+
+    c = {
+        "version": 1,
+        "sim": {},
+        "fpa": {
+            "height": 4,
+            "width": 3,
+            "gain": {
+                "$sample": "random.normal",
+                "loc": 0.0,
+                "scale": 1.0,
+                "size": [
+                    {"$ref": "fpa.height"},
+                    {"$ref": "fpa.width"}
+                ]
+            }
+        }
+    }
+
+    t = config.transform(copy.deepcopy(c), max_stages=1)
+    assert(t["fpa"]["gain"].shape == (4, 3))
 
 
 def test_function():

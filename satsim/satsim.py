@@ -17,7 +17,7 @@ import numpy as np
 from astropy import units as u
 from sgp4.api import SatrecArray
 
-from satsim.math import signal_to_noise_ratio, mean_degrees, diff_degrees, interp_degrees
+from satsim.math import signal_to_noise_ratio, aperture_signal_to_noise_ratio, mean_degrees, diff_degrees, interp_degrees
 from satsim.geometry.transform import rotate_and_translate, apply_wrap_around
 from satsim.geometry.sprite import load_sprite_from_file
 from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch, crop
@@ -27,6 +27,7 @@ from satsim.image.render import render_piecewise, render_full
 from satsim.geometry.draw import gen_line, gen_line_from_endpoints, gen_curve_from_points
 from satsim.geometry.random import gen_random_points
 from satsim.geometry.sstr7 import query_by_los
+from satsim.geometry import gcvs5
 from satsim.geometry.csvsc import query_by_los as csvsc_query_by_los
 from satsim.geometry.sgp4 import (
     create_satrec,
@@ -40,6 +41,7 @@ from satsim.geometry.astrometric import (
     gen_track,
     get_los,
     get_los_azel,
+    get_los_radec,
     get_analytical_los,
     load_earth,
     optimized_angle_from_los_cosine,
@@ -57,7 +59,7 @@ from satsim.io.czml import save_czml
 from satsim.util import tic, toc, MultithreadedTaskQueue, configure_eager, configure_single_gpu, merge_dicts, Profiler
 from satsim.geometry import analytic_obs
 from satsim.io import analytical
-from satsim.config import transform, save_debug, _transform, save_cache
+from satsim.config import transform, save_debug, _transform, save_cache, _ref, _has_rkey_deep
 from satsim.pipeline import _delta_t, _avg_t
 from satsim import time
 
@@ -107,9 +109,24 @@ def gen_multi(ssp, eager=True, output_dir='./', input_dir='./', device=None, mem
 
         logger.info('Generating set {} of {} on process {}.'.format(set_num + 1, n, pid))
 
+        misc_param = None
+        misc_candidate = pydash.objects.get(ssp, 'fpa.noise.misc', None)
+        if isinstance(misc_candidate, (dict, list)):
+            for key in ('$sample', '$generator', '$function', '$compound'):
+                if _has_rkey_deep(misc_candidate, key):
+                    misc_param = copy.deepcopy(misc_candidate)
+                    break
+
         # transform the original satsim parameters (eval any random sampling)
         # do a deep copy to preserve the original configuration
         tssp, issp = transform(copy.deepcopy(ssp), input_dir, with_debug=True)
+
+        if misc_param is not None:
+            if 'fpa' in tssp:
+                tssp['fpa'].setdefault('noise', {})
+                tssp['fpa']['noise']['_misc_param'] = misc_param
+
+        tssp['_input_dir'] = input_dir
 
         # run the transformed parameters
         dir_name = gen_images(tssp, eager, output_dir, set_num, queue=queue, output_debug=output_debug, set_name=folder_name)
@@ -198,6 +215,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     'astrometrics': astrometrics,
                     'save_pickle': ssp['sim']['save_pickle'],
                     'dtype': a2d_dtype,
+                    'fits_compression': ssp['sim']['fits_compression'],
                     'save_jpeg': ssp['sim']['save_jpeg'],
                     'ground_truth': ground_truth,
                     'segmentation': segmentation,
@@ -332,6 +350,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     tic('init')
     logger.debug('Initializing variables.')
 
+    misc_param_cfg = None
+    if 'fpa' in ssp and 'noise' in ssp['fpa']:
+        misc_param_cfg = ssp['fpa']['noise'].pop('_misc_param', None)
+
     # evaluate any python pipelines
     ssp = _transform(ssp, output_dir, False, True)
 
@@ -409,6 +431,17 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         ssp['fpa']['detection'].setdefault('max_false', 10)
 
     star_mode = ssp['geometry']['stars']['mode']
+    gcvs5_cfg = ssp['geometry']['stars'].get('gcvs5')
+    gcvs5_catalog = None
+    gcvs5_state = None
+    gcvs5_enabled = False
+    if star_mode == 'sstr7' and gcvs5_cfg and gcvs5_cfg.get('enabled', False):
+        gcvs5_cfg = gcvs5.normalize_config(gcvs5_cfg)
+        gcvs5_catalog = gcvs5.load_gcvs5_catalog(
+            gcvs5_cfg['path'],
+            gcvs5_cfg['mag_systems'],
+        )
+        gcvs5_enabled = True
 
     # TODO move defaults to a different file
     if 'velocity_units' in ssp['sim']:
@@ -448,6 +481,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'save_jpeg' not in ssp['sim']:
         ssp['sim']['save_jpeg'] = True
+
+    if 'fits_compression' not in ssp['sim']:
+        ssp['sim']['fits_compression'] = 'none'
 
     if 'save_movie' not in ssp['sim']:
         ssp['sim']['save_movie'] = ssp['sim']['save_jpeg']
@@ -600,7 +636,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 observer = create_topocentric(astrometrics['lat'], astrometrics['lon'], astrometrics['alt'])
                 site_mode = 'ground'
 
-            if 'tle' in ssp['geometry']['site']['track']:
+            if track_mode == 'radec':
+                track = None
+            elif 'tle' in ssp['geometry']['site']['track']:
                 track = create_sgp4(ssp['geometry']['site']['track']['tle'][0], ssp['geometry']['site']['track']['tle'][1])
             elif 'tle1' in ssp['geometry']['site']['track']:
                 track = create_sgp4(ssp['geometry']['site']['track']['tle1'], ssp['geometry']['site']['track']['tle2'])
@@ -613,6 +651,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             astrometrics['object'] = pydash.objects.get(ssp, 'geometry.site.track.name', '')
             track_az = pydash.objects.get(ssp, 'geometry.site.track.az', 0)
             track_el = pydash.objects.get(ssp, 'geometry.site.track.el', 0)
+            track_ra = pydash.objects.get(ssp, 'geometry.site.track.ra', None)
+            track_dec = pydash.objects.get(ssp, 'geometry.site.track.dec', None)
             track_apparent = pydash.objects.get(ssp, 'geometry.site.track.track_apparent', True)
 
             if type(track_az) is not list:
@@ -651,7 +691,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 astrometrics['track_mode'],
                 track_az,
                 track_el,
-                track_apparent,
+                track_apparent=track_apparent,
+                track_ra=track_ra,
+                track_dec=track_dec,
             )
         else:
             observer = None
@@ -660,6 +702,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             track_mode = None
             track_az = None
             track_el = None
+            track_ra = None
+            track_dec = None
             ssp['sim']['star_catalog_query_mode'] = 'at_start'
 
         if ssp['sim']['temporal_osf'] == 'auto':
@@ -681,6 +725,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         else:
             r_stars_os, c_stars_os, m_stars_os = [], [], []
             pe_stars_os = []
+        m_stars_os_base = None
+        variable_stars = None
 
         # gen psf
         if ssp['sim']['psf_sample_frequency'] == 'collect':
@@ -708,6 +754,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         _rn = tf.cast(rn, tf.float32)
         _en = tf.cast(en, tf.float32)
         rn_tf = tf.math.sqrt(_rn * _rn + _en * _en)
+
+        misc_param = None
+        misc_tf_static = None
+        input_dir = ssp.get('_input_dir', './')
+        if misc_param_cfg is not None:
+            if isinstance(misc_param_cfg, (dict, list)):
+                misc_param = misc_param_cfg
+            else:
+                misc_tf_static = tf.cast(misc_param_cfg, tf.float32)
+        elif 'fpa' in ssp and 'noise' in ssp['fpa']:
+            misc_static = ssp['fpa']['noise'].get('misc')
+            if misc_static is not None:
+                misc_tf_static = tf.cast(misc_static, tf.float32)
 
         # gen frame and yield
         for frame_num in range(num_frames):
@@ -740,6 +799,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             t_end = t_start + t_exposure
             ts_start = time.utc_from_list(tt, t_start)
             ts_end = time.utc_from_list(tt, t_end)
+            ts_mid = time.mid(ts_start, ts_end)
+            t_jd = float(time.to_astropy(ts_mid).jd)
             t_start_star = t_start
             t_end_star = t_end
             t_frame_track_start = _parse_start_track_time(track_mode, frame_num, num_frames, ts_collect_start, ts_start)
@@ -763,6 +824,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                     obs, obs_cache, batch_cache,
                                                                                     t_frame_track_start, ts_collect_end, t_start, t_end, tt,
                                                                                     observer, track, track_az, track_el,
+                                                                                    track_ra, track_dec,
                                                                                     zeropoint, s_osf,
                                                                                     h_fpa_os, w_fpa_os,
                                                                                     h_pad_os, w_pad_os,
@@ -781,7 +843,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                                          y_fov_pad, x_fov_pad,
                                                                                                          y_fov, x_fov,
                                                                                                          y_ifov, x_ifov,
-                                                                                                         observer, track, star_rot, astrometrics['track_mode'], track_az, track_el, track_apparent)
+                                                                                                         observer, track, star_rot, astrometrics['track_mode'], track_az, track_el,
+                                                                                                         track_apparent=track_apparent,
+                                                                                                         track_ra=track_ra,
+                                                                                                         track_dec=track_dec)
 
             # if image rendering is disabled, optionally generate analytical observations and return
             if ssp['sim']['mode'] == 'none':
@@ -825,7 +890,15 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     elif star_mode == 'csv':
                         r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
 
-                    pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
+                    m_stars_os_base = np.asarray(m_stars_os, dtype=float)
+                    if gcvs5_enabled and star_mode == 'sstr7':
+                        gcvs5_state = gcvs5.prepare_gcvs5_state(
+                            ra_stars,
+                            dec_stars,
+                            m_stars_os_base,
+                            gcvs5_catalog,
+                            gcvs5_cfg,
+                        )
                     t_start_star = 0.0
                     t_end_star = t_exposure
                     if ssp['sim']['star_catalog_query_mode'] == 'frame':
@@ -837,6 +910,34 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     r_stars_os, c_stars_os, star_bounds = apply_wrap_around(h_fpa_pad_os, w_fpa_pad_os, r_stars_os, c_stars_os, t_start, t_end, star_rot_rate, star_tran_os, star_bounds)
 
             logger.debug('Number of stars {}.'.format(len(r_stars_os)))
+
+            if star_mode in ('sstr7', 'csv'):
+                if m_stars_os_base is None:
+                    m_stars_os_base = np.asarray(m_stars_os, dtype=float)
+
+                variable_stars = np.full(m_stars_os_base.shape, False, dtype=object)
+
+                if gcvs5_enabled and star_mode == 'sstr7' and gcvs5_state is not None:
+                    variable_stars = gcvs5.get_variable_flags(
+                        m_stars_os_base,
+                        gcvs5_catalog,
+                        gcvs5_state,
+                        gcvs5_cfg,
+                    )
+                    m_stars_os = gcvs5.apply_gcvs5_variability(
+                        m_stars_os_base,
+                        ra_stars,
+                        dec_stars,
+                        t_jd,
+                        gcvs5_catalog,
+                        gcvs5_state,
+                        gcvs5_cfg,
+                        frame_index=frame_num,
+                    )
+                else:
+                    m_stars_os = m_stars_os_base
+
+                pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
 
             t_start_star = tf.cast(t_start_star, tf.float32)
             t_end_star = tf.cast(t_end_star, tf.float32)
@@ -874,6 +975,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 else:
                     fpa_conv_noise = fpa_conv
                 fpa, rn_gt = add_read_noise(fpa_conv_noise, rn, en)
+                if misc_param is not None:
+                    misc_val = _eval_misc_noise(ssp, misc_param, frame_num, input_dir)
+                    if misc_val is not None:
+                        fpa = fpa + tf.cast(misc_val, tf.float32)
+                elif misc_tf_static is not None:
+                    fpa = fpa + misc_tf_static
 
             # analog to digital
             with frame_profiler.time('a2d'):
@@ -958,6 +1065,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                             segmentation['object_segmentation'][fpa_segmentation > min_dn] = ob['id']
                             logger.debug('Generated object segmentation {}, {} mv.'.format(ob['id'], ob['mv']))
 
+            snr_aperture_stars = None
+
             # cropped sensor
             crop_bg_tf = bg_tf
             crop_dc_tf = dc_tf
@@ -1001,8 +1110,60 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     opp['rrr'] = opp['rrr'] - cp['height_offset']
                     opp['rcc'] = opp['rcc'] - cp['width_offset']
 
+            if segmentation is not None:
+                def _to_numpy(value):
+                    if hasattr(value, 'numpy'):
+                        return value.numpy()
+                    return np.asarray(value)
+
+                signal_targ_np = _to_numpy(fpa_conv_targ)
+                signal_star_np = _to_numpy(fpa_conv_star)
+                bg_np = _to_numpy(crop_bg_tf)
+                dc_np = _to_numpy(crop_dc_tf)
+                rn_np = _to_numpy(crop_rn_tf)
+
+                background_np = bg_np + dc_np
+
+                if ssp['sim']['calculate_snr']:
+                    targ_signal_np = signal_targ_np
+                    star_signal_np = signal_star_np
+                    targ_background_np = background_np + signal_star_np
+                    star_background_np = background_np + signal_targ_np
+                else:
+                    combined_np = signal_star_np + signal_targ_np
+                    targ_signal_np = combined_np
+                    star_signal_np = combined_np
+                    targ_background_np = background_np
+                    star_background_np = background_np
+
+                if ssp['sim']['num_shot_noise_samples'] is not None:
+                    snr_scale = math.sqrt(ssp['sim']['num_shot_noise_samples'])
+                else:
+                    snr_scale = 1.0
+
+                obj_segmentation = segmentation.get('object_segmentation')
+                if obj_segmentation is not None:
+                    for ob in obs_os_pix:
+                        mask = obj_segmentation == ob['id']
+                        snr_aperture = aperture_signal_to_noise_ratio(targ_signal_np, targ_background_np, rn_np, mask)
+                        ob['snr_aperture'] = float(snr_aperture * snr_scale) if snr_aperture is not None else None
+
+                star_segmentation = segmentation.get('star_segmentation')
+                if star_segmentation is not None and seg_id_stars is not None:
+                    snr_by_star_id = {}
+                    for sid in np.unique(star_segmentation):
+                        if sid <= 0:
+                            continue
+                        mask = star_segmentation == sid
+                        snr_aperture = aperture_signal_to_noise_ratio(star_signal_np, star_background_np, rn_np, mask)
+                        snr_by_star_id[int(sid)] = float(snr_aperture * snr_scale) if snr_aperture is not None else None
+                    seg_ids = np.asarray(seg_id_stars, dtype=int)
+                    snr_aperture_stars = [snr_by_star_id.get(int(sid)) if sid > 0 else None for sid in seg_ids]
+
             if ssp['sim']['star_annotation_threshold'] is not False:
                 pes_stars_os = pe_stars_os / t_exposure
+                if variable_stars is None:
+                    variable_stars = np.full(np.asarray(m_stars_os).shape, False, dtype=object)
                 star_os_pix = {
                     'h': crop_h_fpa_os,
                     'w': crop_w_fpa_os,
@@ -1012,9 +1173,11 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     'cc': c_stars_os,
                     'pe': pes_stars_os,
                     'mv': m_stars_os if m_stars_os is not None else pe_to_mv(zeropoint, pes_stars_os),
+                    'variable': variable_stars,
                     'ra': ra_stars,
                     'dec': dec_stars,
                     'seg_id': seg_id_stars,
+                    'snr_aperture': snr_aperture_stars,
                     't_start': t_start_star,
                     't_end': t_end_star,
                     'rot': star_rot_rate,
@@ -1107,8 +1270,43 @@ def _gen_psf(ssp, height, width, y_ifov, x_ifov, s_osf):
             psf_os = gen_from_poppy_configuration(height / s_osf, width / s_osf, y_ifov, x_ifov, s_osf, ssp['fpa']['psf'])
             save_cache(ssp['fpa']['psf'], psf_os)
             psf_os = tf.cast(psf_os, tf.float32)
+        elif ssp['fpa']['psf']['mode'] == 'none':
+            logger.debug('PSF disabled (mode=none).')
+            psf_os = None
 
     return psf_os
+
+
+def _offset_seed_tree(value, offset):
+    if offset == 0:
+        return value
+
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == 'seed' and isinstance(item, numbers.Real) and not isinstance(item, bool):
+                value[key] = item + offset
+            else:
+                _offset_seed_tree(item, offset)
+    elif isinstance(value, list):
+        for item in value:
+            _offset_seed_tree(item, offset)
+
+    return value
+
+
+def _eval_misc_noise(ssp, misc_param, frame_num, input_dir='.'):
+    if misc_param is None:
+        return None
+
+    misc_container = {'misc': copy.deepcopy(misc_param)}
+    _ref(misc_container, ssp)
+
+    _offset_seed_tree(misc_container['misc'], frame_num)
+
+    misc_container = _transform(misc_container, input_dir, run_generator=True, eval_python=False, run_compound=True)
+    misc_container = _transform(misc_container, input_dir, run_generator=False, eval_python=False, run_compound=True)
+
+    return misc_container['misc']
 
 
 def _extract_tle_lines(obs_entry):
@@ -1222,7 +1420,7 @@ def _batch_sgp4_fov_filter(obs, obs_cache, active_flags, updated_flags, has_even
 def _gen_objects(ssp, render_mode,
                  obs, obs_cache, batch_cache,
                  tc_start, tc_end, t_start, t_end, tt,
-                 observer, track, track_az, track_el,
+                 observer, track, track_az, track_el, track_ra, track_dec,
                  zeropoint, s_osf,
                  h_fpa_os, w_fpa_os,
                  h_pad_os, w_pad_os,
@@ -1253,13 +1451,15 @@ def _gen_objects(ssp, render_mode,
 
     az_arr = None
     el_arr = None
+    ra_arr = None
+    dec_arr = None
     ra_c = None
     dec_c = None
     fov_half_diag_pad_cos = None
 
-    if enable_fov_filter:
-        if track_mode == 'fixed':
-            az_arr, el_arr = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
+    if track_mode == 'fixed':
+        az_arr, el_arr = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
+        if enable_fov_filter:
             ra_c, dec_c, _, _, _, _ = get_los_azel(
                 observer,
                 az_arr[1],
@@ -1269,16 +1469,32 @@ def _gen_objects(ssp, render_mode,
                 aberration=track_aberration,
                 stellar_aberration=enable_stellar_aberration,
             )
-        else:
-            ra_c, dec_c, _, _, _, _ = get_los(
-                observer,
-                track,
-                ts_mid,
-                deflection=track_deflection,
-                aberration=track_aberration,
-                stellar_aberration=enable_stellar_aberration,
-            )
+    elif track_mode == 'radec':
+        ra_arr, dec_arr = _calculate_apparent_ra_dec(
+            tc_start,
+            tc_end,
+            [ts_start, ts_mid, ts_end],
+            track_ra,
+            track_dec,
+            observer,
+            deflection=track_deflection,
+            aberration=track_aberration,
+            stellar_aberration=False,
+        )
+        if enable_fov_filter:
+            ra_c = float(ra_arr[1])
+            dec_c = float(dec_arr[1])
+    elif enable_fov_filter:
+        ra_c, dec_c, _, _, _, _ = get_los(
+            observer,
+            track,
+            ts_mid,
+            deflection=track_deflection,
+            aberration=track_aberration,
+            stellar_aberration=enable_stellar_aberration,
+        )
 
+    if enable_fov_filter:
         if fov_filter_radius is not None:
             fov_half_diag_pad = fov_filter_radius
         else:
@@ -1409,29 +1625,6 @@ def _gen_objects(ssp, render_mode,
                     ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                     obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
 
-            if az_arr is None:
-                az_arr, el_arr = _calculate_az_el(tc_start, tc_end, [ts_start, ts_mid, ts_end], track_az, track_el)
-                if enable_fov_filter and ra_c is None:
-                    if track_mode == 'fixed':
-                        ra_c, dec_c, _, _, _, _ = get_los_azel(
-                            observer,
-                            az_arr[1],
-                            el_arr[1],
-                            ts_mid,
-                            deflection=track_deflection,
-                            aberration=track_aberration,
-                            stellar_aberration=enable_stellar_aberration,
-                        )
-                    else:
-                        ra_c, dec_c, _, _, _, _ = get_los(
-                            observer,
-                            track,
-                            ts_mid,
-                            deflection=track_deflection,
-                            aberration=track_aberration,
-                            stellar_aberration=enable_stellar_aberration,
-                        )
-
             o_offset = [0.0, 0.0]
             if 'offset' in o:
                 o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
@@ -1467,6 +1660,8 @@ def _gen_objects(ssp, render_mode,
                         fliplr=ssp['fpa']['flip_left_right'],
                         az=az_arr,
                         el=el_arr,
+                        ra=ra_arr,
+                        dec=dec_arr,
                         deflection=enable_deflection,
                         aberration=enable_light_transit,
                         track_apparent=track_apparent,  # enable apparent correction in pointing
@@ -1610,14 +1805,96 @@ def _calculate_az_el(tc_start, tc_end, t_curr, track_az, track_el):
     return az, el
 
 
+def _coerce_track_series(values):
+    if values is None:
+        return None
+    if isinstance(values, np.ndarray):
+        values = values.tolist()
+    if isinstance(values, (list, tuple)):
+        return [float(v) for v in values]
+    return [float(values)]
+
+
+def _unwrap_degrees_series(values):
+    unwrapped = [values[0]]
+    for v in values[1:]:
+        unwrapped.append(unwrapped[-1] + diff_degrees(unwrapped[-1], v))
+    return np.asarray(unwrapped, dtype=float)
+
+
+def _interp_track_series(values, t_curr, t_start, t_end, is_angle=False):
+    if len(values) == 1 or t_start.tt == t_end.tt:
+        return np.asarray([values[0]] * len(t_curr), dtype=float)
+
+    t_vals = np.asarray([t.tt for t in t_curr], dtype=float)
+
+    if len(values) == 2:
+        if is_angle:
+            return interp_degrees(t_vals, t_start.tt, t_end.tt, values[0], values[1])
+        return np.interp(t_vals, [t_start.tt, t_end.tt], [values[0], values[1]])
+
+    frac = (t_vals - t_start.tt) / (t_end.tt - t_start.tt)
+    frac = np.clip(frac, 0.0, 1.0)
+    xx = np.linspace(0.0, 1.0, len(values))
+
+    if is_angle:
+        values = _unwrap_degrees_series(values)
+        return np.interp(frac, xx, values) % 360.0
+
+    return np.interp(frac, xx, values)
+
+
+def _calculate_ra_dec(tc_start, tc_end, t_curr, track_ra, track_dec):
+    ra_vals = _coerce_track_series(track_ra)
+    dec_vals = _coerce_track_series(track_dec)
+
+    if ra_vals is None or dec_vals is None:
+        raise ValueError('track.ra and track.dec must be provided for radec tracking')
+
+    if len(ra_vals) != len(dec_vals):
+        if len(ra_vals) == 1:
+            ra_vals = ra_vals * len(dec_vals)
+        elif len(dec_vals) == 1:
+            dec_vals = dec_vals * len(ra_vals)
+        else:
+            raise ValueError('track.ra and track.dec lengths must match for radec tracking')
+
+    ra = _interp_track_series(ra_vals, t_curr, tc_start, tc_end, is_angle=True)
+    dec = _interp_track_series(dec_vals, t_curr, tc_start, tc_end, is_angle=False)
+
+    return ra, dec
+
+
+def _calculate_apparent_ra_dec(tc_start, tc_end, t_curr, track_ra, track_dec, observer,
+                               deflection=False, aberration=True, stellar_aberration=False):
+    raw_ra, raw_dec = _calculate_ra_dec(tc_start, tc_end, t_curr, track_ra, track_dec)
+
+    ra_vals = []
+    dec_vals = []
+    for r, d, t in zip(raw_ra, raw_dec, t_curr):
+        ra_i, dec_i, _, _, _, _ = get_los_radec(
+            observer,
+            float(r),
+            float(d),
+            t,
+            deflection=deflection,
+            aberration=aberration,
+            stellar_aberration=stellar_aberration,
+        )
+        ra_vals.append(ra_i)
+        dec_vals.append(dec_i)
+
+    return np.asarray(ra_vals, dtype=float), np.asarray(dec_vals, dtype=float)
+
+
 def _calculate_star_position_and_motion(ssp, astrometrics,
                                         ts_collect_start, ts_collect_end, t_start, t_end, t_exposure,
                                         h_fpa_pad_os, w_fpa_pad_os,
                                         y_fov_pad, x_fov_pad,
                                         y_fov, x_fov,
                                         y_ifov, x_ifov,
-                                        observer, track, star_rot, track_mode, track_az, track_el, track_apparent=True):
-    az, el = _calculate_az_el(ts_collect_start, ts_collect_end, [t_start, t_end], track_az, track_el)
+                                        observer, track, star_rot, track_mode, track_az, track_el,
+                                        track_apparent=True, track_ra=None, track_dec=None):
     enable_deflection = ssp['sim']['enable_deflection']
     enable_light_transit = ssp['sim']['enable_light_transit']
     enable_stellar_aberration = ssp['sim']['enable_stellar_aberration']
@@ -1626,6 +1903,11 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         enable_deflection = False
         enable_light_transit = False
 
+    az = None
+    el = None
+    ra_vals = None
+    dec_vals = None
+
     if track_mode == 'rate':
         track_target = [track]
         star_ra0, star_dec0, _, _, _, _ = get_los(observer, track, t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
@@ -1633,6 +1915,7 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
         ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, t_end, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
     elif track_mode == 'fixed':
+        az, el = _calculate_az_el(ts_collect_start, ts_collect_end, [t_start, t_end], track_az, track_el)
         track_target = []
         star_ra0, star_dec0, _, _, _, _ = get_los_azel(observer, az[0], el[0], t_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
         star_ra1, star_dec1, _, _, _, _ = get_los_azel(observer, az[1], el[1], t_end, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
@@ -1644,6 +1927,51 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         star_ra1, star_dec1, _, _, _, _ = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=enable_stellar_aberration)
         ra0, dec0, dis0, az0, el0, los0 = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
         ra1, dec1, dis1, az1, el1, los1 = get_los(observer, track, ts_collect_start, deflection=enable_deflection, aberration=enable_light_transit, stellar_aberration=False)
+    elif track_mode == 'radec':
+        track_target = []
+        raw_ra, raw_dec = _calculate_ra_dec(ts_collect_start, ts_collect_end, [t_start, t_end], track_ra, track_dec)
+        ra0, dec0, dis0, az0, el0, _ = get_los_radec(
+            observer,
+            float(raw_ra[0]),
+            float(raw_dec[0]),
+            t_start,
+            deflection=enable_deflection,
+            aberration=enable_light_transit,
+            stellar_aberration=False,
+        )
+        ra1, dec1, dis1, az1, el1, _ = get_los_radec(
+            observer,
+            float(raw_ra[1]),
+            float(raw_dec[1]),
+            t_end,
+            deflection=enable_deflection,
+            aberration=enable_light_transit,
+            stellar_aberration=False,
+        )
+        if enable_stellar_aberration:
+            star_ra0, star_dec0, _, _, _, _ = get_los_radec(
+                observer,
+                float(raw_ra[0]),
+                float(raw_dec[0]),
+                t_start,
+                deflection=enable_deflection,
+                aberration=enable_light_transit,
+                stellar_aberration=True,
+            )
+            star_ra1, star_dec1, _, _, _, _ = get_los_radec(
+                observer,
+                float(raw_ra[1]),
+                float(raw_dec[1]),
+                t_end,
+                deflection=enable_deflection,
+                aberration=enable_light_transit,
+                stellar_aberration=True,
+            )
+        else:
+            star_ra0, star_dec0 = ra0, dec0
+            star_ra1, star_dec1 = ra1, dec1
+        ra_vals = np.array([ra0, ra1], dtype=float)
+        dec_vals = np.array([dec0, dec1], dtype=float)
     else:
         logger.error('Unknown track mode: {}.'.format(track_mode))
 
@@ -1663,8 +1991,10 @@ def _calculate_star_position_and_motion(ssp, astrometrics,
         track_mode,
         flipud=ssp['fpa']['flip_up_down'],
         fliplr=ssp['fpa']['flip_left_right'],
-        az=az,
-        el=el,
+        az=az if track_mode == 'fixed' else None,
+        el=el if track_mode == 'fixed' else None,
+        ra=ra_vals if track_mode == 'radec' else None,
+        dec=dec_vals if track_mode == 'radec' else None,
         deflection=enable_deflection,
         aberration=enable_light_transit,
         track_apparent=track_apparent,

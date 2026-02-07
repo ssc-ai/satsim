@@ -41,6 +41,12 @@ def test_render_full():
 
     render_separate = True
     obs_model = None
+    star_render_mode = 'transform'
+    img = render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, None, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, obs_model=obs_model, star_render_mode=star_render_mode)
+    np.testing.assert_almost_equal(tf.reduce_sum(img[0]), 1500, decimal=3)
+
+    render_separate = True
+    obs_model = None
     star_render_mode = 'fft'
     img = render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, obs_model=obs_model, star_render_mode=star_render_mode)
     np.testing.assert_almost_equal(tf.reduce_sum(img[0]), 1500, decimal=3)

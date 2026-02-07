@@ -9,8 +9,36 @@ from datetime import datetime, timedelta
 
 from satsim import __version__
 
+_COMPRESSION_TYPES = {
+    'none': None,
+    'gzip': 'GZIP_1',
+    'gzip2': 'GZIP_2',
+    'rice': 'RICE_1',
+    'hcompress': 'HCOMPRESS_1',
+    'plio': 'PLIO_1',
+}
 
-def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, overwrite=False, dtype='uint16', astrometrics=None):
+
+def _normalize_compression(fits_compression):
+    if fits_compression is None or fits_compression is False:
+        return None
+    if not isinstance(fits_compression, str):
+        raise ValueError('fits_compression must be a string or None.')
+
+    value = fits_compression.strip()
+    if not value:
+        return None
+
+    key = value.lower()
+    if key in _COMPRESSION_TYPES:
+        return _COMPRESSION_TYPES[key]
+
+    valid = ', '.join(sorted(_COMPRESSION_TYPES.keys()))
+    raise ValueError('Unknown FITS compression type: {}. Valid values: {}.'.format(
+        fits_compression, valid))
+
+
+def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, overwrite=False, dtype='uint16', astrometrics=None, fits_compression=None):
     """Save a SatNet compatible FITS file.
 
     Args:
@@ -21,6 +49,8 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
         header: `dict`, placeholder, not implemented
         overwrite: `boolean`, if True overwrite file if it exists
         dtype: `string`, 'int16', 'uint16', 'int32', 'uint32', or 'float32'. default: 'int16'
+        fits_compression: `string`, FITS compression type. Valid values: 'none', 'gzip',
+            'gzip2', 'rice', 'hcompress', 'plio'.
     """
     
     ver = 'SATSIM {}'.format(__version__)
@@ -28,7 +58,11 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     # copy data to be thread safe
     fpa_copy = np.copy(fpa)
 
-    hdu = fits.PrimaryHDU(fpa_copy)
+    compression_type = _normalize_compression(fits_compression)
+    if compression_type:
+        hdu = fits.CompImageHDU(fpa_copy, compression_type=compression_type)
+    else:
+        hdu = fits.PrimaryHDU(fpa_copy)
     hdr = hdu.header
 
     if astrometrics is not None and 'time' in astrometrics:
@@ -110,16 +144,21 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     hdr['CTYPE2']   = 'DEC--TAN'
     hdr['CRVAL1']   = get_or_default('ra', 0)
     hdr['CRVAL2']   = get_or_default('dec', 0)
-    hdr['CRPIX1']   = fpa.shape[0] / 2.0
-    hdr['CRPIX2']   = fpa.shape[1] / 2.0
-    hdr['CDELT1']   = get_or_default('x_ifov', 0)
-    hdr['CDELT2']   = get_or_default('y_ifov', 0)
-    hdr['CD1_1']    = get_or_default('x_ifov', 0)
-    hdr['CD1_2']    = 0.0
-    hdr['CD2_1']    = 0.0
-    hdr['CD2_2']    = get_or_default('y_ifov', 0)
-    hdr['CROTA1']   = 0.0
-    hdr['CROTA2']   = 0.0
+    hdr['CRPIX1']   = fpa.shape[1] / 2.0
+    hdr['CRPIX2']   = fpa.shape[0] / 2.0
+    x_ifov = get_or_default('x_ifov', 0)
+    y_ifov = get_or_default('y_ifov', 0)
+    roll = float(get_or_default('roll', 0.0))
+    theta = np.deg2rad(roll)
+    hdr['CDELT1']   = x_ifov
+    hdr['CDELT2']   = y_ifov
+    # Apply focal plane roll to CD matrix (matches astropy CROTA handling).
+    hdr['CD1_1']    = x_ifov * np.cos(theta)
+    hdr['CD1_2']    = -y_ifov * np.sin(theta)
+    hdr['CD2_1']    = x_ifov * np.sin(theta)
+    hdr['CD2_2']    = y_ifov * np.cos(theta)
+    hdr['CROTA1']   = roll
+    hdr['CROTA2']   = roll
     hdr['EQUINOX']  = 2000.0
     hdr["TRKMODE"]  = get_or_default('track_mode')
 

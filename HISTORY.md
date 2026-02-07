@@ -1,6 +1,21 @@
 History
 =======
 
+0.23.0
+---------------------
+
+* Add FITS compression support. Set `sim.fits_compression`.
+* Add seed support for deterministic sampling in random functions. Use `seed` on `$sample`.
+* Add simplex gradient noise and lognormal_mu_sigma random. Use `$sample: random.simplex` or `random.lognormal_mu_sigma`, with optional `center`.
+* Add GCVS5 star variability catalog support. Configure `geometry.stars.gcvs5.*`.
+* Add RA/Dec tracking support. Set `geometry.site.track.mode` to `radec`.
+* Add compound operator normalization/evaluation and schema updates. Use `$compound` with `$operator`.
+* Enhance radial_cos2d with falloff parameters. Set `falloff_height`, `falloff_width`, or `falloff_xy`.
+* Implement PSF `none` mode to bypass convolution. Set `fpa.psf.mode: none`.
+* Refactor FITS header generation to incorporate focal plane roll and fix CD/CRPIX.
+* Add support for additional noise term in FPA and evaluation tests. Configure `fpa.noise.misc`.
+
+
 0.22.2
 ---------------------
 

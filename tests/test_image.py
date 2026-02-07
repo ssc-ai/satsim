@@ -206,6 +206,23 @@ def test_radial_cos2d():
     np.testing.assert_almost_equal(image[256,256], 0)
 
 
+def test_radial_cos2d_falloff_size():
+
+    h = 5
+    w = 9
+
+    image = radial_cos2d(h, w, 1.0, 1.0, 1.0, clip=None, falloff_height=w, falloff_width=w)
+    image_xy = radial_cos2d(h, w, 1.0, 1.0, 1.0, clip=None, falloff_xy=w)
+
+    assert(image.shape[0] == h)
+    assert(image.shape[1] == w)
+    np.testing.assert_allclose(image, image_xy)
+
+    center_r = h // 2
+    center_c = w // 2
+    np.testing.assert_allclose(image[center_r, center_c + 1], image[center_r + 1, center_c])
+
+
 def test_radial_polygrid2d():
 
     h = 512

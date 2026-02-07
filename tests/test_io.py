@@ -5,6 +5,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflo
 import os
 
 import numpy as np
+import pytest
 from astropy.io import fits as afits
 
 from satsim.io import fits, image
@@ -56,6 +57,43 @@ def test_save_fits_uint32():
 def test_save_fits_int32():
 
     test_save_fits('int32', '>i4')
+
+
+def test_save_fits_compressed():
+
+    a = np.zeros([5,5])
+    a[0,4] = 1
+
+    filename = './fits_file_for_test_compressed.fits'
+    if os.path.exists(filename):
+        os.remove(filename)
+
+    hdu, hdr = fits.save(filename, a, overwrite=True, fits_compression='gzip')
+
+    assert(os.path.exists(filename))
+
+    with afits.open(filename) as hdul:
+        hdulhdr = hdul[1].header
+        hduldata = hdul[1].data
+        assert(isinstance(hdul[1], afits.CompImageHDU))
+        assert(hdul[1].compression_type == 'GZIP_1')
+        assert(hdulhdr['EXPTIME'] == hdr['EXPTIME'])
+        np.testing.assert_array_equal(a, hduldata)
+
+    os.remove(filename)
+
+
+def test_save_fits_invalid_compression():
+
+    a = np.zeros([5,5])
+    filename = './fits_file_for_test_invalid_compress.fits'
+    if os.path.exists(filename):
+        os.remove(filename)
+
+    with pytest.raises(ValueError, match='Unknown FITS compression type'):
+        fits.save(filename, a, overwrite=True, fits_compression='gzip_1')
+
+    assert(not os.path.exists(filename))
 
 
 def test_save_image():

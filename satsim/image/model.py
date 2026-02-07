@@ -28,7 +28,8 @@ def polygrid2d(height, width, c, low=-1, high=1):
     return np.polynomial.polynomial.polygrid2d(x=rr, y=cc, c=c)
 
 
-def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None, mult=1.0, clip=[0.0, 1.0]):
+def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None, mult=1.0, clip=[0.0, 1.0],
+                 falloff_height=None, falloff_width=None, falloff_xy=None):
     """ Generates a cosine wave radially from the center of the image. Typically
     used to simulate optical vignette or irradiance falloff.
 
@@ -36,14 +37,21 @@ def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None
         height: `int`, image height.
         width: `int`, image width.
         y_scale: `float`, the fraction of the cosine wave to generate across the
-            rows from the center to the edge.
+            rows from the center to the edge of the falloff height.
         x_scale: `float`, the fraction of the cosine wave to generate across the
-            columns from the center to the edge.
-        scale: `float`, if not None set y_scale and x_scale to this.
+            columns from the center to the edge of the falloff width.
         power: `float`, the exponent of the cosine. Set to 4 to generate a
             "cosine fourth" irradiance falloff map. default=4
+        xy_scale: `float`, if not None set y_scale and x_scale to this.
         mult: `float`, multiply cosine. default=1
         clip: `array`, clip returned value by minimum and maximum. default=[0.0, 1.0]
+        falloff_height: `float`, effective height (in pixels) of the falloff
+            grid. If larger than `height`, the vignette extends beyond the
+            image; if smaller, the falloff is more aggressive. default=None
+        falloff_width: `float`, effective width (in pixels) of the falloff
+            grid. If larger than `width`, the vignette extends beyond the
+            image; if smaller, the falloff is more aggressive. default=None
+        falloff_xy: `float`, if not None set falloff_height and falloff_width to this.
 
     Returns:
         An `array`, a two dimensional image.
@@ -52,8 +60,25 @@ def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None
         y_scale = xy_scale
         x_scale = xy_scale
 
-    x = np.linspace(-np.pi * x_scale, np.pi * x_scale, width)
-    y = np.linspace(-np.pi * y_scale, np.pi * y_scale, height)
+    if falloff_xy is not None:
+        falloff_height = falloff_xy
+        falloff_width = falloff_xy
+
+    if falloff_height is None:
+        falloff_height = height
+    if falloff_width is None:
+        falloff_width = width
+
+    def _axis_coords(size, falloff_size, scale):
+        center = (size - 1) / 2.0
+        if falloff_size is None or falloff_size <= 1:
+            step = 0.0
+        else:
+            step = 2 * np.pi * scale / (falloff_size - 1)
+        return (np.arange(size, dtype=np.float64) - center) * step
+
+    x = _axis_coords(width, falloff_width, x_scale)
+    y = _axis_coords(height, falloff_height, y_scale)
     xx, yy = np.meshgrid(x, y)
     z = mult * np.cos(np.sqrt(xx ** 2 + yy ** 2)) ** power
 

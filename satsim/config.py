@@ -9,6 +9,7 @@ import importlib
 import collections
 import operator
 import functools
+import numpy as np
 import diskcache
 
 from satsim.math.random import gen_sample
@@ -16,6 +17,53 @@ from satsim.math.random import gen_sample
 logger = logging.getLogger(__name__)
 caches = {}
 _config = {}
+_SEED_MAX = 2 ** 32
+
+
+def _resolve_seed(param):
+    """Resolve a seed value from a `$sample` parameter.
+
+    Handles literal seeds and seeds defined via nested config structures
+    (including `$ref` and `$sample`), returning the resolved seed or `None`.
+    """
+    if 'seed' not in param:
+        return None
+
+    seed = param['seed']
+    if seed is None:
+        return None
+
+    if isinstance(seed, (dict, list)):
+        seed_param = {'seed': seed}
+        seed_param = _ref(seed_param, _config)
+        seed_param = _transform(seed_param)
+        seed = seed_param['seed']
+
+    return seed
+
+
+def _apply_seed_tree(param, rng):
+    """Populate missing `seed` fields for nested `$sample` entries.
+
+    Uses the provided RNG to generate deterministic per-node seeds, without
+    overriding explicit seeds.
+    """
+    if isinstance(param, dict):
+        if _has_rkey(param, '$sample'):
+            if 'seed' not in param or param['seed'] is None:
+                param['seed'] = int(rng.randint(0, _SEED_MAX))
+
+        for k, v in param.items():
+            if k == 'seed':
+                continue
+            if isinstance(v, (dict, list)):
+                _apply_seed_tree(v, rng)
+    elif isinstance(param, list):
+        for v in param:
+            if isinstance(v, (dict, list)):
+                _apply_seed_tree(v, rng)
+
+    return param
 
 
 def parse_function(param):
@@ -166,7 +214,8 @@ def parse_generator(param):
 def parse_random_sample(param):
     """Parses a random sample parameter and returns a sample. The value of
     the key `$sample` should be the format `random.DISTRIBUTION`, where
-    `DISTRIBUTION` is a NumPy random distribution. For example::
+    `DISTRIBUTION` is a NumPy random distribution or a custom type such as
+    `simplex` or `simplex_stripe`. For example::
 
         p = { "$sample": "random.uniform", "low": 5.0, "high": 22.0 }
         x = parse_random_sample(p)
@@ -190,6 +239,9 @@ def parse_random_sample(param):
         x = parse_random_sample(p)
         # x will a list of length 5, i.e. x == [7,5,8,5,1]
 
+    If `seed` is provided, the random sample will be deterministic for that
+    field only.
+
     Args:
         param: `dict`, random sample parameter
 
@@ -198,27 +250,45 @@ def parse_random_sample(param):
     """
     compat_name = _rkey(param, '$sample')
     stype, rtype = param[compat_name].split('.')
+    seed = _resolve_seed(param)
 
     if stype == 'random':
 
         # handle special types first
         if rtype == 'choice':
+            rng = np.random.RandomState(seed)
             c = param['choices']
-            return c[gen_sample('randint', low=0, high=len(c))]
+            choice = copy.deepcopy(c[rng.randint(0, len(c))])
+            if seed is not None:
+                _apply_seed_tree(choice, rng)
+            return _transform(parse_param(choice))
         # elif rtype == 'bins': #TODO
         #     return param
         elif rtype == 'list':
             samples = []
+            rng = None
+            if seed is not None:
+                rng = np.random.RandomState(seed)
+                length_param = _apply_seed_tree(copy.deepcopy(param['length']), rng)
+                list_length = parse_param(length_param)
+            else:
+                list_length = parse_param(param['length'])
             if 'list' in param:  # backward compat
                 logger.warning('Deprecated list replacement. Use $sample keyword inline instead.')
-                for i in range(parse_param(param['length'])):
-                    samples.append(_transform(copy.deepcopy(param['list'])))
+                for i in range(list_length):
+                    value = copy.deepcopy(param['list'])
+                    if seed is not None:
+                        _apply_seed_tree(value, rng)
+                    samples.append(_transform(parse_param(value)))
                 param['list'] = samples
                 del param[compat_name]
                 del param['length']
             else:
-                for i in range(parse_param(param['length'])):
-                    samples.append(_transform(copy.deepcopy(param['value'])))
+                for i in range(list_length):
+                    value = copy.deepcopy(param['value'])
+                    if seed is not None:
+                        _apply_seed_tree(value, rng)
+                    samples.append(_transform(parse_param(value)))
                 del param[compat_name]
                 param = samples
 
@@ -226,10 +296,62 @@ def parse_random_sample(param):
 
         # everything else is numpy random
         else:
+            if seed is not None:
+                _apply_seed_tree(param, np.random.RandomState(seed))
             del param[compat_name]
             param = _ref(param, _config)
             param = _transform(param)
             return gen_sample(rtype, **param)
+
+
+def _normalize_compound_operator(op):
+    if op is None:
+        return 'add'
+
+    op_norm = str(op).strip().lower()
+    if op_norm in {'add', '+', 'sum'}:
+        return 'add'
+    if op_norm in {'multiply', 'mul', '*', 'product'}:
+        return 'multiply'
+
+    raise ValueError('Unsupported compound operator: {}'.format(op))
+
+
+def _evaluate_compound(param, dirname, eval_python):
+    compound_key = _rkey(param, '$compound')
+    operator_key = _rkey(param, '$operator') if _has_rkey(param, '$operator') else None
+    default_op = _normalize_compound_operator(param[operator_key] if operator_key else 'add')
+
+    items = param[compound_key]
+    if len(items) == 0:
+        return items
+
+    acc = None
+    for item in items:
+        item_op = default_op
+        item_value = item
+
+        if isinstance(item_value, dict) and _has_rkey(item_value, '$operator'):
+            item_op_key = _rkey(item_value, '$operator')
+            item_op = _normalize_compound_operator(item_value[item_op_key])
+            item_value = copy.deepcopy(item_value)
+            del item_value[item_op_key]
+
+        item_value = parse_param(item_value, dirname, run_generator=True, eval_python=eval_python, run_compound=False)
+        item_value = _transform(item_value, dirname, run_generator=True, eval_python=eval_python, run_compound=False)
+
+        if acc is None:
+            acc = item_value
+            continue
+
+        if item_op == 'add':
+            acc = acc + item_value
+        elif item_op == 'multiply':
+            acc = acc * item_value
+        else:
+            raise ValueError('Unsupported compound operator: {}'.format(item_op))
+
+    return acc
 
 
 def parse_param(param, dirname=None, run_generator=False, eval_python=False, run_compound=False):
@@ -254,20 +376,26 @@ def parse_param(param, dirname=None, run_generator=False, eval_python=False, run
     # traverse dict
     if isinstance(param, dict):
         if _has_rkey(param, '$sample'):
+            if _has_rkey(param, '$operator') and not run_compound:
+                return param
             return parse_random_sample(param)
         elif _has_rkey(param, '$file'):
             with open(os.path.join(dirname, param[_rkey(param, '$file')]), 'rb') as f:
                 return pickle.load(f)
         elif run_generator and '$function' in param:
+            if _has_rkey(param, '$operator') and not run_compound:
+                return param
             val = parse_function(param)()
             save_cache(param, val)
             return val
         elif run_generator and _has_rkey(param, '$generator'):
+            if _has_rkey(param, '$operator') and not run_compound:
+                return param
             return parse_generator(param[_rkey(param, '$generator')])
         elif eval_python and _has_rkey(param, '$pipeline'):
             return parse_function_pipeline(param[_rkey(param, '$pipeline')])
         elif run_compound and _has_rkey(param, '$compound'):
-            val = functools.reduce(lambda x, y: x + y, param['$compound'])
+            val = _evaluate_compound(param, dirname, eval_python)
             save_cache(param, val)
             return val
         else:
@@ -449,10 +577,17 @@ def _ref(config, original):
                 config[k] = functools.reduce(operator.getitem, keys, original)
             else:
                 config[k] = _ref(v, original)
-        elif isinstance(v, list):  # TODO make this recursive
-            for k2 in v:
-                if isinstance(k2, dict):
-                    _ref(k2, original)
+        elif isinstance(v, list):
+            for idx, item in enumerate(v):
+                if isinstance(item, dict):
+                    if _has_rkey(item, '$ref'):
+                        name = _rkey(item, '$ref')
+                        keys = item[name].split('.')
+                        v[idx] = functools.reduce(operator.getitem, keys, original)
+                    else:
+                        _ref(item, original)
+                elif isinstance(item, list):
+                    _ref({'_list': item}, original)
 
     return config
 

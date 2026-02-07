@@ -160,6 +160,22 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
     # render point source targets
     fpa_os_w_targets = add_counts(fpa_os_w_targets, r_obs_os, c_obs_os, pe_obs_os, h_pad_os_div2, w_pad_os_div2)
 
+    if psf_os is None:
+        if render_separate:
+            fpa_conv_crop = crop(fpa_os_w_stars, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
+            fpa_conv_star = downsample(fpa_conv_crop, s_osf, 'pool')
+
+            fpa_conv_crop_targ = crop(fpa_os_w_targets, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
+            fpa_conv_targ = downsample(fpa_conv_crop_targ, s_osf, 'pool')
+
+            return fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, None, fpa_conv_crop
+
+        fpa_os_sum = fpa_os_w_stars + fpa_os_w_targets
+        fpa_conv_crop = crop(fpa_os_sum, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
+        fpa_conv_ds = downsample(fpa_conv_crop, s_osf, 'pool')
+
+        return fpa_conv_ds, tf.zeros_like(fpa_conv_ds), fpa_os_w_targets, None, fpa_conv_crop
+
     if render_separate:
 
         # blur stars
