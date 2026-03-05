@@ -12,7 +12,6 @@ from satsim.radar.simulator import _build_target
 from satsim.time import utc, to_utc_list
 
 
-
 def test_wavelength_basic():
     f = 1.0e9  # Hz
     lam = sensor.wavelength(f)
@@ -133,7 +132,6 @@ def test_no_range_rate():
 
     TARGET_RADIUS = 8000.0  # km
     OBSERVER_RADIUS = 6753.0  # km (Earth radius + 500 km altitude)
-
 
     # Arbitrary epoch
     t = utc(2024, 1, 1, 0, 0, 0)

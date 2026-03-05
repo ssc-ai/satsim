@@ -13,7 +13,6 @@ from typing import Optional, Tuple, Any
 
 from skyfield.framelib import ICRS
 
-from satsim import time
 from satsim.geometry.astrometric import get_los
 
 
