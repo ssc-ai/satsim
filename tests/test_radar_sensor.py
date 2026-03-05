@@ -1,8 +1,16 @@
 import math
+from unittest.mock import MagicMock
 
 import numpy as np
+from skyfield.api import Distance
+from skyfield.framelib import ICRS
+from skyfield.vectorlib import VectorFunction
 
+from satsim.geometry.astrometric import load_earth
 import satsim.radar.monostatic as sensor
+from satsim.radar.simulator import _build_target
+from satsim.time import utc, to_utc_list
+
 
 
 def test_wavelength_basic():
@@ -103,14 +111,89 @@ def test_range_rate_numeric(monkeypatch):
     v = 123.45
 
     def fake_get_los(observer, target, t, deflection=False, aberration=False, stellar_aberration=False):
+        radial_velocity = MagicMock()
+        radial_velocity.km_per_s = v / 1000.0  # range_rate
+
+        fake_icrf_los = MagicMock()
+        fake_icrf_los.frame_latlon_and_rates = MagicMock(
+            return_value=(None, None, None, None, None, radial_velocity)
+        )
         # Return range in km that grows linearly with time (seconds)
-        return 0.0, 0.0, (v * t) / 1000.0, 0.0, 0.0, None
+        return 0.0, 0.0, (v * t) / 1000.0, 0.0, 0.0, fake_icrf_los
 
     monkeypatch.setattr(sensor, 'get_los', fake_get_los)
 
-    rr = sensor.range_rate(None, None, t=0.0, dt=2.0)
+    rr = sensor.range_rate(None, None, t=0.0)
     # Now in km/s
     np.testing.assert_allclose(rr, v / 1000.0, rtol=1e-12)
+
+
+def test_no_range_rate():
+    """Test case where range rate should be zero analytically."""
+
+    TARGET_RADIUS = 8000.0  # km
+    OBSERVER_RADIUS = 6753.0  # km (Earth radius + 500 km altitude)
+
+
+    # Arbitrary epoch
+    t = utc(2024, 1, 1, 0, 0, 0)
+
+    # Create a target with a circular orbit at the celestial north pole
+    target = _build_target(
+        {
+            "mode": "twobody",
+            "epoch": to_utc_list(t),
+            "position": [
+                0.0,
+                0.0,
+                TARGET_RADIUS,
+            ],
+            "velocity": [
+                6.0,
+                0.0,
+                0.0,
+            ],
+        }
+    )
+
+    observer_position = Distance(km=[0.0, 0.0, OBSERVER_RADIUS])
+
+    def observer_at(t):
+        # tt = _to_astropy(t)
+        rGCRS = observer_position.au
+        vGCRS = np.array([0.0, 0.0, 0.0])
+        size = np.size(t)
+        return rGCRS, vGCRS, rGCRS, [None] * size
+
+    observer_gcrs = VectorFunction()
+    observer_gcrs.center = 399  # Earth-centered vector
+    observer_gcrs.target = ICRS
+    observer_gcrs._at = observer_at  # returns fixed GCRS position/velocity
+    observer = load_earth() + observer_gcrs
+
+    _, _, rng, _, el, _ = sensor.get_los(
+        observer,
+        target,
+        t,
+        deflection=False,
+        aberration=False,
+        stellar_aberration=False,
+    )
+
+    # Ensure range is equal to the difference in radii
+    np.testing.assert_allclose(rng, TARGET_RADIUS - OBSERVER_RADIUS, rtol=1e-11)
+    # Ensure elevation is 90 degrees (target is directly overhead)
+    np.testing.assert_allclose(el, 90.0, rtol=1e-11)
+    # NOTE: when target is directly overhead, azimuth is undefined, so we don't test it
+
+    rr_val = sensor.range_rate(
+        observer,
+        target,
+        t=t,
+    )
+
+    # Because the target's velocity is purely tangent to the line of sight, range rate should be zero
+    np.testing.assert_allclose(rr_val, 0.0, atol=1e-11)
 
 
 def test_doppler_shift_sign_and_value():

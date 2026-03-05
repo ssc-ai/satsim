@@ -11,6 +11,8 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Any
 
+from skyfield.framelib import ICRS
+
 from satsim import time
 from satsim.geometry.astrometric import get_los
 
@@ -151,22 +153,20 @@ def in_range_limits(rng: float, p: RadarParams) -> bool:
     return (rng >= mn) and (rng <= mx)
 
 
-def range_rate(observer: Any, target: Any, t, dt: float = 1.0) -> float:
+def range_rate(observer: Any, target: Any, t) -> float:
     """Estimate range-rate via finite difference over a short interval.
 
     Args:
         observer: observing site/body (Skyfield object)
         target: target object (Skyfield object)
         t: epoch (Skyfield time or compatible)
-        dt: differencing interval [s]
 
     Returns:
         Range-rate [km/s].
     """
-    offset_time = time.utc_from_list(time.to_utc_list(t), delta_sec=dt)
-    _, _, range_start, _, _, _ = get_los(observer, target, t, deflection=False, aberration=False, stellar_aberration=False)
-    _, _, range_end, _, _, _ = get_los(observer, target, offset_time, deflection=False, aberration=False, stellar_aberration=False)
-    return (range_end - range_start) / dt
+    _, _, _, _, _, icrf_los = get_los(observer, target, t, deflection=False, aberration=False, stellar_aberration=False)
+    _, _, _, _, _, rr = icrf_los.frame_latlon_and_rates(ICRS)
+    return rr.km_per_s
 
 
 def detect(p: RadarParams, rcs: float, range_value: float) -> Tuple[bool, Optional[float]]:

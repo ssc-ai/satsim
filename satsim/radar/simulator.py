@@ -191,7 +191,7 @@ def simulate(ssp: Dict[str, Any], output_dir: str = './') -> str:
                 continue
 
             # Range-rate (km/s)
-            rr_val = range_rate(observer, target, t_mid, dt=min(1.0, max(rp.dwell, 1e-3)))
+            rr_val = range_rate(observer, target, t_mid)
 
             # Apply measurement noise
             az_m = az + np.random.normal(scale=rp.angle_error)
