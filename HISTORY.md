@@ -1,6 +1,12 @@
 History
 =======
 
+0.23.1
+---------------------
+
+* Change radar range rate to instantaneous measurement. See `radar.monostatic.range_rate`.
+
+
 0.23.0
 ---------------------
 
