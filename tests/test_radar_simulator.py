@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+from unittest.mock import MagicMock
 
 import astropy.units as u
 import numpy as np
@@ -190,10 +191,17 @@ def test_simulate_writes_observations(monkeypatch):
 
     monkeypatch.setattr(simulator, 'get_los', fake_get_los_sim)
 
-    # Make range_rate deterministic in sensor by mapping time->range linearly
+    # Make range_rate deterministic in sensor
     def fake_get_los_sensor(observer, target, t, deflection=False, aberration=False, stellar_aberration=False):
-        sec = sensor.time.to_utc_list(t)[5]
-        return 0.0, 0.0, sec / 1000.0, 0.0, 0.0, None  # km
+        radial_velocity = MagicMock()
+        radial_velocity.km_per_s = 0.001  # range_rate
+
+        fake_icrf_los = MagicMock()
+        fake_icrf_los.frame_latlon_and_rates = MagicMock(
+            return_value=(None, None, None, None, None, radial_velocity)
+        )
+
+        return 0.0, 0.0, 0.0, 0.0, 0.0, fake_icrf_los  # km
 
     monkeypatch.setattr(sensor, 'get_los', fake_get_los_sensor)
 
