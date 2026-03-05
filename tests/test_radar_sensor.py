@@ -102,10 +102,6 @@ def test_in_fov_and_range_limits():
 
 
 def test_range_rate_numeric(monkeypatch):
-    # Monkeypatch time helpers to use floats for time
-    monkeypatch.setattr(sensor.time, 'to_utc_list', lambda t: t)
-    monkeypatch.setattr(sensor.time, 'utc_from_list', lambda t, delta_sec=0: t + delta_sec)
-
     # Radial velocity (m/s)
     v = 123.45
 
