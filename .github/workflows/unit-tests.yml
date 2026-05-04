@@ -10,52 +10,40 @@ permissions:
 
 jobs:
   unit-tests:
-    name: Ubuntu 24.04 / Python 3.12
+    name: Docker Image Unit Tests
     runs-on: ubuntu-24.04
-    container: ubuntu:24.04
-    env:
-      CUDA_VISIBLE_DEVICES: ""
-      LANG: en_US.UTF-8
-      LANGUAGE: en_US:en
-      LC_ALL: en_US.UTF-8
-      SATSIM_SKYFIELD_LOAD_DIR: /root/.skyfield
-      SHELL: /bin/bash
-      TF_CPP_MIN_LOG_LEVEL: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      PIP_NO_PYTHON_VERSION_WARNING: "1"
+    timeout-minutes: 90
 
     steps:
-      - name: Install system dependencies
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates \
-            git \
-            software-properties-common \
-            python3 \
-            python3-dev \
-            python3-pip \
-            locales \
-            zip \
-            unzip \
-            vim \
-            wget
-          locale-gen en_US.UTF-8
-
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          python3 -m pip config set global.break-system-packages true
-          python3 -m pip install 'tensorflow~=2.19.0'
-          python3 -m pip install --ignore-installed -r requirements_dev.txt
-          python3 -m pip install -e .
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Cache Skyfield ephemeris
+      - name: Prepare Docker build context
         run: |
-          mkdir -p "${SATSIM_SKYFIELD_LOAD_DIR}"
-          cp de421.bsp "${SATSIM_SKYFIELD_LOAD_DIR}/de421.bsp"
+          python -m pip install --upgrade pip setuptools wheel
+          python setup.py bdist_wheel
+          mkdir -p docs/_build/html
+          touch docs/_build/html/.gitkeep
 
-      - name: Run unit tests
-        run: python3 -m pytest
+      - name: Build Docker image
+        run: |
+          docker build \
+            --file docker/ubuntu24.04_cuda12.5_py3.12.dockerfile \
+            --tag satsim:ci \
+            .
+
+      - name: Run unit tests in Docker image
+        run: |
+          docker run --rm \
+            --volume "$PWD:/workspace" \
+            --workdir /workspace \
+            --env CUDA_VISIBLE_DEVICES="" \
+            --env SATSIM_SKYFIELD_LOAD_DIR=/root/.skyfield \
+            --env TF_CPP_MIN_LOG_LEVEL=1 \
+            satsim:ci \
+            /bin/bash -lc "pip3 --no-cache-dir install --ignore-installed -r requirements_dev.txt && python3 -m pytest"
