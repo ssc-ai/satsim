@@ -46,4 +46,4 @@ jobs:
             --env SATSIM_SKYFIELD_LOAD_DIR=/root/.skyfield \
             --env TF_CPP_MIN_LOG_LEVEL=1 \
             satsim:ci \
-            /bin/bash -lc "pip3 --no-cache-dir install --ignore-installed -r requirements_dev.txt && python3 -m pytest"
+            /bin/bash -lc "pip3 --no-cache-dir install --ignore-installed -r requirements_dev.txt && pip3 --no-cache-dir install --no-deps -e . && python3 -m pytest"
