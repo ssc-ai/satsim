@@ -49,7 +49,7 @@ jobs:
         run: |
           python3 -m pip config set global.break-system-packages true
           python3 -m pip install 'tensorflow~=2.19.0'
-          python3 -m pip install -r requirements_dev.txt
+          python3 -m pip install --ignore-installed -r requirements_dev.txt
           python3 -m pip install -e .
 
       - name: Cache Skyfield ephemeris
