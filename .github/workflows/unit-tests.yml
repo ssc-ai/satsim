@@ -52,6 +52,7 @@ jobs:
             --volume "$PWD:/workspace" \
             --workdir /workspace \
             --env CUDA_VISIBLE_DEVICES="" \
+            --env PIP_ROOT_USER_ACTION=ignore \
             --env SATSIM_SKYFIELD_LOAD_DIR=/root/.skyfield \
             --env TF_CPP_MIN_LOG_LEVEL=1 \
             satsim:ci \
