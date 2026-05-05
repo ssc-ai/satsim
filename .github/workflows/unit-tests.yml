@@ -23,10 +23,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Prepare Docker build context
+      - name: Build PyPI artifacts
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python setup.py bdist_wheel
+          rm -rf build dist
+          python -m pip install --upgrade pip setuptools wheel twine
+          python setup.py sdist bdist_wheel
+          python -m twine check dist/*
           mkdir -p docs/_build/html
           touch docs/_build/html/.gitkeep
 
@@ -50,10 +52,17 @@ jobs:
         run: |
           docker run --rm \
             --volume "$PWD:/workspace" \
-            --workdir /workspace \
+            --workdir /tmp \
             --env CUDA_VISIBLE_DEVICES="" \
             --env PIP_ROOT_USER_ACTION=ignore \
             --env SATSIM_SKYFIELD_LOAD_DIR=/root/.skyfield \
             --env TF_CPP_MIN_LOG_LEVEL=1 \
             satsim:ci \
-            /bin/bash -lc "pip3 --no-cache-dir install --ignore-installed -r requirements_dev.txt && pip3 --no-cache-dir install --no-deps -e . && python3 -m pytest"
+            /bin/bash -lc "pip3 --no-cache-dir install --ignore-installed -r /workspace/requirements_dev.txt && python3 -c 'import satsim; print(satsim.__file__); assert not satsim.__file__.startswith(\"/workspace/\")' && mkdir -p /tmp/satsim-tests && cp -a /workspace/tests /tmp/satsim-tests/tests && cp /workspace/setup.cfg /tmp/satsim-tests/setup.cfg && cp -a /workspace/share /tmp/satsim-tests/share && cd /tmp/satsim-tests && python3 -m pytest tests"
+
+      - name: Upload PyPI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pypi-dist
+          path: dist/*
+          if-no-files-found: error
