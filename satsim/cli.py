@@ -13,7 +13,7 @@ import click
 logger = logging.getLogger(__name__)
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(version=__version__, prog_name='SatSim')
 @click.option('-d', '--debug', default='WARNING', show_default=True, help='Set the logging level. [DEBUG,INFO,WARNING,ERROR,OFF]')
 @click.pass_context
@@ -38,6 +38,9 @@ def main(ctx, debug):
         logging.getLogger().setLevel(logging.ERROR)
     else:
         logging.getLogger().setLevel(logging.WARNING)
+
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
     return 0
 
