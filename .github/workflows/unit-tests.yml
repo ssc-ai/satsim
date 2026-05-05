@@ -37,6 +37,15 @@ jobs:
             --tag satsim:ci \
             .
 
+      - name: Download SSTR7 test catalog
+        run: |
+          curl -L \
+            --fail \
+            --output sstrc7-test-catalog.zip \
+            https://github.com/ssc-ai/satsim/releases/download/test-assets-v1/sstrc7-test-catalog.zip
+          mkdir -p share/sstrc7
+          unzip -q sstrc7-test-catalog.zip -d share/sstrc7
+
       - name: Run unit tests in Docker image
         run: |
           docker run --rm \
