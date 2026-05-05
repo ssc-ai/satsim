@@ -50,9 +50,19 @@ class GreatCircle(VectorFunction):
             rminor=self.R,
         )
         if self.observer is not None:
-            ra, dec, _, _, _, _ = get_los_azel(
-                self.observer, gc["longitude"], gc["latitude"], observer.t
-            )
+            if np.ndim(dt) == 0:
+                lon = float(np.asarray(gc["longitude"]).reshape(-1)[0])
+                lat = float(np.asarray(gc["latitude"]).reshape(-1)[0])
+                ra, dec, _, _, _, _ = get_los_azel(
+                    self.observer, lon, lat, observer.t
+                )
+            else:
+                ra = np.zeros_like(gc["longitude"], dtype=float)
+                dec = np.zeros_like(gc["latitude"], dtype=float)
+                for i, (lo, la) in enumerate(zip(gc["longitude"], gc["latitude"])):
+                    r, d0, _, _, _, _ = get_los_azel(self.observer, lo, la, observer.t[i])
+                    ra[i] = r
+                    dec[i] = d0
         else:
             ra = gc["longitude"]
             dec = gc["latitude"]

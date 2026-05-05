@@ -1,0 +1,68 @@
+name: Unit Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Docker Image Unit Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build PyPI artifacts
+        run: |
+          rm -rf build dist
+          python -m pip install --upgrade pip setuptools wheel twine
+          python setup.py sdist bdist_wheel
+          python -m twine check dist/*
+          mkdir -p docs/_build/html
+          touch docs/_build/html/.gitkeep
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --file docker/ubuntu24.04_cuda12.5_py3.12.dockerfile \
+            --tag satsim:ci \
+            .
+
+      - name: Download SSTR7 test catalog
+        run: |
+          curl -L \
+            --fail \
+            --output sstrc7-test-catalog.zip \
+            https://github.com/ssc-ai/satsim/releases/download/test-assets-v1/sstrc7-test-catalog.zip
+          mkdir -p share/sstrc7
+          unzip -q sstrc7-test-catalog.zip -d share/sstrc7
+
+      - name: Run unit tests in Docker image
+        run: |
+          docker run --rm \
+            --volume "$PWD:/workspace" \
+            --workdir /tmp \
+            --env CUDA_VISIBLE_DEVICES="" \
+            --env PIP_ROOT_USER_ACTION=ignore \
+            --env SATSIM_SKYFIELD_LOAD_DIR=/root/.skyfield \
+            --env TF_CPP_MIN_LOG_LEVEL=1 \
+            satsim:ci \
+            /bin/bash -lc "pip3 --no-cache-dir install --ignore-installed -r /workspace/requirements_dev.txt && python3 -c 'import satsim; print(satsim.__file__); assert not satsim.__file__.startswith(\"/workspace/\")' && mkdir -p /tmp/satsim-tests && cp -a /workspace/tests /tmp/satsim-tests/tests && cp /workspace/setup.cfg /tmp/satsim-tests/setup.cfg && cp -a /workspace/share /tmp/satsim-tests/share && cd /tmp/satsim-tests && python3 -m pytest tests"
+
+      - name: Upload PyPI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pypi-dist
+          path: dist/*
+          if-no-files-found: error

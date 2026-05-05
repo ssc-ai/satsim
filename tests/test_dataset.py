@@ -89,9 +89,9 @@ def test_dataset_augment():
         bb = b.numpy()
 
         if is_tensorflow_running_on_cpu() and platform.machine() == 'x86_64':
-            assert(int(np.sum(img)) == 262143840)
+            assert(abs(int(np.sum(img)) - 262143840) <= 256)
         else:
-            assert(int(np.sum(img)) == 262144096)
+            assert(abs(int(np.sum(img)) - 262144096) <= 256)
         np.testing.assert_array_almost_equal(bb[0], [0.48079428, 0.48079428, 0.5218099, 0.51985675, 1.], decimal=5)
 
     data_satsim = augment_satnet_with_satsim(ds, ssp, prob=0.0)

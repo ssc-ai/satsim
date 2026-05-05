@@ -127,3 +127,7 @@ node_modules/
 # internal
 internal/
 .test_output/
+
+# CI test assets
+sstrc7-test-catalog.zip
+share/sstrc7/
