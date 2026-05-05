@@ -1,6 +1,8 @@
 SatSim
 ======
 
+[![Unit Tests](https://github.com/ssc-ai/satsim/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/ssc-ai/satsim/actions/workflows/unit-tests.yml)
+
 **SatSim source code was developed under contract with AFRL/RDSM, and is approved for public release under Public Affairs release approval
 #AFRL-2022-1116.**
 
