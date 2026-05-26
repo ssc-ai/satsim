@@ -142,8 +142,8 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     hdr['SH-UT002'] = (dt_start + timedelta(seconds=exposure_time)).isoformat()
     hdr['CTYPE1']   = 'RA---TAN'
     hdr['CTYPE2']   = 'DEC--TAN'
-    hdr['CRVAL1']   = get_or_default('ra', 0)
-    hdr['CRVAL2']   = get_or_default('dec', 0)
+    hdr['CRVAL1']   = get_or_default('ra_apparent', get_or_default('ra', 0))
+    hdr['CRVAL2']   = get_or_default('dec_apparent', get_or_default('dec', 0))
     hdr['CRPIX1']   = fpa.shape[1] / 2.0
     hdr['CRPIX2']   = fpa.shape[0] / 2.0
     x_ifov = get_or_default('x_ifov', 0)
