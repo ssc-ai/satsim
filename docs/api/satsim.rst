@@ -44,6 +44,14 @@ satsim.config module
    :undoc-members:
    :show-inheritance:
 
+satsim.clouds module
+--------------------
+
+.. automodule:: satsim.clouds
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.satsim module
 --------------------
 

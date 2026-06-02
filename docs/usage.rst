@@ -89,6 +89,13 @@ Here is a complete SatSim parameter python dictionary example:
             "padding": 100,            # number of real pixels to pad each side of the image
             "samples": 1               # number of sets to generate
         },
+        "clouds": [
+            {
+                "type": "patchy",      # cloud type preset
+                "coverage": 0.2,       # fractional coverage from 0.0 to 1.0
+                "brightness": 17.5     # optional cloud glow in mv/arcsec^2
+            }
+        ],
         "fpa": {
             "height": 512,             # height of image image in real pixels
             "width": 512,              # width of the image in real pixels
@@ -162,6 +169,85 @@ Here is a complete SatSim parameter python dictionary example:
             }
         }
     }
+
+Cloud Configuration
+-------------------
+
+Clouds are configured with an optional top-level ``clouds`` list. If the key is
+missing or the list is empty, no cloud attenuation is applied. Each list item is
+one cloud layer. Layers are generated independently and combined as an
+atmospheric stack: transmission fields multiply, optical depth fields add, masks
+are combined with logical OR, and density is combined as layered opacity.
+
+Cloud transmission attenuates rendered stars, targets, and sky background before
+sensor noise and analog-to-digital conversion. If a layer has ``brightness``,
+SatSim adds cloud glow to the background in photoelectrons before sensor noise.
+The glow uses the same visual magnitude per arcsec^2 convention as
+``background.galactic`` and scales by ``1 - transmission`` for that layer. If
+``sim.save_segmentation`` is enabled, SatSim writes an additional
+``cloud_segmentation`` map.
+
+Preset layers can be used with only a type and optional coverage:
+
+.. code-block:: python
+
+    "clouds": [
+        {
+            "type": "patchy",
+            "coverage": 0.2,
+            "brightness": 17.5
+        },
+        {
+            "type": "veil",
+            "coverage": 0.5
+        }
+    ]
+
+Supported cloud types are ``patchy``, ``cellular``, ``veil``, ``sheet``,
+``fog``, and ``custom``. Preset layers start from built-in defaults and then
+apply any user-provided fields. Custom layers start from generic defaults and
+are intended for direct tuning:
+
+.. code-block:: python
+
+    "clouds": [
+        {
+            "type": "custom",
+            "name": "hand_tuned_haze",
+            "coverage": 0.35,
+            "feature_scales_m": [640, 1280, 2560, 5120],
+            "density_edge_width": 0.25,
+            "density_floor": 0.08,
+            "texture_contrast": 0.6,
+            "locality_degree": 1,
+            "tau_min": 0.01,
+            "tau_max": 0.8,
+            "tau_gamma": 1.15
+        }
+    ]
+
+Each cloud layer supports these fields:
+
+- ``type``: required cloud type name.
+- ``name``: optional metadata label. Defaults to ``cloud_<index>``.
+- ``enabled``: optional boolean. Defaults to ``true``.
+- ``seed``: optional integer. Defaults to a deterministic seed derived from the
+  simulation seed, layer index, and cloud type.
+- ``coverage``: optional fractional coverage in the range ``0.0`` to ``1.0``.
+- ``feature_scales_m``: optional list of positive physical texture scales in meters.
+- ``density_edge_width``: optional nonnegative edge softness value.
+- ``density_floor``: optional ``null`` or value in ``[0.0, 1.0]``.
+- ``brightness``: optional cloud glow in visual magnitude per arcsec^2. Lower
+  values are brighter. Photoelectrons are scaled by ``1 - transmission``.
+- ``texture_contrast``: optional value in ``[0.0, 1.0]``.
+- ``locality_degree``: optional positive integer. Higher values make cloud
+  support more localized and patchy.
+- ``tau_min``, ``tau_max``, ``tau_gamma``: optional optical depth controls.
+
+The v1 schema intentionally does not expose moon illumination, albedo,
+reflectance, blur, ``coverage_mode``, ``mask_threshold``,
+``min_feature_scale_px``, or ``amplitude_decay`` fields. Unknown cloud layer
+fields raise a configuration error.
 
 Here is a geometry example for a topocentric site and an SGP4 satellite track simulation:
 

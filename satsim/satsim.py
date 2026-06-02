@@ -57,6 +57,7 @@ from satsim.io.satnet import write_frame, write_annotation, set_frame_annotation
 from satsim.io.image import save_apng
 from satsim.io.czml import save_czml
 from satsim.util import tic, toc, MultithreadedTaskQueue, configure_eager, configure_single_gpu, merge_dicts, Profiler
+from satsim.clouds import cloud_brightness_pe_from_field, cloud_field_from_config
 from satsim.geometry import analytic_obs
 from satsim.io import analytical
 from satsim.config import transform, save_debug, _transform, save_cache, _ref, _has_rkey_deep
@@ -564,7 +565,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     obs = ssp['geometry']['obs']['list']
 
-    bg = mv_to_pe(zeropoint, ssp['background']['galactic']) * (y_ifov * 3600 * x_ifov * 3600) * t_exposure
+    pixel_area_arcsec2 = y_ifov * 3600 * x_ifov * 3600
+    bg = mv_to_pe(zeropoint, ssp['background']['galactic']) * pixel_area_arcsec2 * t_exposure
 
     if 'stray' in ssp['background']:
         if isinstance(ssp['background']['stray'], dict) and 'mode' in ssp['background']['stray'] and ssp['background']['stray']['mode'] == 'none':
@@ -754,6 +756,21 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         _rn = tf.cast(rn, tf.float32)
         _en = tf.cast(en, tf.float32)
         rn_tf = tf.math.sqrt(_rn * _rn + _en * _en)
+        cloud_field = cloud_field_from_config(ssp)
+        cloud_transmission_tf = None
+        cloud_brightness_pe_tf = None
+        cloud_has_brightness = False
+        if cloud_field is not None:
+            cloud_transmission_tf = tf.cast(cloud_field.transmission, tf.float32)
+            cloud_has_brightness = any(layer.config.brightness is not None for layer in cloud_field.layers)
+            cloud_brightness_pe_np = cloud_brightness_pe_from_field(
+                cloud_field,
+                zeropoint,
+                t_exposure,
+                pixel_area_arcsec2,
+            )
+            cloud_brightness_pe_tf = tf.cast(cloud_brightness_pe_np, tf.float32)
+            astrometrics['clouds'] = cloud_field.metadata
 
         misc_param = None
         misc_tf_static = None
@@ -967,9 +984,18 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             with frame_profiler.time('render'):
                 fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, ssp['sim']['calculate_snr'])
 
+            frame_bg_tf = bg_tf
+            frame_cloud_brightness_pe_tf = None
+            if cloud_transmission_tf is not None:
+                fpa_conv_star = fpa_conv_star * cloud_transmission_tf
+                fpa_conv_targ = fpa_conv_targ * cloud_transmission_tf
+                frame_bg_tf = bg_tf * cloud_transmission_tf + cloud_brightness_pe_tf
+                if cloud_has_brightness:
+                    frame_cloud_brightness_pe_tf = cloud_brightness_pe_tf
+
             # add noise
             with frame_profiler.time('noise'):
-                fpa_conv = (fpa_conv_star + fpa_conv_targ + bg_tf) * gain_tf + dc_tf
+                fpa_conv = (fpa_conv_star + fpa_conv_targ + frame_bg_tf) * gain_tf + dc_tf
                 if ssp['sim']['enable_shot_noise'] is True:
                     fpa_conv_noise = add_photon_noise(fpa_conv, ssp['sim']['num_shot_noise_samples'])
                 else:
@@ -1068,9 +1094,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             snr_aperture_stars = None
 
             # cropped sensor
-            crop_bg_tf = bg_tf
+            crop_bg_tf = frame_bg_tf
             crop_dc_tf = dc_tf
             crop_rn_tf = rn_tf
+            crop_cloud_brightness_pe_tf = frame_cloud_brightness_pe_tf
             crop_h_fpa_os = h_fpa_os
             crop_w_fpa_os = w_fpa_os
             crop_gain_tf = gain_tf
@@ -1083,8 +1110,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     fpa_digital = crop(fpa_digital, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     fpa_conv_targ = crop(fpa_conv_targ, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     fpa_conv_star = crop(fpa_conv_star, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    if len(bg_tf.shape) == 2:
-                        crop_bg_tf = crop(bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if len(frame_bg_tf.shape) == 2:
+                        crop_bg_tf = crop(frame_bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if frame_cloud_brightness_pe_tf is not None and len(frame_cloud_brightness_pe_tf.shape) == 2:
+                        crop_cloud_brightness_pe_tf = crop(frame_cloud_brightness_pe_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     if len(dc_tf.shape) == 2:
                         crop_dc_tf = crop(dc_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     if len(rn_tf.shape) == 2:
@@ -1111,6 +1140,16 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     opp['rcc'] = opp['rcc'] - cp['width_offset']
 
             if segmentation is not None:
+                if cloud_field is not None:
+                    cloud_mask = cloud_field.mask.astype(np.uint16)
+                    if 'crop' in ssp['fpa']:
+                        cp = ssp['fpa']['crop']
+                        cloud_mask = cloud_mask[
+                            cp['height_offset']:cp['height_offset'] + cp['height'],
+                            cp['width_offset']:cp['width_offset'] + cp['width'],
+                        ]
+                    segmentation['cloud_segmentation'] = cloud_mask
+
                 def _to_numpy(value):
                     if hasattr(value, 'numpy'):
                         return value.numpy()
@@ -1192,6 +1231,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 ground_truth['target_pe'] = fpa_conv_targ.numpy()
                 ground_truth['star_pe'] = fpa_conv_star.numpy()
                 ground_truth['background_pe'] = crop_bg_tf.numpy()
+                if crop_cloud_brightness_pe_tf is not None:
+                    ground_truth['cloud_brightness_pe'] = crop_cloud_brightness_pe_tf.numpy()
                 ground_truth['dark_current_pe'] = crop_dc_tf.numpy()
                 ground_truth['photon_noise_pe'] = (fpa_conv_noise - fpa_conv).numpy()
                 ground_truth['read_noise_pe'] = rn_gt.numpy()

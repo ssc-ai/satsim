@@ -2,6 +2,7 @@ SatSim JSON Schema
 ==================
 
 This folder contains the v1 JSON schema. Root file is located in `Document.json`.
+Reusable scalar and structured types are located in `types/`.
 
 Requirements
 ------------

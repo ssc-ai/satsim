@@ -4,7 +4,14 @@ import tensorflow as tf
 import numpy as np
 
 from satsim.image.augment import null, flip, crop_and_resize, scatter_shift_polar, pow, rotate, resize, scatter_shift_random, load_from_file
-from satsim.image.model import astropy_model2d, sin2d, radial_cos2d, polygrid2d
+from satsim.image.model import (
+    astropy_model2d,
+    deformable_radial_falloff2d,
+    deformable_radial_poly2d,
+    polygrid2d,
+    radial_cos2d,
+    sin2d,
+)
 
 
 def test_load_from_file():
@@ -221,6 +228,33 @@ def test_radial_cos2d_falloff_size():
     center_r = h // 2
     center_c = w // 2
     np.testing.assert_allclose(image[center_r, center_c + 1], image[center_r + 1, center_c])
+
+
+def test_deformable_radial_models():
+
+    h = 9
+    w = 7
+    center = (h // 2, w // 2)
+
+    poly = deformable_radial_poly2d(h, w, [1.0, -0.5], clip=None)
+    falloff = deformable_radial_falloff2d(h, w, [0.5], clip=None)
+
+    assert(poly.shape[0] == h)
+    assert(poly.shape[1] == w)
+    assert(falloff.shape[0] == h)
+    assert(falloff.shape[1] == w)
+    np.testing.assert_allclose(poly[center], 1.0)
+    np.testing.assert_allclose(falloff[center], 1.0)
+    assert(poly[0, 0] < poly[center])
+    assert(falloff[0, 0] < falloff[center])
+
+    clipped = deformable_radial_falloff2d(h, w, [2.0], clip=[0.0, 1.0])
+    assert(np.min(clipped) >= 0.0)
+    assert(np.max(clipped) <= 1.0)
+
+    circular = deformable_radial_falloff2d(h, w, [0.5], eta=1.0, clip=None)
+    elliptical = deformable_radial_falloff2d(h, w, [0.5], eta=2.0, clip=None)
+    assert(not np.allclose(circular, elliptical))
 
 
 def test_radial_polygrid2d():

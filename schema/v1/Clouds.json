@@ -1,0 +1,84 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/Clouds.json",
+    "title": "Clouds",
+    "description": "Optional cloud attenuation layers. Each layer generates an independent procedural cloud density field, binary mask, optical depth field, and transmission field. Multiple enabled layers are combined as an atmospheric stack: transmission multiplies, optical depth adds, masks are OR'd together, and density is combined as layered opacity.",
+    "type": "array",
+    "items": {
+        "$ref": "#/definitions/cloudLayer"
+    },
+    "definitions": {
+        "cloudLayer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+                "type": {
+                    "description": "Cloud layer type. Presets (`patchy`, `cellular`, `veil`, `sheet`, and `fog`) provide tuned defaults for cloud shape and optical depth. Use `custom` to start from generic defaults and directly specify model parameters.",
+                    "type": "string",
+                    "enum": ["patchy", "cellular", "veil", "sheet", "fog", "custom"]
+                },
+                "name": {
+                    "description": "Optional human-readable metadata label for this layer. The name is used in generated metadata and diagnostics only; it does not affect cloud generation. Defaults to `cloud_<index>`.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Whether to include this layer when generating the combined cloud field. Disabled layers are ignored as if they were not present.",
+                    "type": "boolean",
+                    "default": true
+                },
+                "seed": {
+                    "description": "Optional deterministic seed for this layer's noise field. If omitted, SatSim derives a stable seed from the simulation seed, the layer index, and the cloud type so repeated runs are reproducible.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Integer.json"
+                },
+                "coverage": {
+                    "description": "Target fractional cloud amount for this layer, from 0.0 for clear to 1.0 for full coverage. This is a fraction only; percent values such as 20 are not accepted.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
+                },
+                "feature_scales_m": {
+                    "description": "Positive physical texture scales, in meters, used by the multi-scale procedural noise model. Smaller values add fine texture; larger values create broader cloud structures.",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                    }
+                },
+                "density_edge_width": {
+                    "description": "Nonnegative softness width for mapping procedural texture into cloud density. Lower values create sharper cloud edges; higher values create broader, softer transitions.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "density_floor": {
+                    "description": "Optional minimum density added before optical-depth mapping. Use null for no explicit floor. Positive values are useful for veil, sheet, or fog-like layers where the frame should retain some baseline attenuation.",
+                    "anyOf": [
+                        { "type": "null" },
+                        { "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json" }
+                    ]
+                },
+                "brightness": {
+                    "description": "Optional cloud glow brightness in visual magnitude per arcsec^2, used to simulate artificial ground light illuminating the cloud. Lower magnitude values are brighter. Emitted photoelectrons are scaled by the inverted layer transmission, `1 - transmission`.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                },
+                "texture_contrast": {
+                    "description": "Contrast applied to the normalized procedural texture before density mapping. A value of 1.0 preserves full texture variation; lower values flatten mottling and create smoother haze-like layers.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
+                },
+                "locality_degree": {
+                    "description": "Positive integer controlling cloud support localization by multiplying independent texture fields. A value of 1 keeps broad coherent structure; higher values make cloud support more localized and patchy.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveInteger.json"
+                },
+                "tau_min": {
+                    "description": "Minimum optical depth used when converting nonzero cloud density into Beer-Lambert transmission. Higher values make even faint cloud regions more attenuating.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "tau_max": {
+                    "description": "Maximum optical depth reached by dense cloud regions. Higher values produce stronger attenuation and can make thick cloud regions nearly opaque. Runtime validation requires tau_max >= tau_min.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "tau_gamma": {
+                    "description": "Positive response exponent for mapping density into optical depth. Values below 1.0 make lower-density cloud regions more optically significant; values above 1.0 concentrate attenuation in denser regions.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                }
+            }
+        }
+    }
+}

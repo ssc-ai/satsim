@@ -21,6 +21,10 @@
             "description": "The background parameters.",
             "$ref": "Background.json"
         },
+        "clouds": {
+            "description": "Optional cloud attenuation layers.",
+            "$ref": "Clouds.json"
+        },
         "geometry": {
             "description": "The geometry parameters.",
             "$ref": "Geometry.json"
