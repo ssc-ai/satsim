@@ -501,21 +501,8 @@ def _open_simplex_fractal(geometry, feature_scales_m, seed, amplitude_decay):
 
 
 def _noise_grid(seed, xs, ys):
-    generator = OpenSimplex(seed=int(seed))
-    array_noise = getattr(generator, 'noise2array', None)
-    if callable(array_noise):
-        values = np.asarray(array_noise(xs, ys), dtype=np.float64)
-        if values.shape == (xs.size, ys.size):
-            values = values.T
-        if values.shape == (ys.size, xs.size):
-            return values
-
-    scalar_noise = getattr(generator, 'noise2', None) or getattr(generator, 'noise2d')
-    values = np.empty((ys.size, xs.size), dtype=np.float64)
-    for row, y in enumerate(ys):
-        for col, x in enumerate(xs):
-            values[row, col] = scalar_noise(float(x), float(y))
-    return values
+    values = np.asarray(OpenSimplex(seed=int(seed)).noise2array(xs, ys), dtype=np.float64)
+    return values.T if values.shape == (xs.size, ys.size) else values
 
 
 def _sim_seed(ssp):
