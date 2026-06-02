@@ -229,6 +229,9 @@ def test_radial_cos2d_falloff_size():
     center_c = w // 2
     np.testing.assert_allclose(image[center_r, center_c + 1], image[center_r + 1, center_c])
 
+    flat = radial_cos2d(h, w, 1.0, 1.0, 1.0, clip=None, falloff_height=1, falloff_width=1)
+    np.testing.assert_allclose(flat, np.ones((h, w)))
+
 
 def test_deformable_radial_models():
 
@@ -251,6 +254,16 @@ def test_deformable_radial_models():
     clipped = deformable_radial_falloff2d(h, w, [2.0], clip=[0.0, 1.0])
     assert(np.min(clipped) >= 0.0)
     assert(np.max(clipped) <= 1.0)
+
+    clipped_poly = deformable_radial_poly2d(h, w, [2.0], clip=[0.0, 1.0])
+    assert(np.min(clipped_poly) >= 0.0)
+    assert(np.max(clipped_poly) <= 1.0)
+
+    shifted = deformable_radial_falloff2d(h, w, [0.5], center=(1.0, 2.0), clip=None)
+    np.testing.assert_allclose(shifted[2, 1], 1.0)
+
+    normalized = deformable_radial_falloff2d(h, w, [0.5], normalize=True, clip=None)
+    np.testing.assert_allclose(np.max(normalized), 1.0)
 
     circular = deformable_radial_falloff2d(h, w, [0.5], eta=1.0, clip=None)
     elliptical = deformable_radial_falloff2d(h, w, [0.5], eta=2.0, clip=None)

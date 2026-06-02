@@ -37,6 +37,32 @@ def test_no_clouds_config_returns_none():
     assert cloud_field_from_config(_ssp([])) is None
 
 
+def test_invalid_cloud_collection_and_layer_shape_fail():
+    with pytest.raises(ValueError, match='clouds must be a list'):
+        parse_cloud_layers({'type': 'patchy'})
+
+    with pytest.raises(ValueError, match=r'clouds\[0\] must be an object'):
+        parse_cloud_layers([None])
+
+    with pytest.raises(ValueError, match=r'clouds\[0\].type is required'):
+        parse_cloud_layers([{}])
+
+    with pytest.raises(ValueError, match='enabled must be a boolean'):
+        parse_cloud_layers([{'type': 'patchy', 'enabled': 'yes'}])
+
+
+def test_disabled_layers_are_omitted():
+    assert parse_cloud_layers([{'type': 'patchy', 'enabled': False}]) == tuple()
+
+    layers = parse_cloud_layers([
+        {'type': 'patchy', 'enabled': False},
+        {'type': 'veil', 'coverage': 0.3},
+    ], sim_seed=5)
+
+    assert len(layers) == 1
+    assert layers[0].cloud_type == 'veil'
+
+
 def test_preset_layer_uses_defaults():
     layers = parse_cloud_layers([{'type': 'patchy'}], sim_seed=3)
 
@@ -134,6 +160,9 @@ def test_unknown_type_and_invalid_numeric_ranges_fail():
         parse_cloud_layers([{'type': 'custom', 'feature_scales_m': '40,80'}])
 
     with pytest.raises(ValueError, match='feature_scales_m'):
+        parse_cloud_layers([{'type': 'custom', 'feature_scales_m': None}])
+
+    with pytest.raises(ValueError, match='feature_scales_m'):
         parse_cloud_layers([{'type': 'custom', 'feature_scales_m': [40, False]}])
 
     with pytest.raises(ValueError, match='seed'):
@@ -167,6 +196,52 @@ def test_brightness_is_in_layer_metadata():
 
     assert field.layers[0].metadata['brightness'] == pytest.approx(17.5)
     assert field.metadata['layers'][0]['brightness'] == pytest.approx(17.5)
+
+
+def test_cloud_generation_handles_empty_field_and_missing_geometry():
+    assert generate_cloud_field(tuple(), _geometry()) is None
+    assert cloud_brightness_pe_from_field(None, 23.0, 1.0, 1.0) is None
+
+    with pytest.raises(ValueError, match='Cloud generation requires'):
+        cloud_field_from_config({'clouds': [{'type': 'patchy'}]})
+
+
+def test_top_level_seed_is_used_when_sim_seed_is_absent():
+    ssp = _ssp([{'type': 'custom', 'coverage': 0.0}])
+    del ssp['sim']
+    ssp['seed'] = 23
+
+    field = cloud_field_from_config(ssp)
+
+    assert field.layers[0].config.seed == 23
+
+
+def test_zero_and_full_coverage_layers_have_stable_optics():
+    geometry = CloudGeometry(height_px=8, width_px=10, y_fov_deg=1.0, x_fov_deg=1.0)
+
+    clear = generate_cloud_field(parse_cloud_layers([
+        {'type': 'custom', 'coverage': 0.0},
+    ]), geometry)
+
+    np.testing.assert_array_equal(clear.density, np.zeros_like(clear.density))
+    np.testing.assert_array_equal(clear.mask, np.zeros_like(clear.mask, dtype=bool))
+    np.testing.assert_array_equal(clear.tau, np.zeros_like(clear.tau))
+    np.testing.assert_array_equal(clear.transmission, np.ones_like(clear.transmission))
+
+    opaque = generate_cloud_field(parse_cloud_layers([
+        {
+            'type': 'custom',
+            'coverage': 1.0,
+            'tau_min': 0.1,
+            'tau_max': 0.7,
+            'tau_gamma': 1.0,
+        },
+    ]), geometry)
+
+    np.testing.assert_array_equal(opaque.density, np.ones_like(opaque.density))
+    np.testing.assert_array_equal(opaque.mask, np.ones_like(opaque.mask, dtype=bool))
+    np.testing.assert_allclose(opaque.tau, np.full_like(opaque.tau, 0.7))
+    np.testing.assert_allclose(opaque.transmission, np.exp(np.full_like(opaque.transmission, -0.7)))
 
 
 def test_multi_layer_clouds_combine_deterministically():
