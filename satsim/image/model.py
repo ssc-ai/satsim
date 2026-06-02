@@ -88,6 +88,88 @@ def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None
     return z
 
 
+def _deformable_radius_grid(height, width, eta=1.0, center=None, center_x=None, center_y=None):
+    if center is not None:
+        center_x, center_y = center
+
+    if center_x is None:
+        center_x = (width - 1) / 2.0
+    if center_y is None:
+        center_y = (height - 1) / 2.0
+
+    y = np.arange(height, dtype=np.float64)
+    x = np.arange(width, dtype=np.float64)
+    xx, yy = np.meshgrid(x, y)
+    rr = np.sqrt((xx - center_x) ** 2 + (eta * (yy - center_y)) ** 2)
+
+    corners = np.array([
+        [0.0, 0.0],
+        [width - 1.0, 0.0],
+        [0.0, height - 1.0],
+        [width - 1.0, height - 1.0],
+    ])
+    r_max = np.max(np.sqrt((corners[:, 0] - center_x) ** 2 + (eta * (corners[:, 1] - center_y)) ** 2))
+    return rr / r_max if r_max > 0 else rr
+
+
+def _normalize_peak(z):
+    z_max = np.max(z)
+    return z / z_max if z_max != 0 else z
+
+
+def deformable_radial_poly2d(height, width, coefficients, eta=1.0, center=None, center_x=None, center_y=None,
+                             normalize=True, mult=1.0, clip=[0.0, 1.0]):
+    """Generate a deformable radial polynomial vignette map.
+
+    This follows the distance transform used by the deformable radial
+    polynomial vignetting model:
+
+        r_eta = sqrt((x - x_c)^2 + (eta * (y - y_c))^2)
+
+    The polynomial is evaluated on r_eta normalized by the farthest image corner,
+    so coefficients are stable across image sizes.
+    """
+    rr = _deformable_radius_grid(height, width, eta, center, center_x, center_y)
+    z = np.polynomial.polynomial.polyval(rr, coefficients)
+
+    if normalize:
+        z = _normalize_peak(z)
+
+    z = mult * z
+
+    if clip is not None:
+        z = np.clip(z, clip[0], clip[1])
+
+    return z
+
+
+def deformable_radial_falloff2d(height, width, amplitudes, eta=1.0, center=None, center_x=None, center_y=None,
+                                base=1.0, normalize=False, mult=1.0, clip=[0.0, 1.0]):
+    """Generate a monotonic deformable radial polynomial falloff map.
+
+    This uses the same DRP distance transform as `deformable_radial_poly2d`,
+    but constrains the radial function to decrease from the optical center:
+
+        z = base - sum(amplitude_k * r_eta ** k)
+
+    with k starting at 1 and r_eta normalized by the farthest image corner.
+    """
+    rr = _deformable_radius_grid(height, width, eta, center, center_x, center_y)
+    z = np.full((height, width), base, dtype=np.float64)
+    for power, amplitude in enumerate(amplitudes, start=1):
+        z = z - amplitude * rr ** power
+
+    if normalize:
+        z = _normalize_peak(z)
+
+    z = mult * z
+
+    if clip is not None:
+        z = np.clip(z, clip[0], clip[1])
+
+    return z
+
+
 def sin2d(height, width, amplitude=1, frequency=5, bias=0, minimum=0, maximum=None, direction=0, damped=False):
     """ Generates a sine wave across the image in a specified direction.
 
