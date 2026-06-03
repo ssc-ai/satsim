@@ -28,7 +28,7 @@
                     "default": true
                 },
                 "seed": {
-                    "description": "Optional deterministic seed for this layer's noise field. If omitted, SatSim derives a stable seed from the simulation seed, the layer index, and the cloud type so repeated runs are reproducible.",
+                    "description": "Optional deterministic seed for this layer's noise field. If omitted and a simulation seed is present, SatSim derives a stable seed from the simulation seed and layer index. If no simulation seed is present, SatSim generates a random cloud seed for the run and records it in metadata.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Integer.json"
                 },
                 "coverage": {
@@ -56,6 +56,14 @@
                 },
                 "brightness": {
                     "description": "Optional cloud glow brightness in visual magnitude per arcsec^2, used to simulate artificial ground light illuminating the cloud. Lower magnitude values are brighter. Emitted photoelectrons are scaled by the inverted layer transmission, `1 - transmission`.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                },
+                "wind_speed": {
+                    "description": "Optional cloud advection speed in meters per second on the cloud plane. The value is converted to pixels per second from the cloud range and FPA IFOV. Defaults to 0.0, meaning no wind-driven cloud motion.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "wind_direction": {
+                    "description": "Optional cloud advection direction in degrees using SatSim's image-plane polar convention: 0 moves cloud features toward positive column/right, 90 moves them toward positive row/down. Values are normalized modulo 360 degrees. Defaults to 0.0.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
                 },
                 "texture_contrast": {

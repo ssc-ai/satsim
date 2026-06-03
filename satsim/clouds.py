@@ -8,6 +8,7 @@ from opensimplex import OpenSimplex
 
 from satsim.image.fpa import mv_to_pe
 from satsim.util.validation import (
+    finite_number,
     integer,
     nonnegative_number,
     optional_finite_number,
@@ -21,6 +22,7 @@ from satsim.util.validation import (
 CLOUD_TYPE_NAMES = ('patchy', 'cellular', 'veil', 'sheet', 'fog')
 CUSTOM_CLOUD_TYPE = 'custom'
 DEFAULT_CLOUD_RANGE_M = 3000.0
+_SEED_MAX = 2 ** 32
 
 _PUBLIC_LAYER_FIELDS = {
     'type',
@@ -32,6 +34,8 @@ _PUBLIC_LAYER_FIELDS = {
     'density_edge_width',
     'density_floor',
     'brightness',
+    'wind_speed',
+    'wind_direction',
     'texture_contrast',
     'locality_degree',
     'tau_min',
@@ -53,6 +57,8 @@ _CUSTOM_DEFAULTS = dict(_INTERNAL_DEFAULTS, **{
     'density_edge_width': 0.12,
     'density_floor': None,
     'brightness': None,
+    'wind_speed': 0.0,
+    'wind_direction': 0.0,
     'texture_contrast': 1.0,
     'locality_degree': 1,
     'tau_min': 0.02,
@@ -146,6 +152,8 @@ class CloudGeometry:
     y_fov_deg: float
     x_fov_deg: float
     cloud_range_m: float = DEFAULT_CLOUD_RANGE_M
+    y_center_offset_m: float = 0.0
+    x_center_offset_m: float = 0.0
 
     @property
     def x_meters_per_pixel(self):
@@ -179,6 +187,8 @@ class CloudLayerConfig:
     density_edge_width: float
     density_floor: float
     brightness: float
+    wind_speed: float
+    wind_direction: float
     texture_contrast: float
     locality_degree: int
     tau_min: float
@@ -199,6 +209,8 @@ class CloudLayerConfig:
             'density_edge_width': float(self.density_edge_width),
             'density_floor': self.density_floor,
             'brightness': None if self.brightness is None else float(self.brightness),
+            'wind_speed': float(self.wind_speed),
+            'wind_direction': float(self.wind_direction),
             'texture_contrast': float(self.texture_contrast),
             'locality_degree': int(self.locality_degree),
             'tau_min': float(self.tau_min),
@@ -227,34 +239,71 @@ class CloudField:
     metadata: dict
 
 
-def cloud_field_from_config(ssp):
+def cloud_layers_from_config(ssp):
+    return parse_cloud_layers(ssp.get('clouds'), sim_seed=_config_seed(ssp))
+
+
+def cloud_field_from_config(ssp, y_pad_px=0, x_pad_px=0, layer_configs=None,
+                            y_pad_after_px=None, x_pad_after_px=None):
     """Generate a combined cloud field from a SatSim configuration."""
-    layer_configs = parse_cloud_layers(ssp.get('clouds'), sim_seed=_sim_seed(ssp))
+    if layer_configs is None:
+        layer_configs = cloud_layers_from_config(ssp)
     if not layer_configs:
         return None
 
-    geometry = cloud_geometry_from_config(ssp)
-    return generate_cloud_field(layer_configs, geometry)
+    geometry = cloud_geometry_from_config(
+        ssp,
+        y_pad_px=y_pad_px,
+        x_pad_px=x_pad_px,
+        y_pad_after_px=y_pad_after_px,
+        x_pad_after_px=x_pad_after_px,
+    )
+    field = generate_cloud_field(layer_configs, geometry)
+    y_pad_after_px = y_pad_px if y_pad_after_px is None else y_pad_after_px
+    x_pad_after_px = x_pad_px if x_pad_after_px is None else x_pad_after_px
+    field.metadata['motion'] = {
+        'source_shape_px': [int(geometry.height_px), int(geometry.width_px)],
+        'pad_px': [int(y_pad_px), int(x_pad_px)],
+        'pad_after_px': [int(y_pad_after_px), int(x_pad_after_px)],
+    }
+    return field
 
 
-def cloud_geometry_from_config(ssp):
+def cloud_geometry_from_config(ssp, y_pad_px=0, x_pad_px=0, y_pad_after_px=None, x_pad_after_px=None):
     try:
         fpa = ssp['fpa']
+        y_pad_after_px = y_pad_px if y_pad_after_px is None else y_pad_after_px
+        x_pad_after_px = x_pad_px if x_pad_after_px is None else x_pad_after_px
+        fpa_height_px = int(fpa['height'])
+        fpa_width_px = int(fpa['width'])
+        y_pad_px = int(y_pad_px)
+        x_pad_px = int(x_pad_px)
+        y_pad_after_px = int(y_pad_after_px)
+        x_pad_after_px = int(x_pad_after_px)
+        height_px = fpa_height_px + y_pad_px + y_pad_after_px
+        width_px = fpa_width_px + x_pad_px + x_pad_after_px
+        y_meters_per_pixel = DEFAULT_CLOUD_RANGE_M * math.radians(float(fpa['y_fov'])) / float(fpa_height_px)
+        x_meters_per_pixel = DEFAULT_CLOUD_RANGE_M * math.radians(float(fpa['x_fov'])) / float(fpa_width_px)
         return CloudGeometry(
-            height_px=int(fpa['height']),
-            width_px=int(fpa['width']),
-            y_fov_deg=float(fpa['y_fov']),
-            x_fov_deg=float(fpa['x_fov']),
+            height_px=height_px,
+            width_px=width_px,
+            y_fov_deg=float(fpa['y_fov']) * height_px / float(fpa_height_px),
+            x_fov_deg=float(fpa['x_fov']) * width_px / float(fpa_width_px),
+            y_center_offset_m=0.5 * (y_pad_px - y_pad_after_px) * y_meters_per_pixel,
+            x_center_offset_m=0.5 * (x_pad_px - x_pad_after_px) * x_meters_per_pixel,
         )
     except KeyError as exc:
         raise ValueError('Cloud generation requires fpa.height, fpa.width, fpa.y_fov, and fpa.x_fov.') from exc
 
 
-def parse_cloud_layers(clouds, sim_seed=7):
+def parse_cloud_layers(clouds, sim_seed=None):
     if clouds is None:
         return tuple()
     if not isinstance(clouds, list):
         raise ValueError('clouds must be a list of cloud layer objects.')
+
+    if sim_seed is None:
+        sim_seed = _random_seed()
 
     layers = []
     for index, raw_layer in enumerate(clouds):
@@ -280,6 +329,81 @@ def cloud_brightness_pe_from_field(cloud_field, zeropoint, exposure_s, pixel_are
 
 def generate_cloud_field(layer_configs, geometry):
     layers = tuple(generate_cloud_layer(config, geometry) for config in layer_configs)
+    return _combine_cloud_layers(layers)
+
+
+def generate_cloud_layer(config, geometry):
+    texture = _cloud_texture(config, geometry)
+    density = _cloud_density_from_noise(
+        texture,
+        coverage=config.coverage,
+        edge_width=config.density_edge_width,
+        density_floor=config.density_floor,
+    )
+    return _cloud_layer_from_density(config, density)
+
+
+def crop_cloud_field(cloud_field, offset_px, height_px, width_px, pad_px=(0, 0), layer_offsets_px=None):
+    """Return an FPA-sized cloud field sampled from a padded source field."""
+    if cloud_field is None:
+        return None
+
+    pad_y, pad_x = float(pad_px[0]), float(pad_px[1])
+    offset_y, offset_x = float(offset_px[0]), float(offset_px[1])
+    if layer_offsets_px is None:
+        layer_offsets = [[offset_y, offset_x] for _ in cloud_field.layers]
+    else:
+        layer_offsets = [[float(offset[0]), float(offset[1])] for offset in layer_offsets_px]
+        if len(layer_offsets) != len(cloud_field.layers):
+            raise ValueError('layer_offsets_px length must match the number of cloud layers.')
+
+    layers = []
+    clamped = False
+    crop_starts = []
+    for layer, layer_offset in zip(cloud_field.layers, layer_offsets):
+        start_y = pad_y - layer_offset[0]
+        start_x = pad_x - layer_offset[1]
+        crop_starts.append([start_y, start_x])
+        density, layer_clamped = _sample_bilinear(layer.density, start_y, start_x, height_px, width_px)
+        clamped = clamped or layer_clamped
+        layers.append(_cloud_layer_from_density(layer.config, density))
+
+    field = _combine_cloud_layers(tuple(layers))
+    field.metadata['motion'] = {
+        'source_shape_px': [int(cloud_field.density.shape[0]), int(cloud_field.density.shape[1])],
+        'pad_px': [int(pad_px[0]), int(pad_px[1])],
+        'pad_after_px': cloud_field.metadata.get('motion', {}).get('pad_after_px', [int(pad_px[0]), int(pad_px[1])]),
+        'crop_offset_px': [offset_y, offset_x],
+        'crop_start_px': [pad_y - offset_y, pad_x - offset_x],
+        'layer_crop_offsets_px': layer_offsets,
+        'layer_crop_starts_px': crop_starts,
+        'clamped': bool(clamped),
+    }
+    return field
+
+
+def _cloud_layer_from_density(config, density):
+    density = np.asarray(density, dtype=np.float32)
+    mask = density > config.mask_threshold
+    tau, transmission = _optical_fields(density, config)
+    metadata = config.metadata()
+    metadata['stats'] = {
+        'density': _array_stats(density),
+        'mask': {'coverage_fraction': float(mask.mean())},
+        'tau': _array_stats(tau),
+        'transmission': _array_stats(transmission),
+    }
+    return CloudLayer(
+        config=config,
+        density=density,
+        mask=mask,
+        tau=tau,
+        transmission=transmission,
+        metadata=metadata,
+    )
+
+
+def _combine_cloud_layers(layers):
     if not layers:
         return None
 
@@ -310,33 +434,6 @@ def generate_cloud_field(layer_configs, geometry):
         mask=mask,
         tau=tau.astype(np.float32),
         transmission=transmission.astype(np.float32),
-        metadata=metadata,
-    )
-
-
-def generate_cloud_layer(config, geometry):
-    texture = _cloud_texture(config, geometry)
-    density = _cloud_density_from_noise(
-        texture,
-        coverage=config.coverage,
-        edge_width=config.density_edge_width,
-        density_floor=config.density_floor,
-    )
-    mask = density > config.mask_threshold
-    tau, transmission = _optical_fields(density, config)
-    metadata = config.metadata()
-    metadata['stats'] = {
-        'density': _array_stats(density),
-        'mask': {'coverage_fraction': float(mask.mean())},
-        'tau': _array_stats(tau),
-        'transmission': _array_stats(transmission),
-    }
-    return CloudLayer(
-        config=config,
-        density=density,
-        mask=mask,
-        tau=tau,
-        transmission=transmission,
         metadata=metadata,
     )
 
@@ -378,6 +475,8 @@ def _parse_cloud_layer(raw_layer, index, sim_seed):
         'density_edge_width',
         'density_floor',
         'brightness',
+        'wind_speed',
+        'wind_direction',
         'texture_contrast',
         'locality_degree',
         'tau_min',
@@ -392,6 +491,8 @@ def _parse_cloud_layer(raw_layer, index, sim_seed):
     density_edge_width = nonnegative_number('density_edge_width', base['density_edge_width'])
     density_floor = optional_unit_interval('density_floor', base['density_floor'])
     brightness = optional_finite_number('brightness', base.get('brightness'))
+    wind_speed = nonnegative_number('wind_speed', base.get('wind_speed', 0.0))
+    wind_direction = finite_number('wind_direction', base.get('wind_direction', 0.0))
     texture_contrast = unit_interval('texture_contrast', base['texture_contrast'])
     locality_degree = positive_integer('locality_degree', base['locality_degree'])
 
@@ -411,6 +512,8 @@ def _parse_cloud_layer(raw_layer, index, sim_seed):
         density_edge_width=density_edge_width,
         density_floor=density_floor,
         brightness=brightness,
+        wind_speed=wind_speed,
+        wind_direction=float(wind_direction) % 360.0,
         texture_contrast=texture_contrast,
         locality_degree=locality_degree,
         tau_min=tau_min,
@@ -487,6 +590,8 @@ def _open_simplex_fractal(geometry, feature_scales_m, seed, amplitude_decay):
     ys = (np.arange(geometry.height_px, dtype=np.float64) + 0.5) * geometry.y_meters_per_pixel
     xs -= geometry.footprint_width_m * 0.5
     ys -= geometry.footprint_height_m * 0.5
+    xs -= geometry.x_center_offset_m
+    ys -= geometry.y_center_offset_m
 
     largest = max(feature_scales_m)
     field = np.zeros((geometry.height_px, geometry.width_px), dtype=np.float64)
@@ -505,12 +610,39 @@ def _noise_grid(seed, xs, ys):
     return values.T if values.shape == (xs.size, ys.size) else values
 
 
-def _sim_seed(ssp):
+def _sample_bilinear(values, start_y, start_x, height, width):
+    source = np.asarray(values, dtype=np.float32)
+    rows = float(start_y) + np.arange(int(height), dtype=np.float32)
+    cols = float(start_x) + np.arange(int(width), dtype=np.float32)
+    clamped = (
+        np.any(rows < 0.0) or np.any(cols < 0.0) or
+        np.any(rows > source.shape[0] - 1) or np.any(cols > source.shape[1] - 1)
+    )
+    rows = np.clip(rows, 0.0, source.shape[0] - 1)
+    cols = np.clip(cols, 0.0, source.shape[1] - 1)
+
+    r0 = np.floor(rows).astype(np.int32)
+    c0 = np.floor(cols).astype(np.int32)
+    r1 = np.clip(r0 + 1, 0, source.shape[0] - 1)
+    c1 = np.clip(c0 + 1, 0, source.shape[1] - 1)
+    ry = (rows - r0).astype(np.float32)[:, None]
+    cx = (cols - c0).astype(np.float32)[None, :]
+
+    top = source[r0[:, None], c0[None, :]] * (1.0 - cx) + source[r0[:, None], c1[None, :]] * cx
+    bottom = source[r1[:, None], c0[None, :]] * (1.0 - cx) + source[r1[:, None], c1[None, :]] * cx
+    return (top * (1.0 - ry) + bottom * ry).astype(np.float32), bool(clamped)
+
+
+def _config_seed(ssp):
     if isinstance(ssp.get('sim'), dict) and 'seed' in ssp['sim']:
         return integer('sim.seed', ssp['sim']['seed'])
     if 'seed' in ssp:
         return integer('seed', ssp['seed'])
-    return 7
+    return None
+
+
+def _random_seed():
+    return int(np.random.RandomState().randint(0, _SEED_MAX))
 
 
 def _feature_scales(value):

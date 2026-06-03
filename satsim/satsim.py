@@ -57,7 +57,13 @@ from satsim.io.satnet import write_frame, write_annotation, set_frame_annotation
 from satsim.io.image import save_apng
 from satsim.io.czml import save_czml
 from satsim.util import tic, toc, MultithreadedTaskQueue, configure_eager, configure_single_gpu, merge_dicts, Profiler
-from satsim.clouds import cloud_brightness_pe_from_field, cloud_field_from_config
+from satsim.clouds import (
+    cloud_brightness_pe_from_field,
+    cloud_field_from_config,
+    cloud_geometry_from_config,
+    cloud_layers_from_config,
+    crop_cloud_field,
+)
 from satsim.geometry import analytic_obs
 from satsim.io import analytical
 from satsim.config import transform, save_debug, _transform, save_cache, _ref, _has_rkey_deep
@@ -65,6 +71,8 @@ from satsim.pipeline import _delta_t, _avg_t
 from satsim import time
 
 logger = logging.getLogger(__name__)
+_MAX_CLOUD_SOURCE_PIXELS = 200_000_000
+_CLOUD_PAD_EPSILON_PX = 1e-9
 
 
 def gen_multi(ssp, eager=True, output_dir='./', input_dir='./', device=None, memory=None, pid=0, output_debug=False, folder_name=None):
@@ -756,21 +764,52 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         _rn = tf.cast(rn, tf.float32)
         _en = tf.cast(en, tf.float32)
         rn_tf = tf.math.sqrt(_rn * _rn + _en * _en)
-        cloud_field = cloud_field_from_config(ssp)
-        cloud_transmission_tf = None
-        cloud_brightness_pe_tf = None
+        cloud_motion = None
+        cloud_source_field = None
         cloud_has_brightness = False
-        if cloud_field is not None:
-            cloud_transmission_tf = tf.cast(cloud_field.transmission, tf.float32)
-            cloud_has_brightness = any(layer.config.brightness is not None for layer in cloud_field.layers)
-            cloud_brightness_pe_np = cloud_brightness_pe_from_field(
-                cloud_field,
-                zeropoint,
+        if ssp.get('clouds'):
+            cloud_layer_configs = cloud_layers_from_config(ssp)
+            cloud_geometry = cloud_geometry_from_config(ssp)
+            cloud_motion = _plan_cloud_motion(
+                ssp,
+                num_frames,
+                t_frame,
                 t_exposure,
-                pixel_area_arcsec2,
+                tt,
+                ts_collect_start,
+                ts_collect_end,
+                s_osf,
+                star_tran_os,
+                track_mode,
+                observer,
+                track,
+                star_rot,
+                track_az,
+                track_el,
+                track_apparent,
+                track_ra,
+                track_dec,
+                h_fpa_pad_os,
+                w_fpa_pad_os,
+                y_fov_pad,
+                x_fov_pad,
+                y_fov,
+                x_fov,
+                y_ifov,
+                x_ifov,
+                cloud_layer_configs=cloud_layer_configs,
+                cloud_geometry=cloud_geometry,
             )
-            cloud_brightness_pe_tf = tf.cast(cloud_brightness_pe_np, tf.float32)
-            astrometrics['clouds'] = cloud_field.metadata
+            cloud_source_field = cloud_field_from_config(
+                ssp,
+                y_pad_px=cloud_motion['pad_px'][0],
+                x_pad_px=cloud_motion['pad_px'][1],
+                y_pad_after_px=cloud_motion['pad_after_px'][0],
+                x_pad_after_px=cloud_motion['pad_after_px'][1],
+                layer_configs=cloud_layer_configs,
+            )
+            if cloud_source_field is not None:
+                cloud_has_brightness = any(layer.config.brightness is not None for layer in cloud_source_field.layers)
 
         misc_param = None
         misc_tf_static = None
@@ -980,6 +1019,30 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 else:
                     return render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'])
 
+            frame_cloud_field = None
+            cloud_transmission_tf = None
+            cloud_brightness_pe_tf = None
+            if cloud_source_field is not None:
+                cloud_frame_motion = cloud_motion['frames'][frame_num]
+                frame_cloud_field = crop_cloud_field(
+                    cloud_source_field,
+                    cloud_frame_motion['total_offset_px'],
+                    h,
+                    w,
+                    pad_px=cloud_motion['pad_px'],
+                    layer_offsets_px=cloud_frame_motion.get('layer_total_offsets_px'),
+                )
+                frame_cloud_field.metadata['motion'].update(cloud_frame_motion)
+                cloud_transmission_tf = tf.cast(frame_cloud_field.transmission, tf.float32)
+                cloud_brightness_pe_np = cloud_brightness_pe_from_field(
+                    frame_cloud_field,
+                    zeropoint,
+                    t_exposure,
+                    pixel_area_arcsec2,
+                )
+                cloud_brightness_pe_tf = tf.cast(cloud_brightness_pe_np, tf.float32)
+                astrometrics['clouds'] = frame_cloud_field.metadata
+
             # render
             with frame_profiler.time('render'):
                 fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, ssp['sim']['calculate_snr'])
@@ -1140,8 +1203,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     opp['rcc'] = opp['rcc'] - cp['width_offset']
 
             if segmentation is not None:
-                if cloud_field is not None:
-                    cloud_mask = cloud_field.mask.astype(np.uint16)
+                if frame_cloud_field is not None:
+                    cloud_mask = frame_cloud_field.mask.astype(np.uint16)
                     if 'crop' in ssp['fpa']:
                         cp = ssp['fpa']['crop']
                         cloud_mask = cloud_mask[
@@ -1926,6 +1989,273 @@ def _calculate_apparent_ra_dec(tc_start, tc_end, t_curr, track_ra, track_dec, ob
         dec_vals.append(dec_i)
 
     return np.asarray(ra_vals, dtype=float), np.asarray(dec_vals, dtype=float)
+
+
+def _plan_cloud_motion(ssp, num_frames, t_frame, t_exposure, tt, ts_collect_start, ts_collect_end,
+                       s_osf, star_tran_os, track_mode, observer, track, star_rot, track_az, track_el,
+                       track_apparent, track_ra, track_dec,
+                       h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, y_fov, x_fov, y_ifov, x_ifov,
+                       cloud_layer_configs=(), cloud_geometry=None):
+    frame_offsets = []
+    min_y = 0.0
+    max_y = 0.0
+    min_x = 0.0
+    max_x = 0.0
+    cloud_layer_configs = tuple(cloud_layer_configs or ())
+
+    for frame_num in range(num_frames):
+        t_start = frame_num * t_frame
+        t_mid_s = t_start + 0.5 * t_exposure
+        ts_start = time.utc_from_list(tt, t_start)
+        ts_mid = time.utc_from_list(tt, t_mid_s)
+
+        if track_mode is None:
+            gimbal_offset = [
+                float(star_tran_os[0]) * t_mid_s / float(s_osf),
+                float(star_tran_os[1]) * t_mid_s / float(s_osf),
+            ]
+        else:
+            frame_track_mode, offset_end = _cloud_motion_track_mode_and_time(
+                track_mode,
+                frame_num,
+                num_frames,
+                ts_start,
+                ts_mid,
+            )
+            elapsed_s = float((offset_end - ts_collect_start) * 86400.0)
+            if elapsed_s <= 0.0:
+                gimbal_offset = [0.0, 0.0]
+            else:
+                _, _, cloud_tran_os, _ = _calculate_star_position_and_motion(
+                    ssp,
+                    {},
+                    ts_collect_start,
+                    ts_collect_end,
+                    ts_collect_start,
+                    offset_end,
+                    elapsed_s,
+                    h_fpa_pad_os,
+                    w_fpa_pad_os,
+                    y_fov_pad,
+                    x_fov_pad,
+                    y_fov,
+                    x_fov,
+                    y_ifov,
+                    x_ifov,
+                    observer,
+                    track,
+                    star_rot,
+                    frame_track_mode,
+                    track_az,
+                    track_el,
+                    track_apparent=track_apparent,
+                    track_ra=track_ra,
+                    track_dec=track_dec,
+                )
+                gimbal_offset = [
+                    float(cloud_tran_os[0]) * elapsed_s / float(s_osf),
+                    float(cloud_tran_os[1]) * elapsed_s / float(s_osf),
+                ]
+
+        layer_wind_offsets = _cloud_wind_offsets_px(cloud_layer_configs, cloud_geometry, t_mid_s)
+        layer_total_offsets = [
+            [gimbal_offset[0] + wind_offset[0], gimbal_offset[1] + wind_offset[1]]
+            for wind_offset in layer_wind_offsets
+        ]
+        if layer_total_offsets:
+            pad_offsets = layer_total_offsets
+            wind_offset = layer_wind_offsets[0]
+            total_offset = layer_total_offsets[0]
+        else:
+            wind_offset = [0.0, 0.0]
+            total_offset = [gimbal_offset[0], gimbal_offset[1]]
+            pad_offsets = [total_offset]
+
+        for offset in pad_offsets:
+            min_y = min(min_y, offset[0])
+            max_y = max(max_y, offset[0])
+            min_x = min(min_x, offset[1])
+            max_x = max(max_x, offset[1])
+        frame_offsets.append({
+            'gimbal_offset_px': gimbal_offset,
+            'wind_offset_px': wind_offset,
+            'total_offset_px': total_offset,
+            'layer_wind_offsets_px': layer_wind_offsets,
+            'layer_total_offsets_px': layer_total_offsets,
+        })
+
+    pad_y = _cloud_side_pad_px(max_y)
+    pad_x = _cloud_side_pad_px(max_x)
+    pad_after_y = _cloud_side_pad_px(-min_y)
+    pad_after_x = _cloud_side_pad_px(-min_x)
+    source_shape_px = _cloud_source_shape_px(cloud_geometry, [pad_y, pad_x], [pad_after_y, pad_after_x])
+    _log_cloud_motion_debug(
+        cloud_layer_configs,
+        cloud_geometry,
+        frame_offsets,
+        [pad_y, pad_x],
+        [pad_after_y, pad_after_x],
+        source_shape_px,
+        [[min_y, max_y], [min_x, max_x]],
+        t_frame,
+    )
+    _validate_cloud_source_size(source_shape_px)
+
+    return {
+        'pad_px': [pad_y, pad_x],
+        'pad_after_px': [pad_after_y, pad_after_x],
+        'source_shape_px': source_shape_px,
+        'offset_range_px': [[min_y, max_y], [min_x, max_x]],
+        'frames': frame_offsets,
+    }
+
+
+def _cloud_side_pad_px(distance_px):
+    return int(math.ceil(float(distance_px)) + 2) if distance_px > _CLOUD_PAD_EPSILON_PX else 0
+
+
+def _cloud_source_shape_px(geometry, pad_px, pad_after_px):
+    if geometry is None:
+        return None
+    return [
+        int(geometry.height_px) + int(pad_px[0]) + int(pad_after_px[0]),
+        int(geometry.width_px) + int(pad_px[1]) + int(pad_after_px[1]),
+    ]
+
+
+def _validate_cloud_source_size(source_shape_px):
+    if source_shape_px is None:
+        return
+
+    source_h = int(source_shape_px[0])
+    source_w = int(source_shape_px[1])
+    source_pixels = source_h * source_w
+    if source_pixels <= _MAX_CLOUD_SOURCE_PIXELS:
+        return
+
+    raise ValueError(
+        'Cloud motion requires a padded source field of {}x{} pixels ({:,} pixels), '
+        'which exceeds the internal limit of {:,} pixels. Reduce cloud wind_speed, '
+        'exposure duration, number of frames, or image resolution. This usually '
+        'happens when physical wind projects to tens of thousands of pixels at the '
+        'current FPA IFOV and cloud range.'.format(
+            source_h,
+            source_w,
+            source_pixels,
+            _MAX_CLOUD_SOURCE_PIXELS,
+        )
+    )
+
+
+def _log_cloud_motion_debug(layer_configs, geometry, frame_offsets, pad_px, pad_after_px, source_shape_px,
+                            offset_range_px, t_frame):
+    if not logger.isEnabledFor(logging.DEBUG) or geometry is None:
+        return
+
+    source_pixels = int(source_shape_px[0]) * int(source_shape_px[1])
+    logger.debug(
+        'Cloud motion map: fpa={}x{} px, source={}x{} px ({:,} pixels), '
+        'pad_before={}, pad_after={}, meters_per_pixel=(row {:.6g}, col {:.6g}), '
+        'offset_range_px=(row [{:.3f}, {:.3f}], col [{:.3f}, {:.3f}]).'.format(
+            int(geometry.height_px),
+            int(geometry.width_px),
+            int(source_shape_px[0]),
+            int(source_shape_px[1]),
+            source_pixels,
+            [int(pad_px[0]), int(pad_px[1])],
+            [int(pad_after_px[0]), int(pad_after_px[1])],
+            geometry.y_meters_per_pixel,
+            geometry.x_meters_per_pixel,
+            float(offset_range_px[0][0]),
+            float(offset_range_px[0][1]),
+            float(offset_range_px[1][0]),
+            float(offset_range_px[1][1]),
+        )
+    )
+
+    if frame_offsets:
+        gimbal_offsets = [frame['gimbal_offset_px'] for frame in frame_offsets]
+        gimbal_range = _cloud_offset_range(gimbal_offsets)
+        gimbal_duration_s = max(float(len(gimbal_offsets) - 1) * float(t_frame), 0.0)
+        if gimbal_duration_s > 0.0:
+            gimbal_speed = [
+                float(gimbal_offsets[-1][0] - gimbal_offsets[0][0]) / gimbal_duration_s,
+                float(gimbal_offsets[-1][1] - gimbal_offsets[0][1]) / gimbal_duration_s,
+            ]
+        else:
+            gimbal_speed = [0.0, 0.0]
+        logger.debug(
+            'Cloud gimbal motion: average_speed_px_per_s=(row {:.3f}, col {:.3f}), '
+            'gimbal_offset_range_px=(row [{:.3f}, {:.3f}], col [{:.3f}, {:.3f}]).'.format(
+                gimbal_speed[0],
+                gimbal_speed[1],
+                gimbal_range[0][0],
+                gimbal_range[0][1],
+                gimbal_range[1][0],
+                gimbal_range[1][1],
+            )
+        )
+
+    wind_px_per_s = _cloud_wind_offsets_px(layer_configs, geometry, 1.0)
+    for index, (layer, wind_px_s) in enumerate(zip(layer_configs, wind_px_per_s)):
+        layer_offsets = [
+            frame['layer_total_offsets_px'][index]
+            for frame in frame_offsets
+            if index < len(frame.get('layer_total_offsets_px', ()))
+        ]
+        layer_range = _cloud_offset_range(layer_offsets) if layer_offsets else [[0.0, 0.0], [0.0, 0.0]]
+        logger.debug(
+            'Cloud layer {} {} wind: {:.3f} m/s at {:.3f} deg = '
+            'row {:.3f} px/s, col {:.3f} px/s, magnitude {:.3f} px/s; '
+            'total_offset_range_px=(row [{:.3f}, {:.3f}], col [{:.3f}, {:.3f}]).'.format(
+                index,
+                layer.name,
+                float(layer.wind_speed),
+                float(layer.wind_direction),
+                float(wind_px_s[0]),
+                float(wind_px_s[1]),
+                math.hypot(float(wind_px_s[0]), float(wind_px_s[1])),
+                layer_range[0][0],
+                layer_range[0][1],
+                layer_range[1][0],
+                layer_range[1][1],
+            )
+        )
+
+
+def _cloud_offset_range(offsets):
+    if not offsets:
+        return [[0.0, 0.0], [0.0, 0.0]]
+    rows = [float(offset[0]) for offset in offsets]
+    cols = [float(offset[1]) for offset in offsets]
+    return [[min(rows), max(rows)], [min(cols), max(cols)]]
+
+
+def _cloud_wind_offsets_px(layer_configs, geometry, elapsed_s):
+    if not layer_configs:
+        return []
+    if geometry is None:
+        return [[0.0, 0.0] for _ in layer_configs]
+
+    offsets = []
+    for layer in layer_configs:
+        speed = float(layer.wind_speed)
+        if speed == 0.0:
+            offsets.append([0.0, 0.0])
+            continue
+        direction_rad = math.radians(float(layer.wind_direction))
+        offsets.append([
+            speed * math.sin(direction_rad) * elapsed_s / geometry.y_meters_per_pixel,
+            speed * math.cos(direction_rad) * elapsed_s / geometry.x_meters_per_pixel,
+        ])
+    return offsets
+
+
+def _cloud_motion_track_mode_and_time(track_mode, frame_num, total_frames, ts_start, ts_mid):
+    frame_track_mode = _parse_track_mode(track_mode, frame_num, total_frames)
+    if track_mode == 'rate-sidereal' and frame_num == total_frames - 1:
+        return 'rate', ts_start
+    return frame_track_mode, ts_mid
 
 
 def _calculate_star_position_and_motion(ssp, astrometrics,

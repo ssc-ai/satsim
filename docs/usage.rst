@@ -93,7 +93,9 @@ Here is a complete SatSim parameter python dictionary example:
             {
                 "type": "patchy",      # cloud type preset
                 "coverage": 0.2,       # fractional coverage from 0.0 to 1.0
-                "brightness": 17.5     # optional cloud glow in mv/arcsec^2
+                "brightness": 17.5,    # optional cloud glow in mv/arcsec^2
+                "wind_speed": 8.0,     # optional cloud advection speed in m/s
+                "wind_direction": 90.0 # optional direction; 0 right, 90 down
             }
         ],
         "fpa": {
@@ -195,7 +197,9 @@ Preset layers can be used with only a type and optional coverage:
         {
             "type": "patchy",
             "coverage": 0.2,
-            "brightness": 17.5
+            "brightness": 17.5,
+            "wind_speed": 8.0,
+            "wind_direction": 90.0
         },
         {
             "type": "veil",
@@ -232,13 +236,20 @@ Each cloud layer supports these fields:
 - ``name``: optional metadata label. Defaults to ``cloud_<index>``.
 - ``enabled``: optional boolean. Defaults to ``true``.
 - ``seed``: optional integer. Defaults to a deterministic seed derived from the
-  simulation seed, layer index, and cloud type.
+  simulation seed, layer index, and cloud type when a simulation seed is
+  present. If no simulation seed is present, SatSim generates a random cloud
+  seed for the run and records it in metadata.
 - ``coverage``: optional fractional coverage in the range ``0.0`` to ``1.0``.
 - ``feature_scales_m``: optional list of positive physical texture scales in meters.
 - ``density_edge_width``: optional nonnegative edge softness value.
 - ``density_floor``: optional ``null`` or value in ``[0.0, 1.0]``.
 - ``brightness``: optional cloud glow in visual magnitude per arcsec^2. Lower
   values are brighter. Photoelectrons are scaled by ``1 - transmission``.
+- ``wind_speed``: optional cloud advection speed in meters per second on the
+  cloud plane. Defaults to ``0.0``.
+- ``wind_direction``: optional cloud advection direction in degrees using
+  SatSim's image-plane polar convention. ``0`` moves features toward positive
+  column/right, and ``90`` moves features toward positive row/down.
 - ``texture_contrast``: optional value in ``[0.0, 1.0]``.
 - ``locality_degree``: optional positive integer. Higher values make cloud
   support more localized and patchy.

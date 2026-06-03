@@ -1,12 +1,18 @@
 import copy
+import math
 
 import numpy as np
 import pytest
 
+from satsim import clouds as clouds_module
 from satsim.clouds import (
+    CloudField,
     CloudGeometry,
+    CloudLayer,
     cloud_brightness_pe_from_field,
     cloud_field_from_config,
+    cloud_geometry_from_config,
+    crop_cloud_field,
     generate_cloud_field,
     parse_cloud_layers,
 )
@@ -30,6 +36,39 @@ def _ssp(clouds=None):
 
 def _geometry():
     return CloudGeometry(height_px=32, width_px=40, y_fov_deg=1.0, x_fov_deg=1.2)
+
+
+def _cloud_field_from_densities(densities, brightness=None):
+    densities = [np.asarray(density, dtype=np.float32) for density in densities]
+    configs = parse_cloud_layers([
+        {
+            'type': 'custom',
+            'brightness': brightness,
+            'tau_min': 0.0,
+            'tau_max': 1.0,
+            'tau_gamma': 1.0,
+        }
+        for _ in densities
+    ], sim_seed=1)
+    layers = []
+    for config, density in zip(configs, densities):
+        layers.append(CloudLayer(
+            config=config,
+            density=density,
+            mask=density > config.mask_threshold,
+            tau=np.zeros_like(density, dtype=np.float32),
+            transmission=np.ones_like(density, dtype=np.float32),
+            metadata=config.metadata(),
+        ))
+    shape = densities[0].shape
+    return CloudField(
+        layers=tuple(layers),
+        density=np.zeros(shape, dtype=np.float32),
+        mask=np.zeros(shape, dtype=bool),
+        tau=np.zeros(shape, dtype=np.float32),
+        transmission=np.ones(shape, dtype=np.float32),
+        metadata={},
+    )
 
 
 def test_no_clouds_config_returns_none():
@@ -71,6 +110,8 @@ def test_preset_layer_uses_defaults():
     assert layers[0].coverage == pytest.approx(0.45)
     assert layers[0].density_edge_width == pytest.approx(0.08)
     assert layers[0].brightness is None
+    assert layers[0].wind_speed == pytest.approx(0.0)
+    assert layers[0].wind_direction == pytest.approx(0.0)
     assert layers[0].locality_degree == 2
     assert layers[0].tau_max == pytest.approx(9.0)
 
@@ -84,6 +125,8 @@ def test_preset_layer_applies_public_overrides():
             'density_edge_width': 0.2,
             'density_floor': 0.1,
             'brightness': 17.5,
+            'wind_speed': 4.0,
+            'wind_direction': 450.0,
             'texture_contrast': 0.5,
             'locality_degree': 2,
             'tau_min': 0.03,
@@ -98,6 +141,8 @@ def test_preset_layer_applies_public_overrides():
     assert layer.density_edge_width == pytest.approx(0.2)
     assert layer.density_floor == pytest.approx(0.1)
     assert layer.brightness == pytest.approx(17.5)
+    assert layer.wind_speed == pytest.approx(4.0)
+    assert layer.wind_direction == pytest.approx(90.0)
     assert layer.texture_contrast == pytest.approx(0.5)
     assert layer.locality_degree == 2
     assert layer.tau_min == pytest.approx(0.03)
@@ -120,6 +165,8 @@ def test_custom_layer_uses_generic_defaults_with_partial_overrides():
     assert layer.feature_scales_m == (40.0, 80.0, 160.0, 320.0, 640.0)
     assert layer.density_edge_width == pytest.approx(0.12)
     assert layer.brightness is None
+    assert layer.wind_speed == pytest.approx(0.0)
+    assert layer.wind_direction == pytest.approx(0.0)
     assert layer.texture_contrast == pytest.approx(1.0)
     assert layer.tau_min == pytest.approx(0.02)
     assert layer.tau_max == pytest.approx(0.8)
@@ -183,19 +230,37 @@ def test_unknown_type_and_invalid_numeric_ranges_fail():
     with pytest.raises(ValueError, match='brightness'):
         parse_cloud_layers([{'type': 'custom', 'brightness': True}])
 
+    with pytest.raises(ValueError, match='wind_speed'):
+        parse_cloud_layers([{'type': 'custom', 'wind_speed': -1.0}])
+
+    with pytest.raises(ValueError, match='wind_speed'):
+        parse_cloud_layers([{'type': 'custom', 'wind_speed': 'fast'}])
+
+    with pytest.raises(ValueError, match='wind_direction'):
+        parse_cloud_layers([{'type': 'custom', 'wind_direction': None}])
+
+    with pytest.raises(ValueError, match='wind_direction'):
+        parse_cloud_layers([{'type': 'custom', 'wind_direction': True}])
+
 
 def test_brightness_is_in_layer_metadata():
     layers = parse_cloud_layers([
         {
             'type': 'custom',
             'brightness': 17.5,
+            'wind_speed': 3.0,
+            'wind_direction': -90.0,
         }
     ])
 
     field = generate_cloud_field(layers, _geometry())
 
     assert field.layers[0].metadata['brightness'] == pytest.approx(17.5)
+    assert field.layers[0].metadata['wind_speed'] == pytest.approx(3.0)
+    assert field.layers[0].metadata['wind_direction'] == pytest.approx(270.0)
     assert field.metadata['layers'][0]['brightness'] == pytest.approx(17.5)
+    assert field.metadata['layers'][0]['wind_speed'] == pytest.approx(3.0)
+    assert field.metadata['layers'][0]['wind_direction'] == pytest.approx(270.0)
 
 
 def test_cloud_generation_handles_empty_field_and_missing_geometry():
@@ -214,6 +279,61 @@ def test_top_level_seed_is_used_when_sim_seed_is_absent():
     field = cloud_field_from_config(ssp)
 
     assert field.layers[0].config.seed == 23
+
+
+def test_missing_config_seed_uses_random_cloud_seed(monkeypatch):
+    monkeypatch.setattr(clouds_module, '_random_seed', lambda: 12345)
+    ssp = _ssp([
+        {'type': 'custom', 'coverage': 0.0},
+        {'type': 'custom', 'coverage': 0.0},
+    ])
+    del ssp['sim']
+
+    field = cloud_field_from_config(ssp)
+
+    assert field.layers[0].config.seed == 12345
+    assert field.layers[1].config.seed == 22345
+    assert field.metadata['layers'][0]['seed'] == 12345
+    assert field.metadata['layers'][1]['seed'] == 22345
+
+
+def test_layer_seed_overrides_random_cloud_seed(monkeypatch):
+    monkeypatch.setattr(clouds_module, '_random_seed', lambda: 12345)
+
+    layers = parse_cloud_layers([{'type': 'custom', 'seed': 77}])
+
+    assert layers[0].seed == 77
+
+
+def test_asymmetric_cloud_padding_preserves_fpa_coordinate_origin():
+    ssp = _ssp([{'type': 'custom', 'coverage': 0.0}])
+    symmetric = cloud_geometry_from_config(ssp, y_pad_px=5, x_pad_px=4)
+    asymmetric = cloud_geometry_from_config(
+        ssp,
+        y_pad_px=5,
+        x_pad_px=4,
+        y_pad_after_px=0,
+        x_pad_after_px=0,
+    )
+
+    def row_coordinate(geometry, row):
+        return (
+            (float(row) + 0.5) * geometry.y_meters_per_pixel -
+            geometry.footprint_height_m * 0.5 -
+            geometry.y_center_offset_m
+        )
+
+    def col_coordinate(geometry, col):
+        return (
+            (float(col) + 0.5) * geometry.x_meters_per_pixel -
+            geometry.footprint_width_m * 0.5 -
+            geometry.x_center_offset_m
+        )
+
+    assert asymmetric.height_px == symmetric.height_px - 5
+    assert asymmetric.width_px == symmetric.width_px - 4
+    assert row_coordinate(asymmetric, 5) == pytest.approx(row_coordinate(symmetric, 5))
+    assert col_coordinate(asymmetric, 4) == pytest.approx(col_coordinate(symmetric, 4))
 
 
 def test_zero_and_full_coverage_layers_have_stable_optics():
@@ -242,6 +362,91 @@ def test_zero_and_full_coverage_layers_have_stable_optics():
     np.testing.assert_array_equal(opaque.mask, np.ones_like(opaque.mask, dtype=bool))
     np.testing.assert_allclose(opaque.tau, np.full_like(opaque.tau, 0.7))
     np.testing.assert_allclose(opaque.transmission, np.exp(np.full_like(opaque.transmission, -0.7)))
+
+
+def test_cloud_crop_without_offset_returns_center_view():
+    density = np.arange(25, dtype=np.float32).reshape(5, 5) / 24.0
+    source = _cloud_field_from_densities([density])
+
+    cropped = crop_cloud_field(source, [0.0, 0.0], 3, 3, pad_px=[1, 1])
+
+    np.testing.assert_allclose(cropped.layers[0].density, density[1:4, 1:4])
+    assert cropped.metadata['motion']['crop_offset_px'] == [0.0, 0.0]
+    assert cropped.metadata['motion']['clamped'] is False
+
+
+def test_positive_cloud_crop_offset_moves_features_down_and_right():
+    density = np.zeros((7, 7), dtype=np.float32)
+    density[3, 3] = 1.0
+    source = _cloud_field_from_densities([density])
+
+    static = crop_cloud_field(source, [0.0, 0.0], 3, 3, pad_px=[3, 3])
+    moved = crop_cloud_field(source, [1.0, 1.0], 3, 3, pad_px=[3, 3])
+
+    assert static.layers[0].density[0, 0] == pytest.approx(1.0)
+    assert moved.layers[0].density[1, 1] == pytest.approx(1.0)
+
+
+def test_fractional_cloud_crop_offset_uses_bilinear_sampling():
+    density = np.array([
+        [0.0, 1.0],
+        [2.0, 3.0],
+    ], dtype=np.float32)
+    source = _cloud_field_from_densities([density])
+
+    cropped = crop_cloud_field(source, [-0.5, -0.5], 1, 1, pad_px=[0, 0])
+
+    np.testing.assert_allclose(cropped.layers[0].density, [[1.5]])
+
+
+def test_cropped_cloud_layers_recombine_physical_stack():
+    first_density = np.full((4, 4), 0.2, dtype=np.float32)
+    second_density = np.full((4, 4), 0.5, dtype=np.float32)
+    source = _cloud_field_from_densities([first_density, second_density])
+
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[1, 1])
+
+    expected_density = 1.0 - (1.0 - cropped.layers[0].density) * (1.0 - cropped.layers[1].density)
+    expected_tau = cropped.layers[0].tau + cropped.layers[1].tau
+    expected_transmission = cropped.layers[0].transmission * cropped.layers[1].transmission
+
+    np.testing.assert_allclose(cropped.density, expected_density)
+    np.testing.assert_allclose(cropped.tau, expected_tau)
+    np.testing.assert_allclose(cropped.transmission, expected_transmission)
+    np.testing.assert_array_equal(cropped.mask, cropped.layers[0].mask | cropped.layers[1].mask)
+
+
+def test_cloud_crop_accepts_per_layer_offsets():
+    first_density = np.zeros((4, 4), dtype=np.float32)
+    second_density = np.zeros((4, 4), dtype=np.float32)
+    first_density[1, 1] = 1.0
+    second_density[1, 2] = 1.0
+    source = _cloud_field_from_densities([first_density, second_density])
+
+    cropped = crop_cloud_field(
+        source,
+        [0.0, 0.0],
+        2,
+        2,
+        pad_px=[1, 1],
+        layer_offsets_px=[[0.0, 0.0], [0.0, -1.0]],
+    )
+
+    assert cropped.layers[0].density[0, 0] == pytest.approx(1.0)
+    assert cropped.layers[1].density[0, 0] == pytest.approx(1.0)
+    assert cropped.metadata['motion']['layer_crop_offsets_px'] == [[0.0, 0.0], [0.0, -1.0]]
+
+
+def test_cloud_brightness_uses_cropped_transmission():
+    density = np.arange(25, dtype=np.float32).reshape(5, 5) / 24.0
+    source = _cloud_field_from_densities([density], brightness=17.5)
+    cropped = crop_cloud_field(source, [0.0, 0.0], 3, 3, pad_px=[1, 1])
+
+    brightness_pe = cloud_brightness_pe_from_field(cropped, 23.0, 2.0, 4.0)
+    expected_base = mv_to_pe(23.0, 17.5) * 2.0 * 4.0
+    expected = expected_base * (1.0 - cropped.layers[0].transmission)
+
+    np.testing.assert_allclose(brightness_pe, expected, rtol=1e-6)
 
 
 def test_multi_layer_clouds_combine_deterministically():
@@ -326,3 +531,299 @@ def test_cloud_field_from_config_does_not_mutate_config():
 
     assert field is not None
     assert ssp == original
+
+
+def test_cloud_motion_rate_sidereal_last_frame_keeps_accumulated_offset(monkeypatch):
+    from satsim import satsim as satsim_module
+
+    calls = []
+
+    def fake_star_motion(*args, **kwargs):
+        calls.append({
+            'track_mode': args[18],
+            'exposure_s': float(args[6]),
+        })
+        return None, None, [10.0, -2.0], 0.0
+
+    monkeypatch.setattr(satsim_module, '_calculate_star_position_and_motion', fake_star_motion)
+
+    tt = [2025, 1, 1, 0, 0, 0.0]
+    ts_collect_start = satsim_module.time.utc_from_list(tt)
+    ts_collect_end = satsim_module.time.utc_from_list(tt, 6.0)
+
+    motion = satsim_module._plan_cloud_motion(
+        {},
+        num_frames=3,
+        t_frame=2.0,
+        t_exposure=1.0,
+        tt=tt,
+        ts_collect_start=ts_collect_start,
+        ts_collect_end=ts_collect_end,
+        s_osf=1,
+        star_tran_os=[0.0, 0.0],
+        track_mode='rate-sidereal',
+        observer=None,
+        track=None,
+        star_rot=0.0,
+        track_az=None,
+        track_el=None,
+        track_apparent=True,
+        track_ra=None,
+        track_dec=None,
+        h_fpa_pad_os=10,
+        w_fpa_pad_os=10,
+        y_fov_pad=1.0,
+        x_fov_pad=1.0,
+        y_fov=1.0,
+        x_fov=1.0,
+        y_ifov=0.1,
+        x_ifov=0.1,
+    )
+
+    assert [call['track_mode'] for call in calls] == ['rate', 'rate', 'rate']
+    assert [call['exposure_s'] for call in calls] == pytest.approx([0.5, 2.5, 4.0])
+    assert motion['frames'][0]['total_offset_px'] == pytest.approx([5.0, -1.0])
+    assert motion['frames'][1]['total_offset_px'] == pytest.approx([25.0, -5.0])
+    assert motion['frames'][2]['total_offset_px'] == pytest.approx([40.0, -8.0])
+    assert motion['pad_px'] == [42, 0]
+    assert motion['pad_after_px'] == [0, 10]
+
+
+def test_cloud_motion_adds_per_layer_wind_offsets():
+    from satsim import satsim as satsim_module
+
+    tt = [2025, 1, 1, 0, 0, 0.0]
+    ts_collect_start = satsim_module.time.utc_from_list(tt)
+    ts_collect_end = satsim_module.time.utc_from_list(tt, 2.0)
+    layer_configs = parse_cloud_layers([
+        {'type': 'custom', 'wind_speed': 2.0, 'wind_direction': 90.0},
+        {'type': 'custom', 'wind_speed': 1.0, 'wind_direction': 0.0},
+    ], sim_seed=1)
+    geometry = CloudGeometry(
+        height_px=1,
+        width_px=1,
+        y_fov_deg=math.degrees(1.0),
+        x_fov_deg=math.degrees(1.0),
+        cloud_range_m=1.0,
+    )
+
+    motion = satsim_module._plan_cloud_motion(
+        {},
+        num_frames=2,
+        t_frame=1.0,
+        t_exposure=1.0,
+        tt=tt,
+        ts_collect_start=ts_collect_start,
+        ts_collect_end=ts_collect_end,
+        s_osf=1,
+        star_tran_os=[0.0, 0.0],
+        track_mode=None,
+        observer=None,
+        track=None,
+        star_rot=0.0,
+        track_az=None,
+        track_el=None,
+        track_apparent=True,
+        track_ra=None,
+        track_dec=None,
+        h_fpa_pad_os=10,
+        w_fpa_pad_os=10,
+        y_fov_pad=1.0,
+        x_fov_pad=1.0,
+        y_fov=1.0,
+        x_fov=1.0,
+        y_ifov=0.1,
+        x_ifov=0.1,
+        cloud_layer_configs=layer_configs,
+        cloud_geometry=geometry,
+    )
+
+    np.testing.assert_allclose(motion['frames'][0]['layer_wind_offsets_px'], [[1.0, 0.0], [0.0, 0.5]], atol=1e-7)
+    np.testing.assert_allclose(motion['frames'][1]['layer_wind_offsets_px'], [[3.0, 0.0], [0.0, 1.5]], atol=1e-7)
+    np.testing.assert_allclose(motion['frames'][1]['layer_total_offsets_px'], [[3.0, 0.0], [0.0, 1.5]], atol=1e-7)
+    assert motion['pad_px'] == [5, 4]
+    assert motion['pad_after_px'] == [0, 0]
+    assert motion['source_shape_px'] == [6, 5]
+
+
+def test_cloud_motion_ignores_cardinal_direction_roundoff_padding():
+    from satsim import satsim as satsim_module
+
+    tt = [2025, 1, 1, 0, 0, 0.0]
+    ts_collect_start = satsim_module.time.utc_from_list(tt)
+    ts_collect_end = satsim_module.time.utc_from_list(tt, 2.0)
+    layer_configs = parse_cloud_layers([
+        {'type': 'custom', 'wind_speed': 2.0, 'wind_direction': 90.0},
+        {'type': 'custom', 'wind_speed': 1.0, 'wind_direction': 270.0},
+    ], sim_seed=1)
+    geometry = CloudGeometry(
+        height_px=10,
+        width_px=10,
+        y_fov_deg=math.degrees(1.0),
+        x_fov_deg=math.degrees(1.0),
+        cloud_range_m=10.0,
+    )
+
+    motion = satsim_module._plan_cloud_motion(
+        {},
+        num_frames=2,
+        t_frame=1.0,
+        t_exposure=1.0,
+        tt=tt,
+        ts_collect_start=ts_collect_start,
+        ts_collect_end=ts_collect_end,
+        s_osf=1,
+        star_tran_os=[0.0, 0.0],
+        track_mode=None,
+        observer=None,
+        track=None,
+        star_rot=0.0,
+        track_az=None,
+        track_el=None,
+        track_apparent=True,
+        track_ra=None,
+        track_dec=None,
+        h_fpa_pad_os=10,
+        w_fpa_pad_os=10,
+        y_fov_pad=1.0,
+        x_fov_pad=1.0,
+        y_fov=1.0,
+        x_fov=1.0,
+        y_ifov=0.1,
+        x_ifov=0.1,
+        cloud_layer_configs=layer_configs,
+        cloud_geometry=geometry,
+    )
+
+    assert motion['pad_px'] == [5, 0]
+    assert motion['pad_after_px'] == [4, 0]
+    assert motion['source_shape_px'] == [19, 10]
+
+
+def test_cloud_motion_rejects_excessive_padded_source(monkeypatch):
+    from satsim import satsim as satsim_module
+
+    monkeypatch.setattr(satsim_module, '_MAX_CLOUD_SOURCE_PIXELS', 100)
+    tt = [2025, 1, 1, 0, 0, 0.0]
+    ts_collect_start = satsim_module.time.utc_from_list(tt)
+    ts_collect_end = satsim_module.time.utc_from_list(tt, 2.0)
+    layer_configs = parse_cloud_layers([
+        {'type': 'custom', 'wind_speed': 10.0, 'wind_direction': 90.0},
+    ], sim_seed=1)
+    geometry = CloudGeometry(
+        height_px=10,
+        width_px=10,
+        y_fov_deg=math.degrees(1.0),
+        x_fov_deg=math.degrees(1.0),
+        cloud_range_m=1.0,
+    )
+
+    with pytest.raises(ValueError, match='padded source field'):
+        satsim_module._plan_cloud_motion(
+            {},
+            num_frames=2,
+            t_frame=1.0,
+            t_exposure=1.0,
+            tt=tt,
+            ts_collect_start=ts_collect_start,
+            ts_collect_end=ts_collect_end,
+            s_osf=1,
+            star_tran_os=[0.0, 0.0],
+            track_mode=None,
+            observer=None,
+            track=None,
+            star_rot=0.0,
+            track_az=None,
+            track_el=None,
+            track_apparent=True,
+            track_ra=None,
+            track_dec=None,
+            h_fpa_pad_os=10,
+            w_fpa_pad_os=10,
+            y_fov_pad=1.0,
+            x_fov_pad=1.0,
+            y_fov=1.0,
+            x_fov=1.0,
+            y_ifov=0.1,
+            x_ifov=0.1,
+            cloud_layer_configs=layer_configs,
+            cloud_geometry=geometry,
+        )
+
+
+def _runtime_cloud_ssp(star_translation):
+    from satsim import config
+
+    ssp = config.load_json('./tests/config_static.json')
+    ssp['sim']['spacial_osf'] = 1
+    ssp['sim']['temporal_osf'] = 1
+    ssp['sim']['padding'] = 2
+    ssp['sim']['enable_shot_noise'] = False
+    ssp['sim']['save_ground_truth'] = True
+    ssp['sim']['save_segmentation'] = True
+    ssp['fpa']['height'] = 24
+    ssp['fpa']['width'] = 24
+    ssp['fpa']['num_frames'] = 2
+    ssp['fpa']['time']['exposure'] = 1.0
+    ssp['fpa']['time']['gap'] = 0.0
+    ssp['fpa']['dark_current'] = 0
+    ssp['fpa']['bias'] = 0
+    ssp['fpa']['noise']['read'] = 0
+    ssp['fpa']['noise']['electronic'] = 0
+    ssp['background']['galactic'] = 22.0
+    ssp['geometry']['stars']['mv']['bins'] = []
+    ssp['geometry']['stars']['mv']['density'] = []
+    ssp['geometry']['stars']['motion']['mode'] = 'affine'
+    ssp['geometry']['stars']['motion']['rotation'] = 0.0
+    ssp['geometry']['stars']['motion']['translation'] = list(star_translation)
+    ssp['geometry']['obs']['list'] = []
+    ssp['clouds'] = [{
+        'type': 'custom',
+        'seed': 123,
+        'coverage': 0.5,
+        'feature_scales_m': [20.0, 40.0],
+        'density_edge_width': 0.1,
+        'tau_min': 0.05,
+        'tau_max': 1.0,
+        'brightness': 18.0,
+    }]
+    return ssp
+
+
+def _run_runtime_cloud_frames(ssp):
+    from satsim.satsim import image_generator
+    from satsim.util import configure_eager
+
+    configure_eager()
+    return list(image_generator(ssp, output_dir='./.images', with_meta=True, num_sets=1))
+
+
+def test_runtime_static_cloud_crop_is_stable_across_frames():
+    frames = _run_runtime_cloud_frames(_runtime_cloud_ssp([0.0, 0.0]))
+
+    first_bg = frames[0][6].numpy()
+    second_bg = frames[1][6].numpy()
+
+    np.testing.assert_allclose(first_bg, second_bg)
+    assert frames[0][2]['clouds']['motion']['pad_px'] == [0, 0]
+    assert frames[0][2]['clouds']['motion']['total_offset_px'] == [0.0, 0.0]
+    assert frames[1][2]['clouds']['motion']['total_offset_px'] == [0.0, 0.0]
+
+
+def test_runtime_moving_cloud_crop_changes_background_and_ground_truth():
+    frames = _run_runtime_cloud_frames(_runtime_cloud_ssp([2.0, 0.0]))
+
+    first_bg = frames[0][6].numpy()
+    second_bg = frames[1][6].numpy()
+    first_motion = frames[0][2]['clouds']['motion']
+    second_motion = frames[1][2]['clouds']['motion']
+
+    assert first_motion['pad_px'] == [5, 0]
+    assert second_motion['pad_px'] == [5, 0]
+    assert first_motion['total_offset_px'] == [1.0, 0.0]
+    assert second_motion['total_offset_px'] == [3.0, 0.0]
+    assert not np.allclose(first_bg, second_bg)
+    np.testing.assert_allclose(frames[0][11]['background_pe'], first_bg)
+    np.testing.assert_allclose(frames[1][11]['background_pe'], second_bg)
+    assert frames[0][13]['cloud_segmentation'].shape == first_bg.shape
+    assert frames[1][13]['cloud_segmentation'].shape == second_bg.shape
