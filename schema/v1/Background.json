@@ -6,12 +6,81 @@
     "type": "object",
     "properties": {
         "galactic": {
-            "description": "Galactic background in visual magnitude.",
-            "$ref": "types/Float.json"
+            "description": "Legacy scalar sky background in visual magnitude per arcsec^2. When skyglow is omitted, this is the total moonless clear-sky background. When skyglow is present, this is treated as the natural moonless baseline used to infer the artificial skyglow residual.",
+            "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+        },
+        "skyglow": {
+            "description": "Optional moonless clear-sky total site brightness in visual magnitude per arcsec^2, including artificial light pollution. Lower values are brighter. May be a scalar or an FPA-shaped two-dimensional magnitude field. SatSim converts galactic and skyglow to linear photoelectrons and uses their difference as the artificial skyglow component; skyglow must not be numerically larger than galactic.",
+            "anyOf": [
+                { "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json" },
+                { "$ref": "https://ssc-ai.github.io/satsim/schema/v1/Background.json#/definitions/magnitudeField" }
+            ]
         },
         "stray": {
             "description": "Stray light model.",
             "type": "object"
+        },
+        "moon": {
+            "description": "Optional lunar sky-brightness mode. none disables lunar sky brightness. default currently aliases krisciunas-schaefer, a V-band scattered moonlight model using lunar phase, Moon-sky separation, Moon zenith distance, target zenith distance, and atmospheric extinction.",
+            "$ref": "https://ssc-ai.github.io/satsim/schema/v1/Background.json#/definitions/moon"
+        },
+        "twilight": {
+            "description": "Optional below-horizon solar twilight sky-brightness mode. none disables twilight. default currently aliases patat, a V-band zenith twilight model using Sun zenith distance.",
+            "$ref": "https://ssc-ai.github.io/satsim/schema/v1/Background.json#/definitions/twilight"
+        },
+        "daytime": {
+            "description": "Optional above-horizon daylight sky-brightness mode. none disables daytime sky brightness. default currently aliases hosek-wilkie, a clear-sky daylight model with solar-elevation-dependent absolute normalization and angular sky shape. perez remains available as an explicit compact CIE/Perez comparison mode.",
+            "$ref": "https://ssc-ai.github.io/satsim/schema/v1/Background.json#/definitions/daytime"
         }
-    }
+    },
+    "definitions": {
+        "magnitudeField": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                }
+            }
+        },
+        "moon": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "mode": {
+                    "description": "Lunar sky-brightness mode. none disables lunar sky brightness. default aliases krisciunas-schaefer.",
+                    "type": "string",
+                    "enum": ["none", "default", "krisciunas-schaefer"],
+                    "default": "none"
+                }
+            }
+        },
+        "twilight": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "mode": {
+                    "description": "Twilight sky-brightness mode. none disables twilight sky brightness. default aliases patat.",
+                    "type": "string",
+                    "enum": ["none", "default", "patat"],
+                    "default": "none"
+                }
+            }
+        },
+        "daytime": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "mode": {
+                    "description": "Daytime sky-brightness mode. none disables daytime sky brightness. default aliases hosek-wilkie. hosek-wilkie uses the Hošek-Wilkie clear-sky model with internal turbidity and ground-albedo defaults. perez uses the older fixed-normalization CIE/Perez comparison path.",
+                    "type": "string",
+                    "enum": ["none", "default", "hosek-wilkie", "perez"],
+                    "default": "none"
+                }
+            }
+        }
+    },
+    "additionalProperties": true
 }

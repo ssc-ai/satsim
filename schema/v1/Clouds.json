@@ -35,6 +35,26 @@
                     "description": "Target fractional cloud amount for this layer, from 0.0 for clear to 1.0 for full coverage. This is a fraction only; percent values such as 20 are not accepted.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
                 },
+                "texture": {
+                    "description": "Grouped cloud texture controls. These fields are aliases for the legacy flat texture fields on this same layer. Do not set the same logical field both directly and inside texture.",
+                    "$ref": "#/definitions/texture"
+                },
+                "optical": {
+                    "description": "Grouped optical-depth controls. These fields are aliases for the legacy flat tau fields on this same layer. Do not set the same logical field both directly and inside optical.",
+                    "$ref": "#/definitions/optical"
+                },
+                "geometry": {
+                    "description": "Grouped cloud-plane geometry controls. These fields are aliases for the legacy flat range and altitude fields on this same layer. Do not set the same logical field both directly and inside geometry.",
+                    "$ref": "#/definitions/geometry"
+                },
+                "motion": {
+                    "description": "Grouped cloud advection controls. These fields are aliases for the legacy flat wind fields on this same layer. Do not set the same logical field both directly and inside motion.",
+                    "$ref": "#/definitions/motion"
+                },
+                "illumination": {
+                    "description": "Grouped cloud brightness controls. These fields are aliases for the legacy flat brightness field on this same layer. Do not set the same logical field both directly and inside illumination.",
+                    "$ref": "#/definitions/illumination"
+                },
                 "feature_scales_m": {
                     "description": "Positive physical texture scales, in meters, used by the multi-scale procedural noise model. Smaller values add fine texture; larger values create broader cloud structures.",
                     "type": "array",
@@ -57,6 +77,14 @@
                 "brightness": {
                     "description": "Optional cloud glow brightness in visual magnitude per arcsec^2, used to simulate artificial ground light illuminating the cloud. Lower magnitude values are brighter. Emitted photoelectrons are scaled by the inverted layer transmission, `1 - transmission`.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                },
+                "range": {
+                    "description": "Optional cloud slant range in kilometers. This controls the physical size of cloud texture projected onto the FPA and converts wind speed into pixels per second. Defaults to 3.0.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                },
+                "altitude": {
+                    "description": "Optional cloud height in kilometers above the observer, used by source-driven cloud brightening gains. If omitted, SatSim uses the layer range as the source-height proxy.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
                 },
                 "wind_speed": {
                     "description": "Optional cloud advection speed in meters per second on the cloud plane. The value is converted to pixels per second from the cloud range and FPA IFOV. Defaults to 0.0, meaning no wind-driven cloud motion.",
@@ -87,6 +115,137 @@
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
                 }
             }
+        },
+        "texture": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "feature_scales_m": {
+                    "description": "Positive physical texture scales, in meters. Alias of clouds[].feature_scales_m.",
+                    "$ref": "#/definitions/featureScalesM"
+                },
+                "scales_m": {
+                    "description": "Positive physical texture scales, in meters. Alias of clouds[].feature_scales_m.",
+                    "$ref": "#/definitions/featureScalesM"
+                },
+                "density_edge_width": {
+                    "description": "Nonnegative softness width for mapping procedural texture into cloud density. Alias of clouds[].density_edge_width.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "edge_width": {
+                    "description": "Nonnegative softness width for mapping procedural texture into cloud density. Alias of clouds[].density_edge_width.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "density_floor": {
+                    "description": "Optional minimum density added before optical-depth mapping. Alias of clouds[].density_floor.",
+                    "$ref": "#/definitions/optionalUnitInterval"
+                },
+                "floor": {
+                    "description": "Optional minimum density added before optical-depth mapping. Alias of clouds[].density_floor.",
+                    "$ref": "#/definitions/optionalUnitInterval"
+                },
+                "texture_contrast": {
+                    "description": "Contrast applied to the normalized procedural texture. Alias of clouds[].texture_contrast.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
+                },
+                "contrast": {
+                    "description": "Contrast applied to the normalized procedural texture. Alias of clouds[].texture_contrast.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
+                },
+                "locality_degree": {
+                    "description": "Positive integer controlling cloud support localization. Alias of clouds[].locality_degree.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveInteger.json"
+                }
+            }
+        },
+        "optical": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "tau_min": {
+                    "description": "Minimum optical depth used when converting nonzero cloud density into Beer-Lambert transmission. Alias of clouds[].tau_min.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "tau_max": {
+                    "description": "Maximum optical depth reached by dense cloud regions. Alias of clouds[].tau_max.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "tau_gamma": {
+                    "description": "Positive response exponent for mapping density into optical depth. Alias of clouds[].tau_gamma.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                }
+            }
+        },
+        "geometry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "range": {
+                    "description": "Cloud slant range in kilometers. Alias of clouds[].range.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                },
+                "range_km": {
+                    "description": "Cloud slant range in kilometers. Alias of clouds[].range.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                },
+                "altitude": {
+                    "description": "Cloud height in kilometers above the observer. Alias of clouds[].altitude.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                },
+                "altitude_km": {
+                    "description": "Cloud height in kilometers above the observer. Alias of clouds[].altitude.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                }
+            }
+        },
+        "motion": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "wind_speed": {
+                    "description": "Cloud advection speed in meters per second on the cloud plane. Alias of clouds[].wind_speed.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "speed_m_per_s": {
+                    "description": "Cloud advection speed in meters per second on the cloud plane. Alias of clouds[].wind_speed.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
+                },
+                "wind_direction": {
+                    "description": "Cloud advection direction in degrees using SatSim's image-plane polar convention. Alias of clouds[].wind_direction.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                },
+                "direction_deg": {
+                    "description": "Cloud advection direction in degrees using SatSim's image-plane polar convention. Alias of clouds[].wind_direction.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                }
+            }
+        },
+        "illumination": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "brightness": {
+                    "description": "Cloud glow brightness in visual magnitude per arcsec^2. Alias of clouds[].brightness.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                },
+                "brightness_mag_arcsec2": {
+                    "description": "Cloud glow brightness in visual magnitude per arcsec^2. Alias of clouds[].brightness.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                }
+            }
+        },
+        "featureScalesM": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+            }
+        },
+        "optionalUnitInterval": {
+            "anyOf": [
+                { "type": "null" },
+                { "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json" }
+            ]
         }
     }
 }

@@ -64,6 +64,11 @@ from satsim.clouds import (
     cloud_layers_from_config,
     crop_cloud_field,
 )
+from satsim.background import (
+    apply_background_stray_augmentation,
+    background_components_from_config,
+    background_frame_components_from_config,
+)
 from satsim.geometry import analytic_obs
 from satsim.io import analytical
 from satsim.config import transform, save_debug, _transform, save_cache, _ref, _has_rkey_deep
@@ -574,13 +579,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     obs = ssp['geometry']['obs']['list']
 
     pixel_area_arcsec2 = y_ifov * 3600 * x_ifov * 3600
-    bg = mv_to_pe(zeropoint, ssp['background']['galactic']) * pixel_area_arcsec2 * t_exposure
-
-    if 'stray' in ssp['background']:
-        if isinstance(ssp['background']['stray'], dict) and 'mode' in ssp['background']['stray'] and ssp['background']['stray']['mode'] == 'none':
-            pass  # for backward compat
-        else:
-            bg = bg + ssp['background']['stray'] * t_exposure
+    background_components = background_components_from_config(
+        ssp,
+        zeropoint,
+        pixel_area_arcsec2,
+        t_exposure,
+    )
+    bg = background_components['background_pre_cloud_pe']
 
     dc = ssp['fpa']['dark_current'] * t_exposure
     rn = ssp['fpa']['noise']['read']
@@ -749,6 +754,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             bg = ssp['augment']['background']['stray'](bg)
             bg = tf.cast(bg, tf.float32)
             bg = tf.where(tf.math.is_nan(bg), tf.zeros_like(bg), bg)
+            background_components = apply_background_stray_augmentation(background_components, bg)
 
         logger.debug('Exposure time {}.'.format(t_exposure))
         logger.debug('Background pe/pix {}.'.format(np.mean(bg)))
@@ -758,7 +764,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         obs_cache = [None] * len(obs)
         batch_cache = {}
         gain_tf = tf.cast(gain, tf.float32)
-        bg_tf = tf.cast(bg, tf.float32)
+        background_component_tfs = {
+            key: tf.cast(value, tf.float32)
+            for key, value in background_components.items()
+            if key.endswith('_pe')
+        }
+        background_component_active = background_components['active']
+        bg_tf = background_component_tfs['background_pre_cloud_pe']
         dc_tf = tf.cast(dc, tf.float32)
         bias_tf = tf.cast(bias, tf.float32)
         _rn = tf.cast(rn, tf.float32)
@@ -904,6 +916,37 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                                          track_ra=track_ra,
                                                                                                          track_dec=track_dec)
 
+            astrometrics['background'] = copy.deepcopy(background_components['metadata'])
+            frame_background_components = background_frame_components_from_config(
+                ssp,
+                zeropoint,
+                pixel_area_arcsec2,
+                t_exposure,
+                observer,
+                site_mode,
+                astrometrics,
+                ts_mid,
+            )
+            astrometrics['background'].update(frame_background_components['metadata'])
+            frame_background_component_tfs = dict(background_component_tfs)
+            frame_background_component_active = dict(background_component_active)
+            for key, value in frame_background_components['components'].items():
+                frame_background_component_tfs[key] = tf.cast(value, tf.float32)
+            frame_background_component_active.update(frame_background_components['active'])
+            frame_pre_cloud_component_keys = [
+                key for key in frame_background_component_tfs
+                if (
+                    key.startswith('background_')
+                    and key.endswith('_pe')
+                    and key not in ('background_pre_cloud_pe', 'background_pe')
+                )
+            ]
+            frame_pre_cloud_bg_tf = sum(
+                [frame_background_component_tfs[key] for key in frame_pre_cloud_component_keys],
+                tf.cast(0.0, tf.float32),
+            )
+            frame_background_component_tfs['background_pre_cloud_pe'] = frame_pre_cloud_bg_tf
+
             # if image rendering is disabled, optionally generate analytical observations and return
             if ssp['sim']['mode'] == 'none':
                 if ssp['sim'].get('analytical_obs', False):
@@ -915,7 +958,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                             opp['rrr'] = opp['rrr'] - cp['height_offset']
                             opp['rcc'] = opp['rcc'] - cp['width_offset']
 
-                    bg_val = float(tf.reduce_mean(bg_tf).numpy()) if hasattr(bg_tf, 'numpy') else float(np.mean(bg_tf))
+                    bg_val = float(tf.reduce_mean(frame_pre_cloud_bg_tf).numpy()) if hasattr(frame_pre_cloud_bg_tf, 'numpy') else float(np.mean(frame_pre_cloud_bg_tf))
                     dc_val = float(tf.reduce_mean(dc_tf).numpy()) if hasattr(dc_tf, 'numpy') else float(np.mean(dc_tf))
                     rn_val = float(rn)
                     en_val = float(en)
@@ -1022,6 +1065,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             frame_cloud_field = None
             cloud_transmission_tf = None
             cloud_brightness_pe_tf = None
+            cloud_brightness_component_tfs = {}
+            frame_cloud_brightness_active = False
             if cloud_source_field is not None:
                 cloud_frame_motion = cloud_motion['frames'][frame_num]
                 frame_cloud_field = crop_cloud_field(
@@ -1034,27 +1079,45 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 )
                 frame_cloud_field.metadata['motion'].update(cloud_frame_motion)
                 cloud_transmission_tf = tf.cast(frame_cloud_field.transmission, tf.float32)
-                cloud_brightness_pe_np = cloud_brightness_pe_from_field(
+                cloud_brightness_components_np = cloud_brightness_pe_from_field(
                     frame_cloud_field,
                     zeropoint,
                     t_exposure,
                     pixel_area_arcsec2,
+                    source_components=_cloud_source_components(
+                        frame_background_component_tfs,
+                        astrometrics.get('background', {}),
+                    ),
+                    return_components=True,
                 )
-                cloud_brightness_pe_tf = tf.cast(cloud_brightness_pe_np, tf.float32)
+                cloud_brightness_pe_tf = tf.cast(
+                    cloud_brightness_components_np['cloud_brightness_pe'],
+                    tf.float32,
+                )
+                cloud_brightness_component_tfs = {
+                    key: tf.cast(value, tf.float32)
+                    for key, value in cloud_brightness_components_np.items()
+                }
+                frame_cloud_brightness_active = (
+                    cloud_has_brightness
+                    or np.any(cloud_brightness_components_np['cloud_source_brightness_pe'])
+                )
                 astrometrics['clouds'] = frame_cloud_field.metadata
 
             # render
             with frame_profiler.time('render'):
                 fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, ssp['sim']['calculate_snr'])
 
-            frame_bg_tf = bg_tf
-            frame_cloud_brightness_pe_tf = None
+            frame_bg_tf = frame_pre_cloud_bg_tf
             if cloud_transmission_tf is not None:
                 fpa_conv_star = fpa_conv_star * cloud_transmission_tf
                 fpa_conv_targ = fpa_conv_targ * cloud_transmission_tf
-                frame_bg_tf = bg_tf * cloud_transmission_tf + cloud_brightness_pe_tf
-                if cloud_has_brightness:
-                    frame_cloud_brightness_pe_tf = cloud_brightness_pe_tf
+                frame_bg_tf = frame_pre_cloud_bg_tf * cloud_transmission_tf + cloud_brightness_pe_tf
+                for key in frame_pre_cloud_component_keys:
+                    frame_background_component_tfs[key] = frame_background_component_tfs[key] * cloud_transmission_tf
+                if frame_cloud_brightness_active:
+                    frame_background_component_tfs.update(cloud_brightness_component_tfs)
+            frame_background_component_tfs['background_pe'] = frame_bg_tf
 
             # add noise
             with frame_profiler.time('noise'):
@@ -1160,7 +1223,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             crop_bg_tf = frame_bg_tf
             crop_dc_tf = dc_tf
             crop_rn_tf = rn_tf
-            crop_cloud_brightness_pe_tf = frame_cloud_brightness_pe_tf
+            crop_background_component_tfs = dict(frame_background_component_tfs)
             crop_h_fpa_os = h_fpa_os
             crop_w_fpa_os = w_fpa_os
             crop_gain_tf = gain_tf
@@ -1175,8 +1238,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     fpa_conv_star = crop(fpa_conv_star, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     if len(frame_bg_tf.shape) == 2:
                         crop_bg_tf = crop(frame_bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
-                    if frame_cloud_brightness_pe_tf is not None and len(frame_cloud_brightness_pe_tf.shape) == 2:
-                        crop_cloud_brightness_pe_tf = crop(frame_cloud_brightness_pe_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    for key, value in frame_background_component_tfs.items():
+                        if len(value.shape) == 2:
+                            crop_background_component_tfs[key] = crop(value, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     if len(dc_tf.shape) == 2:
                         crop_dc_tf = crop(dc_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     if len(rn_tf.shape) == 2:
@@ -1294,8 +1358,15 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 ground_truth['target_pe'] = fpa_conv_targ.numpy()
                 ground_truth['star_pe'] = fpa_conv_star.numpy()
                 ground_truth['background_pe'] = crop_bg_tf.numpy()
-                if crop_cloud_brightness_pe_tf is not None:
-                    ground_truth['cloud_brightness_pe'] = crop_cloud_brightness_pe_tf.numpy()
+                for key in frame_pre_cloud_component_keys:
+                    if frame_background_component_active.get(key, False):
+                        ground_truth[key] = crop_background_component_tfs[key].numpy()
+                if frame_cloud_brightness_active and 'cloud_brightness_pe' in crop_background_component_tfs:
+                    ground_truth['cloud_brightness_pe'] = crop_background_component_tfs['cloud_brightness_pe'].numpy()
+                    if 'cloud_config_brightness_pe' in crop_background_component_tfs:
+                        ground_truth['cloud_config_brightness_pe'] = crop_background_component_tfs['cloud_config_brightness_pe'].numpy()
+                    if 'cloud_source_brightness_pe' in crop_background_component_tfs:
+                        ground_truth['cloud_source_brightness_pe'] = crop_background_component_tfs['cloud_source_brightness_pe'].numpy()
                 ground_truth['dark_current_pe'] = crop_dc_tf.numpy()
                 ground_truth['photon_noise_pe'] = (fpa_conv_noise - fpa_conv).numpy()
                 ground_truth['read_noise_pe'] = rn_gt.numpy()
@@ -2243,12 +2314,48 @@ def _cloud_wind_offsets_px(layer_configs, geometry, elapsed_s):
         if speed == 0.0:
             offsets.append([0.0, 0.0])
             continue
+        range_scale = float(layer.cloud_range) * 1000.0 / float(geometry.cloud_range_m)
+        y_meters_per_pixel = geometry.y_meters_per_pixel * range_scale
+        x_meters_per_pixel = geometry.x_meters_per_pixel * range_scale
         direction_rad = math.radians(float(layer.wind_direction))
         offsets.append([
-            speed * math.sin(direction_rad) * elapsed_s / geometry.y_meters_per_pixel,
-            speed * math.cos(direction_rad) * elapsed_s / geometry.x_meters_per_pixel,
+            speed * math.sin(direction_rad) * elapsed_s / y_meters_per_pixel,
+            speed * math.cos(direction_rad) * elapsed_s / x_meters_per_pixel,
         ])
     return offsets
+
+
+def _cloud_source_components(background_component_tfs, background_metadata=None):
+    background_metadata = background_metadata or {}
+    solar = None
+    for key in ('background_twilight_pe', 'background_daytime_pe'):
+        value = background_component_tfs.get(key)
+        if value is None:
+            continue
+        solar = value if solar is None else solar + value
+    lunar = background_component_tfs.get('background_moon_pe')
+    return {
+        'artificial': background_component_tfs.get('background_skyglow_pe'),
+        'lunar': None if lunar is None else {
+            'pe': lunar,
+            'metadata': background_metadata.get('moon', {}),
+        },
+        'solar': None if solar is None else {
+            'pe': solar,
+            'metadata': _cloud_solar_source_metadata(background_metadata),
+        },
+    }
+
+
+def _cloud_solar_source_metadata(background_metadata):
+    daytime = background_metadata.get('daytime') or {}
+    twilight = background_metadata.get('twilight') or {}
+    metadata = {}
+    for source in (twilight, daytime):
+        for key in ('sun_az', 'sun_el', 'sun_zenith', 'sun_sky_separation'):
+            if key in source and source[key] is not None:
+                metadata[key] = source[key]
+    return metadata
 
 
 def _cloud_motion_track_mode_and_time(track_mode, frame_num, total_frames, ts_start, ts_mid):

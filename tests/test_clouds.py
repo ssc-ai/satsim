@@ -4,18 +4,20 @@ import math
 import numpy as np
 import pytest
 
-from satsim import clouds as clouds_module
+import satsim.clouds.config as clouds_config
 from satsim.clouds import (
     CloudField,
     CloudGeometry,
     CloudLayer,
     cloud_brightness_pe_from_field,
+    cloud_source_brightness_pe_from_field,
     cloud_field_from_config,
     cloud_geometry_from_config,
     crop_cloud_field,
     generate_cloud_field,
     parse_cloud_layers,
 )
+from satsim.clouds.constants import LUNAR_DIRECT_BRIGHTENING, SOLAR_DIRECT_BRIGHTENING
 from satsim.image.fpa import mv_to_pe
 
 
@@ -38,16 +40,17 @@ def _geometry():
     return CloudGeometry(height_px=32, width_px=40, y_fov_deg=1.0, x_fov_deg=1.2)
 
 
-def _cloud_field_from_densities(densities, brightness=None):
+def _cloud_field_from_densities(densities, brightness=None, layer_overrides=None):
     densities = [np.asarray(density, dtype=np.float32) for density in densities]
+    layer_overrides = layer_overrides or {}
     configs = parse_cloud_layers([
-        {
+        dict({
             'type': 'custom',
             'brightness': brightness,
             'tau_min': 0.0,
             'tau_max': 1.0,
             'tau_gamma': 1.0,
-        }
+        }, **layer_overrides)
         for _ in densities
     ], sim_seed=1)
     layers = []
@@ -110,6 +113,8 @@ def test_preset_layer_uses_defaults():
     assert layers[0].coverage == pytest.approx(0.45)
     assert layers[0].density_edge_width == pytest.approx(0.08)
     assert layers[0].brightness is None
+    assert layers[0].cloud_range == pytest.approx(3.0)
+    assert layers[0].altitude is None
     assert layers[0].wind_speed == pytest.approx(0.0)
     assert layers[0].wind_direction == pytest.approx(0.0)
     assert layers[0].locality_degree == 2
@@ -125,6 +130,8 @@ def test_preset_layer_applies_public_overrides():
             'density_edge_width': 0.2,
             'density_floor': 0.1,
             'brightness': 17.5,
+            'range': 6.0,
+            'altitude': 1.2,
             'wind_speed': 4.0,
             'wind_direction': 450.0,
             'texture_contrast': 0.5,
@@ -141,6 +148,8 @@ def test_preset_layer_applies_public_overrides():
     assert layer.density_edge_width == pytest.approx(0.2)
     assert layer.density_floor == pytest.approx(0.1)
     assert layer.brightness == pytest.approx(17.5)
+    assert layer.cloud_range == pytest.approx(6.0)
+    assert layer.altitude == pytest.approx(1.2)
     assert layer.wind_speed == pytest.approx(4.0)
     assert layer.wind_direction == pytest.approx(90.0)
     assert layer.texture_contrast == pytest.approx(0.5)
@@ -148,6 +157,94 @@ def test_preset_layer_applies_public_overrides():
     assert layer.tau_min == pytest.approx(0.03)
     assert layer.tau_max == pytest.approx(0.7)
     assert layer.tau_gamma == pytest.approx(1.4)
+
+
+def test_grouped_layer_config_applies_public_overrides():
+    layers = parse_cloud_layers([
+        {
+            'type': 'veil',
+            'coverage': 0.25,
+            'texture': {
+                'scales_m': [1000, 2000],
+                'edge_width': 0.2,
+                'floor': 0.1,
+                'contrast': 0.5,
+                'locality_degree': 2,
+            },
+            'illumination': {
+                'brightness_mag_arcsec2': 17.5,
+            },
+            'geometry': {
+                'range_km': 6.0,
+                'altitude_km': 1.2,
+            },
+            'motion': {
+                'speed_m_per_s': 4.0,
+                'direction_deg': 450.0,
+            },
+            'optical': {
+                'tau_min': 0.03,
+                'tau_max': 0.7,
+                'tau_gamma': 1.4,
+            },
+        }
+    ])
+
+    layer = layers[0]
+    assert layer.coverage == pytest.approx(0.25)
+    assert layer.feature_scales_m == (1000.0, 2000.0)
+    assert layer.density_edge_width == pytest.approx(0.2)
+    assert layer.density_floor == pytest.approx(0.1)
+    assert layer.brightness == pytest.approx(17.5)
+    assert layer.cloud_range == pytest.approx(6.0)
+    assert layer.altitude == pytest.approx(1.2)
+    assert layer.wind_speed == pytest.approx(4.0)
+    assert layer.wind_direction == pytest.approx(90.0)
+    assert layer.texture_contrast == pytest.approx(0.5)
+    assert layer.locality_degree == 2
+    assert layer.tau_min == pytest.approx(0.03)
+    assert layer.tau_max == pytest.approx(0.7)
+    assert layer.tau_gamma == pytest.approx(1.4)
+
+
+def test_grouped_layer_config_rejects_duplicate_logical_fields():
+    with pytest.raises(ValueError, match='defines brightness both directly and inside illumination'):
+        parse_cloud_layers([
+            {
+                'type': 'custom',
+                'brightness': 17.5,
+                'illumination': {'brightness': 18.0},
+            }
+        ])
+
+    with pytest.raises(ValueError, match='defines feature_scales_m more than once'):
+        parse_cloud_layers([
+            {
+                'type': 'custom',
+                'texture': {
+                    'feature_scales_m': [40.0],
+                    'scales_m': [80.0],
+                },
+            }
+        ])
+
+
+def test_grouped_layer_config_rejects_unknown_or_non_object_groups():
+    with pytest.raises(ValueError, match='Unknown cloud layer field'):
+        parse_cloud_layers([
+            {
+                'type': 'custom',
+                'texture': {'amplitude_decay': 0.8},
+            }
+        ])
+
+    with pytest.raises(ValueError, match='motion must be an object'):
+        parse_cloud_layers([
+            {
+                'type': 'custom',
+                'motion': 'fast',
+            }
+        ])
 
 
 def test_custom_layer_uses_generic_defaults_with_partial_overrides():
@@ -165,6 +262,8 @@ def test_custom_layer_uses_generic_defaults_with_partial_overrides():
     assert layer.feature_scales_m == (40.0, 80.0, 160.0, 320.0, 640.0)
     assert layer.density_edge_width == pytest.approx(0.12)
     assert layer.brightness is None
+    assert layer.cloud_range == pytest.approx(3.0)
+    assert layer.altitude is None
     assert layer.wind_speed == pytest.approx(0.0)
     assert layer.wind_direction == pytest.approx(0.0)
     assert layer.texture_contrast == pytest.approx(1.0)
@@ -230,6 +329,12 @@ def test_unknown_type_and_invalid_numeric_ranges_fail():
     with pytest.raises(ValueError, match='brightness'):
         parse_cloud_layers([{'type': 'custom', 'brightness': True}])
 
+    with pytest.raises(ValueError, match='range'):
+        parse_cloud_layers([{'type': 'custom', 'range': 0.0}])
+
+    with pytest.raises(ValueError, match='altitude'):
+        parse_cloud_layers([{'type': 'custom', 'altitude': -1.0}])
+
     with pytest.raises(ValueError, match='wind_speed'):
         parse_cloud_layers([{'type': 'custom', 'wind_speed': -1.0}])
 
@@ -248,6 +353,8 @@ def test_brightness_is_in_layer_metadata():
         {
             'type': 'custom',
             'brightness': 17.5,
+            'range': 5.0,
+            'altitude': 1.0,
             'wind_speed': 3.0,
             'wind_direction': -90.0,
         }
@@ -256,9 +363,13 @@ def test_brightness_is_in_layer_metadata():
     field = generate_cloud_field(layers, _geometry())
 
     assert field.layers[0].metadata['brightness'] == pytest.approx(17.5)
+    assert field.layers[0].metadata['range'] == pytest.approx(5.0)
+    assert field.layers[0].metadata['altitude'] == pytest.approx(1.0)
     assert field.layers[0].metadata['wind_speed'] == pytest.approx(3.0)
     assert field.layers[0].metadata['wind_direction'] == pytest.approx(270.0)
     assert field.metadata['layers'][0]['brightness'] == pytest.approx(17.5)
+    assert field.metadata['layers'][0]['range'] == pytest.approx(5.0)
+    assert field.metadata['layers'][0]['altitude'] == pytest.approx(1.0)
     assert field.metadata['layers'][0]['wind_speed'] == pytest.approx(3.0)
     assert field.metadata['layers'][0]['wind_direction'] == pytest.approx(270.0)
 
@@ -282,7 +393,7 @@ def test_top_level_seed_is_used_when_sim_seed_is_absent():
 
 
 def test_missing_config_seed_uses_random_cloud_seed(monkeypatch):
-    monkeypatch.setattr(clouds_module, '_random_seed', lambda: 12345)
+    monkeypatch.setattr(clouds_config, '_random_seed', lambda: 12345)
     ssp = _ssp([
         {'type': 'custom', 'coverage': 0.0},
         {'type': 'custom', 'coverage': 0.0},
@@ -298,7 +409,7 @@ def test_missing_config_seed_uses_random_cloud_seed(monkeypatch):
 
 
 def test_layer_seed_overrides_random_cloud_seed(monkeypatch):
-    monkeypatch.setattr(clouds_module, '_random_seed', lambda: 12345)
+    monkeypatch.setattr(clouds_config, '_random_seed', lambda: 12345)
 
     layers = parse_cloud_layers([{'type': 'custom', 'seed': 77}])
 
@@ -523,6 +634,180 @@ def test_cloud_brightness_pe_is_zero_without_bright_layers():
     np.testing.assert_array_equal(brightness_pe, np.zeros_like(field.transmission))
 
 
+def test_cloud_source_brightness_uses_source_components_and_altitude_gain():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([density], layer_overrides={'altitude': 2.0})
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    source_pe = cloud_source_brightness_pe_from_field(
+        cropped,
+        {'artificial': 10.0, 'lunar': 4.0, 'solar': 2.0},
+    )
+    optical_coupling = 1.0 - np.exp(-1.0)
+    expected = optical_coupling * (
+        10.0 * 1.5 * math.exp(-2000.0 / 4000.0)
+        + 4.0 * 0.35 * math.exp(-2000.0 / 8000.0)
+        + 2.0 * 0.25 * math.exp(-2000.0 / 12000.0)
+    )
+
+    np.testing.assert_allclose(source_pe, np.full((2, 2), expected), rtol=1e-6)
+
+
+def test_cloud_lunar_source_uses_direct_illumination_metadata():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([density], layer_overrides={'altitude': 2.0})
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    source_pe = cloud_source_brightness_pe_from_field(
+        cropped,
+        {
+            'lunar': {
+                'pe': 4.0,
+                'metadata': {
+                    'moon_el': 39.0,
+                    'phase_angle': 45.0,
+                },
+            },
+        },
+    )
+
+    optical_coupling = 1.0 - np.exp(-1.0)
+    phase_fraction = 0.5 * (1.0 + math.cos(math.radians(45.0)))
+    expected_gain = (
+        LUNAR_DIRECT_BRIGHTENING['gain']
+        * math.exp(-2000.0 / LUNAR_DIRECT_BRIGHTENING['scale_height_m'])
+        * math.sqrt(math.sin(math.radians(39.0)))
+        * math.sqrt(phase_fraction)
+    )
+    expected = 4.0 * optical_coupling * expected_gain
+
+    np.testing.assert_allclose(source_pe, np.full((2, 2), expected), rtol=1e-6)
+
+
+def test_cloud_lunar_direct_illumination_is_zero_below_horizon():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([density], layer_overrides={'altitude': 2.0})
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    source_pe = cloud_source_brightness_pe_from_field(
+        cropped,
+        {
+            'lunar': {
+                'pe': 4.0,
+                'metadata': {
+                    'moon_el': -1.0,
+                    'phase_angle': 0.0,
+                },
+            },
+        },
+    )
+
+    np.testing.assert_array_equal(source_pe, np.zeros((2, 2), dtype=np.float32))
+
+
+def test_cloud_solar_source_uses_direct_illumination_metadata():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([density], layer_overrides={'altitude': 2.0})
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    source_pe = cloud_source_brightness_pe_from_field(
+        cropped,
+        {
+            'solar': {
+                'pe': 6.0,
+                'metadata': {
+                    'sun_el': 12.0,
+                },
+            },
+        },
+    )
+
+    optical_coupling = 1.0 - np.exp(-1.0)
+    expected_gain = (
+        SOLAR_DIRECT_BRIGHTENING['gain']
+        * math.exp(-2000.0 / SOLAR_DIRECT_BRIGHTENING['scale_height_m'])
+        * math.sqrt(math.sin(math.radians(12.0)))
+    )
+    expected = 6.0 * optical_coupling * expected_gain
+
+    np.testing.assert_allclose(source_pe, np.full((2, 2), expected), rtol=1e-6)
+
+
+def test_cloud_solar_source_uses_twilight_ramp_below_horizon():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([density], layer_overrides={'altitude': 2.0})
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    source_pe = cloud_source_brightness_pe_from_field(
+        cropped,
+        {
+            'solar': {
+                'pe': 6.0,
+                'metadata': {
+                    'sun_el': -12.0,
+                },
+            },
+        },
+    )
+
+    optical_coupling = 1.0 - np.exp(-1.0)
+    twilight_t = (-12.0 - SOLAR_DIRECT_BRIGHTENING['twilight_min_sun_el_deg']) / abs(
+        SOLAR_DIRECT_BRIGHTENING['twilight_min_sun_el_deg']
+    )
+    twilight_gain = twilight_t * twilight_t * (3.0 - 2.0 * twilight_t)
+    expected_gain = (
+        SOLAR_DIRECT_BRIGHTENING['gain']
+        * math.exp(-2000.0 / SOLAR_DIRECT_BRIGHTENING['scale_height_m'])
+        * twilight_gain
+    )
+    expected = 6.0 * optical_coupling * expected_gain
+
+    np.testing.assert_allclose(source_pe, np.full((2, 2), expected), rtol=1e-6)
+
+
+def test_cloud_solar_direct_illumination_is_zero_after_astronomical_twilight():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([density], layer_overrides={'altitude': 2.0})
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    source_pe = cloud_source_brightness_pe_from_field(
+        cropped,
+        {
+            'solar': {
+                'pe': 6.0,
+                'metadata': {
+                    'sun_el': -19.0,
+                },
+            },
+        },
+    )
+
+    np.testing.assert_array_equal(source_pe, np.zeros((2, 2), dtype=np.float32))
+
+
+def test_cloud_brightness_returns_config_and_source_diagnostics():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([density], brightness=17.5)
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    components = cloud_brightness_pe_from_field(
+        cropped,
+        23.0,
+        2.0,
+        4.0,
+        source_components={'artificial': 10.0},
+        return_components=True,
+    )
+
+    np.testing.assert_allclose(
+        components['cloud_brightness_pe'],
+        components['cloud_config_brightness_pe'] + components['cloud_source_brightness_pe'],
+        rtol=1e-6,
+    )
+    assert np.mean(components['cloud_config_brightness_pe']) > 0.0
+    assert np.mean(components['cloud_source_brightness_pe']) > 0.0
+
+
 def test_cloud_field_from_config_does_not_mutate_config():
     ssp = _ssp([{'type': 'custom', 'coverage': 0.4}])
     original = copy.deepcopy(ssp)
@@ -596,8 +881,8 @@ def test_cloud_motion_adds_per_layer_wind_offsets():
     ts_collect_start = satsim_module.time.utc_from_list(tt)
     ts_collect_end = satsim_module.time.utc_from_list(tt, 2.0)
     layer_configs = parse_cloud_layers([
-        {'type': 'custom', 'wind_speed': 2.0, 'wind_direction': 90.0},
-        {'type': 'custom', 'wind_speed': 1.0, 'wind_direction': 0.0},
+        {'type': 'custom', 'wind_speed': 2.0, 'wind_direction': 90.0, 'range': 0.001},
+        {'type': 'custom', 'wind_speed': 1.0, 'wind_direction': 0.0, 'range': 0.001},
     ], sim_seed=1)
     geometry = CloudGeometry(
         height_px=1,
@@ -653,8 +938,8 @@ def test_cloud_motion_ignores_cardinal_direction_roundoff_padding():
     ts_collect_start = satsim_module.time.utc_from_list(tt)
     ts_collect_end = satsim_module.time.utc_from_list(tt, 2.0)
     layer_configs = parse_cloud_layers([
-        {'type': 'custom', 'wind_speed': 2.0, 'wind_direction': 90.0},
-        {'type': 'custom', 'wind_speed': 1.0, 'wind_direction': 270.0},
+        {'type': 'custom', 'wind_speed': 2.0, 'wind_direction': 90.0, 'range': 0.01},
+        {'type': 'custom', 'wind_speed': 1.0, 'wind_direction': 270.0, 'range': 0.01},
     ], sim_seed=1)
     geometry = CloudGeometry(
         height_px=10,
@@ -708,7 +993,7 @@ def test_cloud_motion_rejects_excessive_padded_source(monkeypatch):
     ts_collect_start = satsim_module.time.utc_from_list(tt)
     ts_collect_end = satsim_module.time.utc_from_list(tt, 2.0)
     layer_configs = parse_cloud_layers([
-        {'type': 'custom', 'wind_speed': 10.0, 'wind_direction': 90.0},
+        {'type': 'custom', 'wind_speed': 10.0, 'wind_direction': 90.0, 'range': 0.001},
     ], sim_seed=1)
     geometry = CloudGeometry(
         height_px=10,

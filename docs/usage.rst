@@ -131,7 +131,11 @@ Here is a complete SatSim parameter python dictionary example:
             "stray": {                 # stray light mode
                 "mode": "none"
             },
-            "galactic": 19.5           # background in mv/arcsec^2/sec
+            "galactic": 22.0,          # natural sky background in mv/arcsec^2
+            "skyglow": 21.5,           # optional total clear-sky site brightness
+            "moon": { "mode": "none" },
+            "twilight": { "mode": "none" },
+            "daytime": { "mode": "none" }
         },
         "geometry": {
             "stars": {
@@ -172,6 +176,64 @@ Here is a complete SatSim parameter python dictionary example:
         }
     }
 
+Background Configuration
+------------------------
+
+The ``background`` object defines sky background before dark current, sensor
+noise, and analog-to-digital conversion. Existing configurations that only set
+``background.galactic`` keep the legacy behavior: ``galactic`` is interpreted as
+the total scalar sky background in visual magnitude per arcsec^2.
+
+For artificial skyglow, add ``background.skyglow``:
+
+.. code-block:: python
+
+    "background": {
+        "galactic": 22.0,
+        "skyglow": 21.5,
+        "stray": { "mode": "none" },
+        "moon": { "mode": "none" },
+        "twilight": { "mode": "none" },
+        "daytime": { "mode": "none" }
+    }
+
+When ``skyglow`` is present, ``galactic`` is the natural moonless baseline and
+``skyglow`` is the total moonless clear-sky site brightness, including
+artificial light. ``skyglow`` may be a scalar or an FPA-shaped 2D field in
+visual magnitude per arcsec^2. Magnitudes are logarithmic: SatSim converts both
+values to linear photoelectrons and uses ``linear(skyglow) -
+linear(galactic)`` as the artificial skyglow component. Numerically larger
+``skyglow`` values are darker than ``galactic`` and are rejected because they
+would imply negative artificial light.
+
+SatSim currently treats configured background magnitudes as visual-equivalent
+inputs. Sensor quantum efficiency and full spectral response are not modeled in
+this background config yet.
+
+The ``moon`` block enables lunar scattered sky brightness. ``mode: none``
+disables it; ``mode: default`` currently aliases ``krisciunas-schaefer``. The
+Krisciunas-Schaefer mode is a V-band model that uses lunar phase, Moon-sky
+separation, Moon zenith distance, target zenith distance, and atmospheric
+extinction. It requires a ground ``geometry.site`` with latitude and longitude.
+
+The ``twilight`` block enables below-horizon solar twilight. ``mode: none``
+disables it; ``mode: default`` currently aliases ``patat``. Patat twilight is a
+V-band zenith model driven by Sun zenith distance. SatSim treats it as a solar
+residual over ``background.galactic`` so the natural baseline is not counted
+twice. It also requires a ground ``geometry.site`` with latitude and longitude.
+
+The ``daytime`` block enables above-horizon daylight. ``mode: none`` disables
+it; ``mode: default`` currently aliases ``hosek-wilkie``. The Hosek-Wilkie
+daytime path uses a CIE Y-channel clear-sky sky-dome model with internal
+turbidity and ground-albedo defaults, converts the resulting V-like luminance
+to photoelectrons, and stores the result as a solar residual over
+``background.galactic``. SatSim blends from the Patat twilight endpoint to
+Hosek-Wilkie just above the horizon to avoid an artificial sunrise/sunset
+brightness jump. The older ``mode: perez`` path remains available explicitly for
+comparison; it uses a CIE/Perez relative luminance distribution scaled by
+SatSim's internal fixed daytime zenith luminance default. Daytime modes require
+a ground ``geometry.site`` with latitude and longitude.
+
 Cloud Configuration
 -------------------
 
@@ -183,9 +245,11 @@ are combined with logical OR, and density is combined as layered opacity.
 
 Cloud transmission attenuates rendered stars, targets, and sky background before
 sensor noise and analog-to-digital conversion. If a layer has ``brightness``,
-SatSim adds cloud glow to the background in photoelectrons before sensor noise.
-The glow uses the same visual magnitude per arcsec^2 convention as
-``background.galactic`` and scales by ``1 - transmission`` for that layer. If
+SatSim adds configured cloud glow to the background in photoelectrons before
+sensor noise. The glow uses the same visual magnitude per arcsec^2 convention as
+``background.galactic`` and scales by ``1 - transmission`` for that layer.
+Clouds can also receive source-driven glow from enabled artificial skyglow,
+moonlight, twilight, and daytime background components. If
 ``sim.save_segmentation`` is enabled, SatSim writes an additional
 ``cloud_segmentation`` map.
 
@@ -198,6 +262,8 @@ Preset layers can be used with only a type and optional coverage:
             "type": "patchy",
             "coverage": 0.2,
             "brightness": 17.5,
+            "range": 3.0,
+            "altitude": 1.2,
             "wind_speed": 8.0,
             "wind_direction": 90.0
         },
@@ -245,6 +311,12 @@ Each cloud layer supports these fields:
 - ``density_floor``: optional ``null`` or value in ``[0.0, 1.0]``.
 - ``brightness``: optional cloud glow in visual magnitude per arcsec^2. Lower
   values are brighter. Photoelectrons are scaled by ``1 - transmission``.
+- ``range``: optional cloud slant range in kilometers. It controls projected
+  texture scale and converts wind speed to pixels per second. Defaults to
+  ``3.0``.
+- ``altitude``: optional cloud height in kilometers above the observer. It is
+  used by source-driven cloud brightening gains. If omitted, SatSim uses
+  ``range`` as the source-height proxy.
 - ``wind_speed``: optional cloud advection speed in meters per second on the
   cloud plane. Defaults to ``0.0``.
 - ``wind_direction``: optional cloud advection direction in degrees using
