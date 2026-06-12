@@ -53,7 +53,7 @@
                     }
                 },
                 "turbulent_atmosphere": {
-                    "description": "The POPPY turbulant atmosphere.",
+                    "description": "The POPPY turbulent atmosphere.",
                     "properties": {
                         "Cn2": {
                             "description": "Refractive index structure parameter.",
