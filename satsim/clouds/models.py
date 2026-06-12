@@ -59,6 +59,7 @@ class CloudLayerConfig:
     density_edge_width: float
     density_floor: float
     brightness: float
+    source_gains: dict
     cloud_range: float
     altitude: float
     wind_speed: float
@@ -84,6 +85,10 @@ class CloudLayerConfig:
             'density_edge_width': float(self.density_edge_width),
             'density_floor': self.density_floor,
             'brightness': None if self.brightness is None else float(self.brightness),
+            'source_gains': {
+                name: float(gain)
+                for name, gain in self.source_gains.items()
+            },
             'range': float(self.cloud_range),
             'altitude': None if self.altitude is None else float(self.altitude),
             'wind_speed': float(self.wind_speed),

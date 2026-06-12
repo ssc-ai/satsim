@@ -6,9 +6,13 @@ DEFAULT_CLOUD_RANGE_M = 3000.0
 SEED_MAX = 2 ** 32
 
 SOURCE_BRIGHTENING = {
-    'artificial': (1.5, 4000.0),
-    'lunar': (0.35, 8000.0),
-    'solar': (0.25, 12000.0),
+    'artificial': {'gain': 6.0, 'scale_height_m': 4000.0},
+    'lunar': {'gain': 0.35, 'scale_height_m': 8000.0},
+    'solar': {'gain': 0.25, 'scale_height_m': 12000.0},
+}
+DEFAULT_SOURCE_GAINS = {
+    name: params['gain']
+    for name, params in SOURCE_BRIGHTENING.items()
 }
 
 LUNAR_DIRECT_BRIGHTENING = {
@@ -80,6 +84,7 @@ GROUP_FIELDS = {
     'illumination': {
         'brightness': 'brightness',
         'brightness_mag_arcsec2': 'brightness',
+        'source_gains': 'source_gains',
     },
 }
 

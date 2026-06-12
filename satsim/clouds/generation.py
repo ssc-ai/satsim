@@ -55,6 +55,7 @@ def generate_cloud_layer(config, geometry):
         coverage=config.coverage,
         edge_width=config.density_edge_width,
         density_floor=config.density_floor,
+        mask_threshold=config.mask_threshold,
     )
     return cloud_layer_from_density(config, density)
 
@@ -107,11 +108,18 @@ def layer_geometry(config, geometry):
     )
 
 
-def cloud_density_from_noise(noise, coverage, edge_width, density_floor):
-    """Map normalized procedural noise into normalized cloud density."""
+def cloud_density_from_noise(noise, coverage, edge_width, density_floor, mask_threshold=0.02):
+    """Map normalized procedural noise into normalized cloud density.
+
+    ``coverage`` targets the realized mask fraction after edge softening. For
+    floored layers, it targets the above-floor support while baseline
+    attenuation keeps the mask full-frame. ``mask_threshold`` is the density
+    cutoff used when building the layer mask.
+    """
     values = np.clip(np.asarray(noise, dtype=np.float32), 0.0, 1.0)
     cloud_fraction = unit_interval('coverage', coverage)
     nonnegative_number('density_edge_width', edge_width)
+    mask_threshold = unit_interval('mask_threshold', mask_threshold)
     if density_floor is not None:
         unit_interval('density_floor', density_floor)
 
@@ -120,11 +128,19 @@ def cloud_density_from_noise(noise, coverage, edge_width, density_floor):
     if cloud_fraction == 1.0:
         return np.ones_like(values, dtype=np.float32)
 
-    threshold = 0.82 - 0.66 * cloud_fraction
     width = 0.06 + float(edge_width) + 0.10 * cloud_fraction
     gamma = max(0.45, 1.65 - 1.15 * cloud_fraction)
     gain = 0.50 + 0.72 * cloud_fraction
     floor = max(0.0, cloud_fraction - 0.85) * 0.25 if density_floor is None else float(density_floor)
+    threshold = _density_threshold_for_coverage(
+        values,
+        cloud_fraction,
+        width,
+        gamma,
+        gain,
+        floor,
+        mask_threshold,
+    )
     support = smoothstep(values, threshold - width, threshold + width)
     density = floor + (1.0 - floor) * np.power(support, gamma) * gain
     return np.clip(density, 0.0, 1.0).astype(np.float32)
@@ -153,5 +169,20 @@ def open_simplex_fractal(geometry, feature_scales_m, seed, amplitude_decay):
 
 def noise_grid(seed, xs, ys):
     """Return an OpenSimplex noise grid with SatSim row/column orientation."""
-    values = np.asarray(OpenSimplex(seed=int(seed)).noise2array(xs, ys), dtype=np.float64)
-    return values.T if values.shape == (xs.size, ys.size) else values
+    return np.asarray(OpenSimplex(seed=int(seed)).noise2array(xs, ys), dtype=np.float64)
+
+
+def _density_threshold_for_coverage(values, cloud_fraction, width, gamma, gain, floor, mask_threshold):
+    crossing_value = float(np.quantile(values, 1.0 - cloud_fraction))
+    if floor >= mask_threshold:
+        return crossing_value + width
+
+    support_crossing = (mask_threshold - floor) / ((1.0 - floor) * gain)
+    support_crossing = min(max(float(support_crossing), 0.0), 1.0)
+    smoothstep_x = _smoothstep_inverse(support_crossing ** (1.0 / gamma))
+    return crossing_value - width * (2.0 * smoothstep_x - 1.0)
+
+
+def _smoothstep_inverse(value):
+    value = min(max(float(value), 0.0), 1.0)
+    return 0.5 - np.sin(np.arcsin(1.0 - 2.0 * value) / 3.0)

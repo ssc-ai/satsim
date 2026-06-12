@@ -92,7 +92,7 @@ Here is a complete SatSim parameter python dictionary example:
         "clouds": [
             {
                 "type": "patchy",      # cloud type preset
-                "coverage": 0.2,       # fractional coverage from 0.0 to 1.0
+                "coverage": 0.2,       # approximate cloud mask fraction
                 "brightness": 17.5,    # optional cloud glow in mv/arcsec^2
                 "wind_speed": 8.0,     # optional cloud advection speed in m/s
                 "wind_direction": 90.0 # optional direction; 0 right, 90 down
@@ -221,6 +221,9 @@ disables it; ``mode: default`` currently aliases ``patat``. Patat twilight is a
 V-band zenith model driven by Sun zenith distance. SatSim treats it as a solar
 residual over ``background.galactic`` so the natural baseline is not counted
 twice. It also requires a ground ``geometry.site`` with latitude and longitude.
+The current Patat implementation clamps at its bright end between civil
+twilight and sunrise; daytime mode then transitions from that endpoint to
+Hosek-Wilkie across the first few degrees above the horizon.
 
 The ``daytime`` block enables above-horizon daylight. ``mode: none`` disables
 it; ``mode: default`` currently aliases ``hosek-wilkie``. The Hosek-Wilkie
@@ -274,9 +277,10 @@ Preset layers can be used with only a type and optional coverage:
     ]
 
 Supported cloud types are ``patchy``, ``cellular``, ``veil``, ``sheet``,
-``fog``, and ``custom``. Preset layers start from built-in defaults and then
-apply any user-provided fields. Custom layers start from generic defaults and
-are intended for direct tuning:
+``fog``, and ``custom``. The ``sheet`` preset approximates an optically thick
+stratus deck; use ``veil`` for translucent layers. Preset layers start from
+built-in defaults and then apply any user-provided fields. Custom layers start
+from generic defaults and are intended for direct tuning:
 
 .. code-block:: python
 
@@ -305,12 +309,25 @@ Each cloud layer supports these fields:
   simulation seed, layer index, and cloud type when a simulation seed is
   present. If no simulation seed is present, SatSim generates a random cloud
   seed for the run and records it in metadata.
-- ``coverage``: optional fractional coverage in the range ``0.0`` to ``1.0``.
+- ``coverage``: optional approximate realized sky fraction of the cloud mask in
+  the range ``0.0`` to ``1.0``. For floored presets such as ``veil``,
+  ``sheet``, and ``fog``, coverage controls the above-floor cloud support while
+  the mask remains full-frame because baseline attenuation is present
+  everywhere.
 - ``feature_scales_m``: optional list of positive physical texture scales in meters.
 - ``density_edge_width``: optional nonnegative edge softness value.
 - ``density_floor``: optional ``null`` or value in ``[0.0, 1.0]``.
 - ``brightness``: optional cloud glow in visual magnitude per arcsec^2. Lower
   values are brighter. Photoelectrons are scaled by ``1 - transmission``.
+- ``illumination.source_gains``: optional empirical brightening gains for
+  source-driven cloud glow. Supported keys are ``artificial``, ``lunar``, and
+  ``solar``. Each gain multiplies the in-band photoelectron residual from that
+  source in the generic metadata-free model. For direct lunar and solar
+  illumination metadata, SatSim applies the configured gain proportionally
+  relative to the built-in default. Use measured clear/overcast sky brightness
+  ratios to calibrate site-specific values. The default artificial gain is
+  tuned as a moderate overcast amplification, while Berlin-class urban overcast
+  sites may require gains near ``10`` to ``12``.
 - ``range``: optional cloud slant range in kilometers. It controls projected
   texture scale and converts wind speed to pixels per second. Defaults to
   ``3.0``.
@@ -327,8 +344,15 @@ Each cloud layer supports these fields:
   support more localized and patchy.
 - ``tau_min``, ``tau_max``, ``tau_gamma``: optional optical depth controls.
 
-The v1 schema intentionally does not expose moon illumination, albedo,
-reflectance, blur, ``coverage_mode``, ``mask_threshold``,
+Cloud motion uses a frame-midpoint approximation. Gimbal-induced cloud drift is
+derived from the star-field translation, so clouds are treated as inertially
+fixed rather than ground fixed; the error is the sidereal rate, which is small
+relative to typical wind rates. Clouds are frozen at each frame midpoint, with
+no intra-exposure cloud smear. For ``rate-sidereal`` tracking, the final frame
+holds the cloud offset accumulated at frame start.
+
+The v1 schema intentionally does not expose albedo, reflectance, blur,
+``coverage_mode``, ``mask_threshold``,
 ``min_feature_scale_px``, or ``amplitude_decay`` fields. Unknown cloud layer
 fields raise a configuration error.
 

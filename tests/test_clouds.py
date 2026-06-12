@@ -1,8 +1,14 @@
 import copy
+import json
 import math
+import os
 
 import numpy as np
 import pytest
+
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:jsonschema.RefResolver is deprecated:DeprecationWarning'
+)
 
 import satsim.clouds.config as clouds_config
 from satsim.clouds import (
@@ -17,7 +23,13 @@ from satsim.clouds import (
     generate_cloud_field,
     parse_cloud_layers,
 )
-from satsim.clouds.constants import LUNAR_DIRECT_BRIGHTENING, SOLAR_DIRECT_BRIGHTENING
+from satsim.clouds.constants import (
+    DEFAULT_SOURCE_GAINS,
+    LUNAR_DIRECT_BRIGHTENING,
+    SOLAR_DIRECT_BRIGHTENING,
+    SOURCE_BRIGHTENING,
+)
+from satsim.clouds.generation import cloud_density_from_noise, noise_grid
 from satsim.image.fpa import mv_to_pe
 
 
@@ -38,6 +50,29 @@ def _ssp(clouds=None):
 
 def _geometry():
     return CloudGeometry(height_px=32, width_px=40, y_fov_deg=1.0, x_fov_deg=1.2)
+
+
+def _cloud_schema_validator():
+    jsonschema = pytest.importorskip('jsonschema')
+    schema_path = os.path.abspath('schema/v1/Clouds.json')
+    with open(schema_path, 'r') as f:
+        schema = json.load(f)
+
+    base_uri = schema['$id'].rsplit('/', 1)[0] + '/'
+    store = {schema['$id']: schema}
+    types_dir = os.path.abspath('schema/v1/types')
+    for filename in os.listdir(types_dir):
+        if not filename.endswith('.json'):
+            continue
+        with open(os.path.join(types_dir, filename), 'r') as f:
+            store[base_uri + 'types/' + filename] = json.load(f)
+
+    resolver = jsonschema.RefResolver(
+        base_uri=schema['$id'],
+        referrer=schema,
+        store=store,
+    )
+    return jsonschema, jsonschema.Draft7Validator(schema, resolver=resolver)
 
 
 def _cloud_field_from_densities(densities, brightness=None, layer_overrides=None):
@@ -113,6 +148,7 @@ def test_preset_layer_uses_defaults():
     assert layers[0].coverage == pytest.approx(0.45)
     assert layers[0].density_edge_width == pytest.approx(0.08)
     assert layers[0].brightness is None
+    assert layers[0].source_gains == DEFAULT_SOURCE_GAINS
     assert layers[0].cloud_range == pytest.approx(3.0)
     assert layers[0].altitude is None
     assert layers[0].wind_speed == pytest.approx(0.0)
@@ -130,6 +166,12 @@ def test_preset_layer_applies_public_overrides():
             'density_edge_width': 0.2,
             'density_floor': 0.1,
             'brightness': 17.5,
+            'illumination': {
+                'source_gains': {
+                    'artificial': 12.0,
+                    'lunar': 0.5,
+                },
+            },
             'range': 6.0,
             'altitude': 1.2,
             'wind_speed': 4.0,
@@ -148,6 +190,9 @@ def test_preset_layer_applies_public_overrides():
     assert layer.density_edge_width == pytest.approx(0.2)
     assert layer.density_floor == pytest.approx(0.1)
     assert layer.brightness == pytest.approx(17.5)
+    assert layer.source_gains['artificial'] == pytest.approx(12.0)
+    assert layer.source_gains['lunar'] == pytest.approx(0.5)
+    assert layer.source_gains['solar'] == pytest.approx(DEFAULT_SOURCE_GAINS['solar'])
     assert layer.cloud_range == pytest.approx(6.0)
     assert layer.altitude == pytest.approx(1.2)
     assert layer.wind_speed == pytest.approx(4.0)
@@ -173,6 +218,10 @@ def test_grouped_layer_config_applies_public_overrides():
             },
             'illumination': {
                 'brightness_mag_arcsec2': 17.5,
+                'source_gains': {
+                    'artificial': 12.0,
+                    'lunar': 0.5,
+                },
             },
             'geometry': {
                 'range_km': 6.0,
@@ -196,6 +245,9 @@ def test_grouped_layer_config_applies_public_overrides():
     assert layer.density_edge_width == pytest.approx(0.2)
     assert layer.density_floor == pytest.approx(0.1)
     assert layer.brightness == pytest.approx(17.5)
+    assert layer.source_gains['artificial'] == pytest.approx(12.0)
+    assert layer.source_gains['lunar'] == pytest.approx(0.5)
+    assert layer.source_gains['solar'] == pytest.approx(DEFAULT_SOURCE_GAINS['solar'])
     assert layer.cloud_range == pytest.approx(6.0)
     assert layer.altitude == pytest.approx(1.2)
     assert layer.wind_speed == pytest.approx(4.0)
@@ -262,6 +314,7 @@ def test_custom_layer_uses_generic_defaults_with_partial_overrides():
     assert layer.feature_scales_m == (40.0, 80.0, 160.0, 320.0, 640.0)
     assert layer.density_edge_width == pytest.approx(0.12)
     assert layer.brightness is None
+    assert layer.source_gains == DEFAULT_SOURCE_GAINS
     assert layer.cloud_range == pytest.approx(3.0)
     assert layer.altitude is None
     assert layer.wind_speed == pytest.approx(0.0)
@@ -329,6 +382,15 @@ def test_unknown_type_and_invalid_numeric_ranges_fail():
     with pytest.raises(ValueError, match='brightness'):
         parse_cloud_layers([{'type': 'custom', 'brightness': True}])
 
+    with pytest.raises(ValueError, match='source_gains'):
+        parse_cloud_layers([{'type': 'custom', 'illumination': {'source_gains': 'bright'}}])
+
+    with pytest.raises(ValueError, match='Unknown source_gains'):
+        parse_cloud_layers([{'type': 'custom', 'illumination': {'source_gains': {'stars': 1.0}}}])
+
+    with pytest.raises(ValueError, match='source_gains.artificial'):
+        parse_cloud_layers([{'type': 'custom', 'illumination': {'source_gains': {'artificial': 0.0}}}])
+
     with pytest.raises(ValueError, match='range'):
         parse_cloud_layers([{'type': 'custom', 'range': 0.0}])
 
@@ -348,11 +410,61 @@ def test_unknown_type_and_invalid_numeric_ranges_fail():
         parse_cloud_layers([{'type': 'custom', 'wind_direction': True}])
 
 
+def test_cloud_schema_accepts_source_gains():
+    _, validator = _cloud_schema_validator()
+
+    validator.validate([
+        {
+            'type': 'custom',
+            'illumination': {
+                'source_gains': {
+                    'artificial': 6.0,
+                    'lunar': 0.5,
+                    'solar': 0.25,
+                },
+            },
+        },
+    ])
+
+
+def test_cloud_schema_rejects_unknown_or_nonpositive_source_gains():
+    jsonschema, validator = _cloud_schema_validator()
+
+    with pytest.raises(jsonschema.ValidationError):
+        validator.validate([
+            {
+                'type': 'custom',
+                'illumination': {
+                    'source_gains': {
+                        'stars': 1.0,
+                    },
+                },
+            },
+        ])
+
+    with pytest.raises(jsonschema.ValidationError):
+        validator.validate([
+            {
+                'type': 'custom',
+                'illumination': {
+                    'source_gains': {
+                        'artificial': 0.0,
+                    },
+                },
+            },
+        ])
+
+
 def test_brightness_is_in_layer_metadata():
     layers = parse_cloud_layers([
         {
             'type': 'custom',
             'brightness': 17.5,
+            'illumination': {
+                'source_gains': {
+                    'artificial': 12.0,
+                },
+            },
             'range': 5.0,
             'altitude': 1.0,
             'wind_speed': 3.0,
@@ -363,11 +475,15 @@ def test_brightness_is_in_layer_metadata():
     field = generate_cloud_field(layers, _geometry())
 
     assert field.layers[0].metadata['brightness'] == pytest.approx(17.5)
+    assert field.layers[0].metadata['source_gains']['artificial'] == pytest.approx(12.0)
+    assert field.layers[0].metadata['source_gains']['lunar'] == pytest.approx(DEFAULT_SOURCE_GAINS['lunar'])
     assert field.layers[0].metadata['range'] == pytest.approx(5.0)
     assert field.layers[0].metadata['altitude'] == pytest.approx(1.0)
     assert field.layers[0].metadata['wind_speed'] == pytest.approx(3.0)
     assert field.layers[0].metadata['wind_direction'] == pytest.approx(270.0)
     assert field.metadata['layers'][0]['brightness'] == pytest.approx(17.5)
+    assert field.metadata['layers'][0]['source_gains']['artificial'] == pytest.approx(12.0)
+    assert field.metadata['layers'][0]['source_gains']['lunar'] == pytest.approx(DEFAULT_SOURCE_GAINS['lunar'])
     assert field.metadata['layers'][0]['range'] == pytest.approx(5.0)
     assert field.metadata['layers'][0]['altitude'] == pytest.approx(1.0)
     assert field.metadata['layers'][0]['wind_speed'] == pytest.approx(3.0)
@@ -380,6 +496,18 @@ def test_cloud_generation_handles_empty_field_and_missing_geometry():
 
     with pytest.raises(ValueError, match='Cloud generation requires'):
         cloud_field_from_config({'clouds': [{'type': 'patchy'}]})
+
+
+def test_noise_grid_square_field_preserves_row_column_orientation():
+    xs = np.linspace(-1.0, 1.0, 33)
+    ys = np.linspace(-2.0, 2.0, 33)
+
+    square = noise_grid(7, xs, ys)
+    rectangular = noise_grid(7, xs, ys[:-1])
+
+    assert square.shape == (33, 33)
+    assert rectangular.shape == (32, 33)
+    np.testing.assert_allclose(square[:-1, :], rectangular)
 
 
 def test_top_level_seed_is_used_when_sim_seed_is_absent():
@@ -406,6 +534,21 @@ def test_missing_config_seed_uses_random_cloud_seed(monkeypatch):
     assert field.layers[1].config.seed == 22345
     assert field.metadata['layers'][0]['seed'] == 12345
     assert field.metadata['layers'][1]['seed'] == 22345
+
+
+def test_missing_config_seed_real_random_seed_path_is_valid():
+    ssp = _ssp([
+        {'type': 'custom', 'coverage': 0.0},
+        {'type': 'custom', 'coverage': 0.0},
+    ])
+    del ssp['sim']
+
+    field = cloud_field_from_config(ssp)
+    seeds = [layer.config.seed for layer in field.layers]
+
+    assert len(seeds) == 2
+    assert 0 <= seeds[0] < clouds_config.SEED_MAX
+    assert seeds[1] == seeds[0] + 10000
 
 
 def test_layer_seed_overrides_random_cloud_seed(monkeypatch):
@@ -473,6 +616,41 @@ def test_zero_and_full_coverage_layers_have_stable_optics():
     np.testing.assert_array_equal(opaque.mask, np.ones_like(opaque.mask, dtype=bool))
     np.testing.assert_allclose(opaque.tau, np.full_like(opaque.tau, 0.7))
     np.testing.assert_allclose(opaque.transmission, np.exp(np.full_like(opaque.transmission, -0.7)))
+
+
+@pytest.mark.parametrize('cloud_type', ['custom', 'patchy', 'cellular'])
+@pytest.mark.parametrize('coverage', [0.1, 0.3, 0.5, 0.7, 0.9])
+def test_cloud_density_coverage_tracks_mask_fraction_for_nonfloored_layers(cloud_type, coverage):
+    values = np.linspace(0.0, 1.0, 512 * 512, dtype=np.float32).reshape(512, 512)
+    config = parse_cloud_layers([{'type': cloud_type, 'coverage': coverage}], sim_seed=1)[0]
+
+    density = cloud_density_from_noise(
+        values,
+        config.coverage,
+        config.density_edge_width,
+        config.density_floor,
+        mask_threshold=config.mask_threshold,
+    )
+
+    assert abs(float((density > config.mask_threshold).mean()) - coverage) < 0.05
+
+
+@pytest.mark.parametrize('cloud_type', ['veil', 'sheet', 'fog'])
+@pytest.mark.parametrize('coverage', [0.1, 0.3, 0.5, 0.7, 0.9])
+def test_floored_cloud_density_coverage_tracks_above_floor_support(cloud_type, coverage):
+    values = np.linspace(0.0, 1.0, 512 * 512, dtype=np.float32).reshape(512, 512)
+    config = parse_cloud_layers([{'type': cloud_type, 'coverage': coverage}], sim_seed=1)[0]
+
+    density = cloud_density_from_noise(
+        values,
+        config.coverage,
+        config.density_edge_width,
+        config.density_floor,
+        mask_threshold=config.mask_threshold,
+    )
+
+    np.testing.assert_array_equal(density > config.mask_threshold, np.ones_like(density, dtype=bool))
+    assert abs(float((density > config.density_floor).mean()) - coverage) < 0.05
 
 
 def test_cloud_crop_without_offset_returns_center_view():
@@ -645,10 +823,99 @@ def test_cloud_source_brightness_uses_source_components_and_altitude_gain():
     )
     optical_coupling = 1.0 - np.exp(-1.0)
     expected = optical_coupling * (
-        10.0 * 1.5 * math.exp(-2000.0 / 4000.0)
-        + 4.0 * 0.35 * math.exp(-2000.0 / 8000.0)
-        + 2.0 * 0.25 * math.exp(-2000.0 / 12000.0)
+        10.0
+        * DEFAULT_SOURCE_GAINS['artificial']
+        * math.exp(-2000.0 / SOURCE_BRIGHTENING['artificial']['scale_height_m'])
+        + 4.0
+        * DEFAULT_SOURCE_GAINS['lunar']
+        * math.exp(-2000.0 / SOURCE_BRIGHTENING['lunar']['scale_height_m'])
+        + 2.0
+        * DEFAULT_SOURCE_GAINS['solar']
+        * math.exp(-2000.0 / SOURCE_BRIGHTENING['solar']['scale_height_m'])
     )
+
+    np.testing.assert_allclose(source_pe, np.full((2, 2), expected), rtol=1e-6)
+
+
+def test_cloud_source_brightness_uses_configured_source_gains():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([
+        density,
+    ], layer_overrides={
+        'altitude': 2.0,
+        'illumination': {
+            'source_gains': {
+                'artificial': 12.0,
+            },
+        },
+    })
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    source_pe = cloud_source_brightness_pe_from_field(
+        cropped,
+        {'artificial': 10.0},
+    )
+
+    optical_coupling = 1.0 - np.exp(-1.0)
+    expected = (
+        10.0
+        * optical_coupling
+        * 12.0
+        * math.exp(-2000.0 / SOURCE_BRIGHTENING['artificial']['scale_height_m'])
+    )
+    np.testing.assert_allclose(source_pe, np.full((2, 2), expected), rtol=1e-6)
+
+
+def test_cloud_direct_source_brightness_uses_configured_source_gains():
+    density = np.ones((2, 2), dtype=np.float32)
+    source = _cloud_field_from_densities([
+        density,
+    ], layer_overrides={
+        'altitude': 2.0,
+        'illumination': {
+            'source_gains': {
+                'lunar': DEFAULT_SOURCE_GAINS['lunar'] * 2.0,
+                'solar': DEFAULT_SOURCE_GAINS['solar'] * 3.0,
+            },
+        },
+    })
+    cropped = crop_cloud_field(source, [0.0, 0.0], 2, 2, pad_px=[0, 0])
+
+    source_pe = cloud_source_brightness_pe_from_field(
+        cropped,
+        {
+            'lunar': {
+                'pe': 4.0,
+                'metadata': {
+                    'moon_el': 39.0,
+                    'phase_angle': 45.0,
+                },
+            },
+            'solar': {
+                'pe': 6.0,
+                'metadata': {
+                    'sun_el': 12.0,
+                },
+            },
+        },
+    )
+
+    optical_coupling = 1.0 - np.exp(-1.0)
+    phase_fraction = 0.5 * (1.0 + math.cos(math.radians(45.0)))
+    lunar_gain = (
+        LUNAR_DIRECT_BRIGHTENING['gain']
+        * math.exp(-2000.0 / LUNAR_DIRECT_BRIGHTENING['scale_height_m'])
+        * math.sqrt(math.sin(math.radians(39.0)))
+        * math.sqrt(phase_fraction)
+        * 2.0
+    )
+    solar_gain = (
+        SOLAR_DIRECT_BRIGHTENING['gain']
+        * math.exp(-2000.0 / SOLAR_DIRECT_BRIGHTENING['scale_height_m'])
+        * math.sqrt(math.sin(math.radians(12.0)))
+        * 3.0
+    )
+    expected = optical_coupling * (4.0 * lunar_gain + 6.0 * solar_gain)
 
     np.testing.assert_allclose(source_pe, np.full((2, 2), expected), rtol=1e-6)
 

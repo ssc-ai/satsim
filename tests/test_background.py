@@ -583,6 +583,33 @@ def test_runtime_cloud_source_brightening_uses_artificial_skyglow():
     )
 
 
+def test_runtime_opaque_cloud_with_artificial_gain_is_brighter_than_clear_skyglow():
+    clear_ssp = _background_ssp()
+    clear_ssp['background']['skyglow'] = 21.5
+    clear_frame = _run_one_frame(clear_ssp)
+    clear_background = np.mean(clear_frame[11]['background_pe'])
+
+    cloudy_ssp = _background_ssp()
+    cloudy_ssp['background']['skyglow'] = 21.5
+    cloudy_ssp['clouds'] = [{
+        'type': 'custom',
+        'seed': 321,
+        'coverage': 1.0,
+        'feature_scales_m': [20.0],
+        'altitude': 2.3,
+        'density_edge_width': 0.1,
+        'tau_min': 5.0,
+        'tau_max': 5.0,
+        'tau_gamma': 1.0,
+    }]
+
+    cloudy_frame = _run_one_frame(cloudy_ssp)
+    cloudy_ground_truth = cloudy_frame[11]
+
+    assert np.mean(cloudy_ground_truth['cloud_source_brightness_pe']) > 0.0
+    assert np.mean(cloudy_ground_truth['background_pe']) > clear_background
+
+
 def test_runtime_moon_background_is_pre_cloud_ground_truth_component():
     ssp = _background_ssp()
     ssp['geometry']['time'] = [2015, 4, 24, 9, 7, 30.128]

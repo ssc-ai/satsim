@@ -32,7 +32,7 @@
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Integer.json"
                 },
                 "coverage": {
-                    "description": "Target fractional cloud amount for this layer, from 0.0 for clear to 1.0 for full coverage. This is a fraction only; percent values such as 20 are not accepted.",
+                    "description": "Approximate realized sky fraction of the cloud mask for this layer, from 0.0 for clear to 1.0 for full coverage. For floored presets, coverage controls the above-floor cloud support while the mask remains full-frame because baseline attenuation is present everywhere. This is a fraction only; percent values such as 20 are not accepted.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
                 },
                 "texture": {
@@ -231,6 +231,28 @@
                 "brightness_mag_arcsec2": {
                     "description": "Cloud glow brightness in visual magnitude per arcsec^2. Alias of clouds[].brightness.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Float.json"
+                },
+                "source_gains": {
+                    "description": "Empirical source-driven cloud brightening gains. Each gain multiplies the in-band photoelectron residual from the matching source before altitude falloff. Alias of clouds[].source_gains.",
+                    "$ref": "#/definitions/sourceGains"
+                }
+            }
+        },
+        "sourceGains": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "artificial": {
+                    "description": "Artificial skyglow cloud-brightening gain.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                },
+                "lunar": {
+                    "description": "Lunar cloud-brightening gain. Applied directly to the generic metadata-free model and proportionally, relative to its default, to the direct-illumination model.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                },
+                "solar": {
+                    "description": "Solar cloud-brightening gain. Applied directly to the generic metadata-free model and proportionally, relative to its default, to the direct-illumination model.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
                 }
             }
         },

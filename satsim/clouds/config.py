@@ -8,6 +8,7 @@ from satsim.clouds.constants import (
     CLOUD_TYPE_NAMES,
     CUSTOM_CLOUD_TYPE,
     CUSTOM_DEFAULTS,
+    DEFAULT_SOURCE_GAINS,
     DEFAULT_CLOUD_RANGE_M,
     GROUP_FIELDS,
     PRESETS,
@@ -115,6 +116,7 @@ def _parse_cloud_layer(raw_layer, index, sim_seed):
         'density_edge_width',
         'density_floor',
         'brightness',
+        'source_gains',
         'range',
         'altitude',
         'wind_speed',
@@ -133,6 +135,7 @@ def _parse_cloud_layer(raw_layer, index, sim_seed):
     density_edge_width = nonnegative_number('density_edge_width', base['density_edge_width'])
     density_floor = optional_unit_interval('density_floor', base['density_floor'])
     brightness = optional_finite_number('brightness', base.get('brightness'))
+    source_gains = _source_gains(base.get('source_gains'))
     cloud_range = positive_number('range', base.get('range', DEFAULT_CLOUD_RANGE_M / 1000.0))
     altitude = None
     if base.get('altitude') is not None:
@@ -158,6 +161,7 @@ def _parse_cloud_layer(raw_layer, index, sim_seed):
         density_edge_width=density_edge_width,
         density_floor=density_floor,
         brightness=brightness,
+        source_gains=source_gains,
         cloud_range=cloud_range,
         altitude=altitude,
         wind_speed=wind_speed,
@@ -217,7 +221,7 @@ def _config_seed(ssp):
 
 
 def _random_seed():
-    return int(np.random.RandomState().randint(0, SEED_MAX))
+    return int(np.random.default_rng().integers(0, SEED_MAX))
 
 
 def _feature_scales(value):
@@ -230,3 +234,19 @@ def _feature_scales(value):
     if not scales:
         raise ValueError('feature_scales_m must contain at least one scale.')
     return scales
+
+
+def _source_gains(value):
+    gains = dict(DEFAULT_SOURCE_GAINS)
+    if value is None:
+        return gains
+    if not isinstance(value, dict):
+        raise ValueError('source_gains must be an object.')
+
+    unknown = sorted(set(value) - set(DEFAULT_SOURCE_GAINS))
+    if unknown:
+        raise ValueError('Unknown source_gains field(s): {}.'.format(', '.join(unknown)))
+
+    for source_name, gain in value.items():
+        gains[source_name] = positive_number('source_gains.{}'.format(source_name), gain)
+    return gains

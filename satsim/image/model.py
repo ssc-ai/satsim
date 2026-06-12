@@ -28,7 +28,7 @@ def polygrid2d(height, width, c, low=-1, high=1):
     return np.polynomial.polynomial.polygrid2d(x=rr, y=cc, c=c)
 
 
-def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None, mult=1.0, clip=[0.0, 1.0],
+def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None, mult=1.0, clip=(0.0, 1.0),
                  falloff_height=None, falloff_width=None, falloff_xy=None):
     """ Generates a cosine wave radially from the center of the image. Typically
     used to simulate optical vignette or irradiance falloff.
@@ -44,7 +44,7 @@ def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None
             "cosine fourth" irradiance falloff map. default=4
         xy_scale: `float`, if not None set y_scale and x_scale to this.
         mult: `float`, multiply cosine. default=1
-        clip: `array`, clip returned value by minimum and maximum. default=[0.0, 1.0]
+        clip: `array`, clip returned value by minimum and maximum. default=(0.0, 1.0)
         falloff_height: `float`, effective height (in pixels) of the falloff
             grid. If larger than `height`, the vignette extends beyond the
             image; if smaller, the falloff is more aggressive. default=None
@@ -118,7 +118,7 @@ def _normalize_peak(z):
 
 
 def deformable_radial_poly2d(height, width, coefficients, eta=1.0, center=None, center_x=None, center_y=None,
-                             normalize=True, mult=1.0, clip=[0.0, 1.0]):
+                             normalize=True, mult=1.0, clip=(0.0, 1.0)):
     """Generate a deformable radial polynomial vignette map.
 
     This follows the distance transform used by the deformable radial
@@ -127,7 +127,8 @@ def deformable_radial_poly2d(height, width, coefficients, eta=1.0, center=None, 
         r_eta = sqrt((x - x_c)^2 + (eta * (y - y_c))^2)
 
     The polynomial is evaluated on r_eta normalized by the farthest image corner,
-    so coefficients are stable across image sizes.
+    so coefficients are stable across image sizes. ``center`` is in ``(x, y)``
+    order; use ``center_x`` and ``center_y`` for explicit coordinates.
     """
     rr = _deformable_radius_grid(height, width, eta, center, center_x, center_y)
     z = np.polynomial.polynomial.polyval(rr, coefficients)
@@ -144,7 +145,7 @@ def deformable_radial_poly2d(height, width, coefficients, eta=1.0, center=None, 
 
 
 def deformable_radial_falloff2d(height, width, amplitudes, eta=1.0, center=None, center_x=None, center_y=None,
-                                base=1.0, normalize=False, mult=1.0, clip=[0.0, 1.0]):
+                                base=1.0, normalize=False, mult=1.0, clip=(0.0, 1.0)):
     """Generate a monotonic deformable radial polynomial falloff map.
 
     This uses the same DRP distance transform as `deformable_radial_poly2d`,
@@ -153,6 +154,8 @@ def deformable_radial_falloff2d(height, width, amplitudes, eta=1.0, center=None,
         z = base - sum(amplitude_k * r_eta ** k)
 
     with k starting at 1 and r_eta normalized by the farthest image corner.
+    ``center`` is in ``(x, y)`` order; use ``center_x`` and ``center_y`` for
+    explicit coordinates.
     """
     rr = _deformable_radius_grid(height, width, eta, center, center_x, center_y)
     z = np.full((height, width), base, dtype=np.float64)

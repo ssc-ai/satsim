@@ -5,6 +5,7 @@ import math
 import numpy as np
 
 from satsim.clouds.constants import (
+    DEFAULT_SOURCE_GAINS,
     LUNAR_DIRECT_BRIGHTENING,
     SOLAR_DIRECT_BRIGHTENING,
     SOURCE_BRIGHTENING,
@@ -62,6 +63,7 @@ def cloud_source_brightness_pe_from_field(cloud_field, source_components=None):
             source_pe += source_array * optical_coupling * _cloud_source_gain(
                 source_name,
                 source_metadata,
+                layer.config,
                 height_m,
             )
 
@@ -242,13 +244,19 @@ def _source_value_and_metadata(value):
     return value, {}
 
 
-def _cloud_source_gain(source_name, metadata, height_m):
+def _cloud_source_gain(source_name, metadata, config, height_m):
     if source_name == 'lunar' and metadata:
-        return _lunar_direct_source_gain(metadata, height_m)
+        return _lunar_direct_source_gain(metadata, height_m) * _source_gain_scale(config, source_name)
     if source_name == 'solar' and metadata:
-        return _solar_direct_source_gain(metadata, height_m)
-    gain, scale_height_m = SOURCE_BRIGHTENING[source_name]
-    return gain * math.exp(-height_m / scale_height_m)
+        return _solar_direct_source_gain(metadata, height_m) * _source_gain_scale(config, source_name)
+    # Metadata-free callers intentionally use the generic empirical source model.
+    source_model = SOURCE_BRIGHTENING[source_name]
+    gain = config.source_gains[source_name]
+    return gain * math.exp(-height_m / source_model['scale_height_m'])
+
+
+def _source_gain_scale(config, source_name):
+    return config.source_gains[source_name] / DEFAULT_SOURCE_GAINS[source_name]
 
 
 def _lunar_direct_source_gain(metadata, height_m):
