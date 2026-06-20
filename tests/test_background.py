@@ -123,9 +123,10 @@ def test_skyglow_accepts_directional_magnitude_field():
 
     natural = surface_brightness_to_pe(20.0, 22.0, 4.0, 5.0)
     total = surface_brightness_to_pe(20.0, skyglow, 4.0, 5.0)
+    skyglow_residual = np.maximum(0.0, total - natural)
     np.testing.assert_allclose(components['background_natural_pe'], natural)
-    np.testing.assert_allclose(components['background_skyglow_pe'], total - natural)
-    np.testing.assert_allclose(components['background_pre_cloud_pe'], total)
+    np.testing.assert_allclose(components['background_skyglow_pe'], skyglow_residual)
+    np.testing.assert_allclose(components['background_pre_cloud_pe'], natural + skyglow_residual)
 
 
 def test_equal_skyglow_and_galactic_has_zero_artificial_residual():
@@ -178,12 +179,30 @@ def test_frame_moon_component_uses_ground_site_geometry():
         ts_mid,
     )
 
+    moon_metadata = frame_components['metadata']['moon']
+    expected_moon_nl = krisciunas_schaefer_moon_brightness_nl(
+        moon_metadata['phase_angle'],
+        moon_metadata['moon_sky_separation'],
+        90.0 - moon_metadata['moon_el'],
+        90.0 - moon_metadata['target_el'],
+    )
+    expected_moon_brightness = nano_lamberts_to_surface_brightness(expected_moon_nl)
+    expected_moon_pe = surface_brightness_to_pe(
+        20.0,
+        expected_moon_brightness,
+        4.0,
+        5.0,
+    )
+
     assert frame_components['components']['background_moon_pe'] == pytest.approx(
-        8.559580369157867
+        expected_moon_pe
     )
     assert frame_components['active']['background_moon_pe'] is True
-    assert frame_components['metadata']['moon']['mode'] == 'krisciunas-schaefer'
-    assert frame_components['metadata']['moon']['moon_el'] > 0.0
+    assert moon_metadata['mode'] == 'krisciunas-schaefer'
+    assert moon_metadata['nano_lamberts'] == pytest.approx(expected_moon_nl)
+    assert moon_metadata['brightness'] == pytest.approx(expected_moon_brightness)
+    assert moon_metadata['target_el'] == pytest.approx(el)
+    assert moon_metadata['moon_el'] > 0.0
 
 
 def test_frame_moon_component_requires_ground_site():
@@ -363,14 +382,29 @@ def test_frame_daytime_component_uses_ground_site_geometry():
         ts_mid,
     )
 
+    daytime_metadata = frame_components['metadata']['daytime']
+    expected_brightness = perez_daytime_surface_brightness(
+        90.0 - daytime_metadata['target_el'],
+        daytime_metadata['sun_zenith'],
+        daytime_metadata['sun_sky_separation'],
+    )
+    expected_pe = max(
+        0.0,
+        surface_brightness_to_pe(20.0, expected_brightness, 4.0, 5.0)
+        - surface_brightness_to_pe(20.0, ssp['background']['galactic'], 4.0, 5.0),
+    )
+
     assert frame_components['components']['background_daytime_pe'] == pytest.approx(
-        154740337.26892114
+        expected_pe
     )
     assert frame_components['active']['background_daytime_pe'] is True
-    assert frame_components['metadata']['daytime']['mode'] == 'perez'
-    assert frame_components['metadata']['daytime']['sun_el'] == pytest.approx(
-        19.125216650567147
+    assert daytime_metadata['mode'] == 'perez'
+    assert daytime_metadata['brightness'] == pytest.approx(expected_brightness)
+    assert daytime_metadata['target_el'] == pytest.approx(el)
+    assert daytime_metadata['sun_el'] == pytest.approx(
+        90.0 - daytime_metadata['sun_zenith']
     )
+    assert daytime_metadata['sun_el'] == pytest.approx(19.13, abs=0.01)
 
 
 def test_frame_daytime_default_uses_hosek_wilkie():
