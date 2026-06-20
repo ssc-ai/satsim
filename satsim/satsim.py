@@ -71,7 +71,15 @@ from satsim.background import (
 )
 from satsim.geometry import analytic_obs
 from satsim.io import analytical
-from satsim.config import transform, save_debug, _transform, save_cache, _ref, _has_rkey_deep
+from satsim.config import (
+    transform,
+    save_debug,
+    _transform,
+    save_cache,
+    _ref,
+    _has_rkey_deep,
+    get_spatial_osf,
+)
 from satsim.pipeline import _delta_t, _avg_t
 from satsim import time
 
@@ -295,7 +303,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
 def _parse_sensor_params(ssp):
     """ TODO Temporary.
     """
-    s_osf = ssp['sim']['spacial_osf']
+    s_osf = get_spatial_osf(ssp)
 
     y_ifov = ssp['fpa']['y_fov'] / ssp['fpa']['height']
     x_ifov = ssp['fpa']['x_fov'] / ssp['fpa']['width']
@@ -376,7 +384,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     h = ssp['fpa']['height']
     w = ssp['fpa']['width']
 
-    s_osf = ssp['sim']['spacial_osf']
+    s_osf = get_spatial_osf(ssp)
     t_osf = ssp['sim']['temporal_osf']
 
     h_pad_os = 2 * ssp['sim']['padding'] * s_osf

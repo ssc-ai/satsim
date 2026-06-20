@@ -3,6 +3,8 @@ from __future__ import division, print_function, absolute_import
 import math
 import numpy as np
 
+from satsim.config import get_spatial_osf
+
 
 def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
     """Generate analytical observations for a frame using precomputed RA/Dec.
@@ -41,7 +43,7 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
     x_ifov = astrometrics.get('x_ifov',
                               ssp['fpa']['x_fov'] / ssp['fpa']['width'])
 
-    s_osf = ssp['sim'].get('spacial_osf', 1)
+    s_osf = get_spatial_osf(ssp, 1)
     eod = 1.0
     if isinstance(ssp['fpa'].get('psf'), dict) and 'eod' in ssp['fpa']['psf']:
         eod = ssp['fpa']['psf']['eod']

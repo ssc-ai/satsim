@@ -18,8 +18,13 @@
             ],
             "default": "full"
         },
+        "spatial_osf": {
+            "description": "The spatial oversampling factor. Reduce this value to speed up rendering or fix out of memory errors. Should be an odd integer.",
+            "type": "integer",
+            "minimum": 1
+        },
         "spacial_osf": {
-            "description": "The spacial oversampling factor. Note reduce this value to speed up rendering or fix out of memory errors. Should be an odd integer.",
+            "description": "Alias for spatial_osf.",
             "type": "integer",
             "minimum": 1
         },
