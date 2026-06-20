@@ -54,8 +54,8 @@ The CLI writes each run to a timestamped output directory. Typical EO products i
 
 ## Documentation
 
-- [Installation](docs/installation.rst)
-- [Usage](docs/usage.rst)
+- [Installation](docs/installation.md)
+- [Usage](docs/usage.md)
 - [JSON schema](schema/v1/README.md)
-- [Developer setup](CONTRIBUTING.rst#getting-started)
+- [Developer setup](CONTRIBUTING.md#getting-started-for-developers)
 - [Release history](HISTORY.md)
