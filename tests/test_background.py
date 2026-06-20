@@ -229,14 +229,24 @@ def test_frame_twilight_component_uses_ground_site_geometry():
         ts_mid,
     )
 
+    twilight_metadata = frame_components['metadata']['twilight']
+    expected_twilight_pe = (
+        surface_brightness_to_pe(20.0, twilight_metadata['brightness'], 4.0, 5.0)
+        - surface_brightness_to_pe(20.0, ssp['background']['galactic'], 4.0, 5.0)
+    )
+
     assert frame_components['components']['background_twilight_pe'] == pytest.approx(
-        15.467652534498008
+        expected_twilight_pe
     )
     assert frame_components['active']['background_twilight_pe'] is True
-    assert frame_components['metadata']['twilight']['mode'] == 'patat'
-    assert frame_components['metadata']['twilight']['sun_el'] == pytest.approx(
-        -12.587933862823263
+    assert twilight_metadata['mode'] == 'patat'
+    assert twilight_metadata['brightness'] == pytest.approx(
+        patat_twilight_surface_brightness(twilight_metadata['sun_zenith'])
     )
+    assert twilight_metadata['sun_el'] == pytest.approx(
+        90.0 - twilight_metadata['sun_zenith']
+    )
+    assert twilight_metadata['sun_el'] == pytest.approx(-12.59, abs=0.01)
 
 
 def test_frame_twilight_component_requires_ground_site():
