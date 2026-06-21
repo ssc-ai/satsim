@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json",
+    "title": "Nonnegative Float",
+    "description": "A number greater than or equal to 0.0, or a generated number expected to resolve to a nonnegative value.",
+    "anyOf": [
+        {
+            "type": "number",
+            "minimum": 0.0
+        },
+        { "$ref": "GeneratedNumber.json" }
+    ]
+}

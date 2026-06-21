@@ -1,6 +1,15 @@
 History
 =======
 
+0.24.0
+---------------------
+
+* Add sky background models for artificial skyglow, moonlight, twilight, and daytime. Configure `background.*`.
+* Add modular cloud layers with presets, optical depth, glow, source brightening, and wind motion. Configure `clouds`.
+* Add deformable radial image models. Use `deformable_radial_poly2d` and `deformable_radial_falloff2d`.
+* Add apparent RA/Dec FITS WCS metadata with GAPPT headers.
+
+
 0.23.1
 ---------------------
 

@@ -1,0 +1,27 @@
+{
+  "sqm_clear_sky_split": {
+    "natural_mag": 22.0,
+    "clear_total_mag": 21.5,
+    "total_to_natural_ratio": 1.5848931924611136,
+    "artificial_to_natural_ratio": 0.5848931924611136
+  },
+  "krisciunas_schaefer": {
+    "phase_angle_deg": 0.0,
+    "moon_sky_separation_deg": 90.0,
+    "moon_zenith_deg": 0.0,
+    "target_zenith_deg": 0.0,
+    "nano_lamberts": 912.731084459842,
+    "surface_brightness": 18.930306398551053
+  },
+  "patat_v": {
+    "sun_zenith_deg": 100.0,
+    "surface_brightness": 18.005
+  },
+  "cloud_amplification": {
+    "natural_mag": 22.0,
+    "clear_total_mag": 21.5,
+    "cloudy_total_mag": 20.0,
+    "mean_tau": 5.0,
+    "effective_artificial_gain": 10.776045231919655
+  }
+}

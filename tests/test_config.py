@@ -121,6 +121,22 @@ def test_dynamic_json():
     assert(config._has_rkey_deep(t, '$sample') is False)
 
 
+def test_get_spatial_osf_prefers_spatial_spelling():
+
+    ssp = {'sim': {'spatial_osf': 5, 'spacial_osf': 3}}
+    assert(config.get_spatial_osf(ssp) == 5)
+
+
+def test_get_spatial_osf_allows_legacy_spelling():
+
+    assert(config.get_spatial_osf({'sim': {'spacial_osf': 3}}) == 3)
+
+
+def test_get_spatial_osf_uses_default():
+
+    assert(config.get_spatial_osf({'sim': {}}, 1) == 1)
+
+
 def test_sample_seed_choice_deterministic():
 
     param = {

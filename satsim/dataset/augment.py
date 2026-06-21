@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 from satsim import image_generator
-from satsim.config import transform
+from satsim.config import transform, get_spatial_osf
 from satsim.io.satnet import set_frame_annotation, init_annotation
 from satsim.math import signal_to_noise_ratio
 
@@ -34,7 +34,7 @@ def augment_satnet_with_satsim(dataset, augment_satsim_params, prob=0.5, rn=0, m
         if np.random.uniform() > prob:
             return image, bboxs, filename, annotational_filename
 
-        s_osf = ssp['sim']['spacial_osf']
+        s_osf = get_spatial_osf(ssp)
         a2d_gain = ssp['fpa']['a2d']['gain']
         h = ssp['fpa']['height']
         w = ssp['fpa']['width']

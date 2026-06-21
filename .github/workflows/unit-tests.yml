@@ -58,7 +58,7 @@ jobs:
             --env SATSIM_SKYFIELD_LOAD_DIR=/root/.skyfield \
             --env TF_CPP_MIN_LOG_LEVEL=1 \
             satsim:ci \
-            /bin/bash -lc "pip3 --no-cache-dir install --ignore-installed -r /workspace/requirements_dev.txt && python3 -c 'import satsim; print(satsim.__file__); assert not satsim.__file__.startswith(\"/workspace/\")' && mkdir -p /tmp/satsim-tests && cp -a /workspace/tests /tmp/satsim-tests/tests && cp /workspace/setup.cfg /tmp/satsim-tests/setup.cfg && cp -a /workspace/share /tmp/satsim-tests/share && cd /tmp/satsim-tests && python3 -m pytest tests"
+            /bin/bash -lc "pip3 --no-cache-dir install --ignore-installed -r /workspace/requirements_dev.txt && python3 -c 'import satsim; print(satsim.__file__); assert not satsim.__file__.startswith(\"/workspace/\")' && mkdir -p /tmp/satsim-tests && cp -a /workspace/tests /tmp/satsim-tests/tests && cp /workspace/setup.cfg /tmp/satsim-tests/setup.cfg && cp -a /workspace/schema /tmp/satsim-tests/schema && cp -a /workspace/share /tmp/satsim-tests/share && cd /tmp/satsim-tests && python3 -m pytest tests"
 
       - name: Upload PyPI artifacts
         uses: actions/upload-artifact@v4

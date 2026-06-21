@@ -20,6 +20,16 @@ _config = {}
 _SEED_MAX = 2 ** 32
 
 
+def get_spatial_osf(ssp, default=None):
+    """Return the preferred spatial oversampling value, falling back to legacy spelling."""
+    sim = ssp['sim']
+    if 'spatial_osf' in sim:
+        return sim['spatial_osf']
+    if default is None:
+        return sim['spacial_osf']
+    return sim.get('spacial_osf', default)
+
+
 def _resolve_seed(param):
     """Resolve a seed value from a `$sample` parameter.
 

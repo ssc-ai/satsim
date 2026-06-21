@@ -74,6 +74,11 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
         else:
             return astrometrics[key]
 
+    def has_astrometric(key):
+        return astrometrics is not None and key in astrometrics
+
+    has_apparent_wcs = has_astrometric('ra_apparent') and has_astrometric('dec_apparent')
+
     rd = SkyCoord(ra=get_or_default('ra', 0) * u.degree, dec=get_or_default('dec', 0) * u.degree, frame='icrs')
     (ra, dec) = rd.to_string('hmsdms').split(' ')
     ra = ra.replace('h', ' ').replace('m', ' ').replace('s', ' ')
@@ -142,8 +147,16 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     hdr['SH-UT002'] = (dt_start + timedelta(seconds=exposure_time)).isoformat()
     hdr['CTYPE1']   = 'RA---TAN'
     hdr['CTYPE2']   = 'DEC--TAN'
-    hdr['CRVAL1']   = get_or_default('ra', 0)
-    hdr['CRVAL2']   = get_or_default('dec', 0)
+    hdr['CRVAL1']   = get_or_default('ra_apparent' if has_apparent_wcs else 'ra', 0)
+    hdr['CRVAL2']   = get_or_default('dec_apparent' if has_apparent_wcs else 'dec', 0)
+    hdr['RADESYS']  = 'GAPPT' if has_apparent_wcs else 'ICRS'
+    if has_astrometric('ra'):
+        hdr['RA-OBJ'] = get_or_default('ra')
+    if has_astrometric('dec'):
+        hdr['DEC-OBJ'] = get_or_default('dec')
+    if has_apparent_wcs:
+        hdr['RA-APP'] = get_or_default('ra_apparent')
+        hdr['DEC-APP'] = get_or_default('dec_apparent')
     hdr['CRPIX1']   = fpa.shape[1] / 2.0
     hdr['CRPIX2']   = fpa.shape[0] / 2.0
     x_ifov = get_or_default('x_ifov', 0)
@@ -159,7 +172,8 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     hdr['CD2_2']    = y_ifov * np.cos(theta)
     hdr['CROTA1']   = roll
     hdr['CROTA2']   = roll
-    hdr['EQUINOX']  = 2000.0
+    if not has_apparent_wcs:
+        hdr['EQUINOX']  = 2000.0
     hdr["TRKMODE"]  = get_or_default('track_mode')
 
     if dtype == 'uint16':

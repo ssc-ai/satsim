@@ -96,6 +96,74 @@ def test_save_fits_invalid_compression():
     assert(not os.path.exists(filename))
 
 
+def test_save_fits_labels_apparent_wcs(tmp_path):
+
+    filename = tmp_path / 'apparent_wcs.fits'
+    astrometrics = {
+        'ra': 12.5,
+        'dec': -4.25,
+        'ra_apparent': 12.75,
+        'dec_apparent': -4.0,
+    }
+
+    _, hdr = fits.save(
+        str(filename),
+        np.zeros([5, 5]),
+        overwrite=True,
+        dtype='float32',
+        astrometrics=astrometrics,
+    )
+
+    assert hdr['CRVAL1'] == pytest.approx(astrometrics['ra_apparent'])
+    assert hdr['CRVAL2'] == pytest.approx(astrometrics['dec_apparent'])
+    assert hdr['RADESYS'] == 'GAPPT'
+    assert 'EQUINOX' not in hdr
+    assert hdr['RA-OBJ'] == pytest.approx(astrometrics['ra'])
+    assert hdr['DEC-OBJ'] == pytest.approx(astrometrics['dec'])
+    assert hdr['RA-APP'] == pytest.approx(astrometrics['ra_apparent'])
+    assert hdr['DEC-APP'] == pytest.approx(astrometrics['dec_apparent'])
+
+    with afits.open(filename) as hdul:
+        saved = hdul[0].header
+        assert saved['RADESYS'] == 'GAPPT'
+        assert 'EQUINOX' not in saved
+        assert saved['CRVAL1'] == pytest.approx(astrometrics['ra_apparent'])
+        assert saved['CRVAL2'] == pytest.approx(astrometrics['dec_apparent'])
+
+
+def test_save_fits_labels_icrs_wcs_without_apparent_coordinates(tmp_path):
+
+    filename = tmp_path / 'icrs_wcs.fits'
+    astrometrics = {
+        'ra': 12.5,
+        'dec': -4.25,
+    }
+
+    _, hdr = fits.save(
+        str(filename),
+        np.zeros([5, 5]),
+        overwrite=True,
+        dtype='float32',
+        astrometrics=astrometrics,
+    )
+
+    assert hdr['CRVAL1'] == pytest.approx(astrometrics['ra'])
+    assert hdr['CRVAL2'] == pytest.approx(astrometrics['dec'])
+    assert hdr['RADESYS'] == 'ICRS'
+    assert hdr['EQUINOX'] == pytest.approx(2000.0)
+    assert hdr['RA-OBJ'] == pytest.approx(astrometrics['ra'])
+    assert hdr['DEC-OBJ'] == pytest.approx(astrometrics['dec'])
+    assert 'RA-APP' not in hdr
+    assert 'DEC-APP' not in hdr
+
+    with afits.open(filename) as hdul:
+        saved = hdul[0].header
+        assert saved['RADESYS'] == 'ICRS'
+        assert saved['EQUINOX'] == pytest.approx(2000.0)
+        assert saved['CRVAL1'] == pytest.approx(astrometrics['ra'])
+        assert saved['CRVAL2'] == pytest.approx(astrometrics['dec'])
+
+
 def test_save_image():
 
     a = np.zeros([5,5])

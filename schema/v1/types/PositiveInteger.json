@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveInteger.json",
+    "title": "Positive Integer",
+    "description": "An integer greater than or equal to 1, or a generated integer expected to resolve to a positive value.",
+    "anyOf": [
+        {
+            "type": "integer",
+            "minimum": 1
+        },
+        { "$ref": "GeneratedNumber.json" }
+    ]
+}

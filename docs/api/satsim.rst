@@ -12,6 +12,8 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
+   satsim.background
+   satsim.clouds
    satsim.dataset
    satsim.generator
    satsim.geometry
@@ -40,6 +42,14 @@ satsim.config module
 --------------------
 
 .. automodule:: satsim.config
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.hosek\_wilkie module
+---------------------------
+
+.. automodule:: satsim.hosek_wilkie
    :members:
    :undoc-members:
    :show-inheritance:
