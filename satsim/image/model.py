@@ -28,7 +28,8 @@ def polygrid2d(height, width, c, low=-1, high=1):
     return np.polynomial.polynomial.polygrid2d(x=rr, y=cc, c=c)
 
 
-def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None, mult=1.0, clip=(0.0, 1.0),
+def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None, normalize=False,
+                 mult=1.0, clip=(0.0, 1.0),
                  falloff_height=None, falloff_width=None, falloff_xy=None):
     """ Generates a cosine wave radially from the center of the image. Typically
     used to simulate optical vignette or irradiance falloff.
@@ -43,6 +44,9 @@ def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None
         power: `float`, the exponent of the cosine. Set to 4 to generate a
             "cosine fourth" irradiance falloff map. default=4
         xy_scale: `float`, if not None set y_scale and x_scale to this.
+        normalize: `bool` or `str`, normalize the falloff before applying
+            `mult`. True uses peak normalization; supported string modes are
+            "peak", "median", and "mean". default=False
         mult: `float`, multiply cosine. default=1
         clip: `array`, clip returned value by minimum and maximum. default=(0.0, 1.0)
         falloff_height: `float`, effective height (in pixels) of the falloff
@@ -80,7 +84,9 @@ def radial_cos2d(height, width, y_scale=0.1, x_scale=0.1, power=4, xy_scale=None
     x = _axis_coords(width, falloff_width, x_scale)
     y = _axis_coords(height, falloff_height, y_scale)
     xx, yy = np.meshgrid(x, y)
-    z = mult * np.cos(np.sqrt(xx ** 2 + yy ** 2)) ** power
+    z = np.cos(np.sqrt(xx ** 2 + yy ** 2)) ** power
+    z = _normalize_values(z, normalize)
+    z = mult * z
 
     if clip is not None:
         z = np.clip(z, clip[0], clip[1])
@@ -117,6 +123,27 @@ def _normalize_peak(z):
     return z / z_max if z_max != 0 else z
 
 
+def _normalize_values(z, normalize):
+    if normalize is None or normalize is False:
+        return z
+
+    if normalize is True:
+        mode = 'peak'
+    else:
+        mode = str(normalize).strip().lower()
+
+    if mode in {'peak', 'max'}:
+        denom = np.max(z)
+    elif mode in {'median', 'med'}:
+        denom = np.median(z)
+    elif mode == 'mean':
+        denom = np.mean(z)
+    else:
+        raise ValueError("normalize must be false, true, 'peak', 'median', or 'mean'")
+
+    return z / denom if denom != 0 else z
+
+
 def deformable_radial_poly2d(height, width, coefficients, eta=1.0, center=None, center_x=None, center_y=None,
                              normalize=True, mult=1.0, clip=(0.0, 1.0)):
     """Generate a deformable radial polynomial vignette map.
@@ -133,8 +160,7 @@ def deformable_radial_poly2d(height, width, coefficients, eta=1.0, center=None, 
     rr = _deformable_radius_grid(height, width, eta, center, center_x, center_y)
     z = np.polynomial.polynomial.polyval(rr, coefficients)
 
-    if normalize:
-        z = _normalize_peak(z)
+    z = _normalize_values(z, normalize)
 
     z = mult * z
 
@@ -162,8 +188,7 @@ def deformable_radial_falloff2d(height, width, amplitudes, eta=1.0, center=None,
     for power, amplitude in enumerate(amplitudes, start=1):
         z = z - amplitude * rr ** power
 
-    if normalize:
-        z = _normalize_peak(z)
+    z = _normalize_values(z, normalize)
 
     z = mult * z
 

@@ -77,6 +77,17 @@ def gen_from_poppy(optical_system, wavelengths=[600e-9], weights=[1]):
         return psf[0].data
 
 
+def normalize_psf(psf, normalization=None):
+    if normalization in (None, False, 'none'):
+        return psf
+    if normalization in (True, 'sum', 'unit_sum'):
+        total = np.sum(psf)
+        if total > 0:
+            return psf / total
+        return psf
+    raise ValueError('Unsupported PSF normalization: {}'.format(normalization))
+
+
 def gen_from_poppy_configuration(height, width, y_ifov, x_ifov, s_osf, config):
     """Generate a point spread function (PSF) from a POPPY configuration.
     Configuration example::
@@ -173,7 +184,10 @@ def gen_from_poppy_configuration(height, width, y_ifov, x_ifov, s_osf, config):
         h_pad = int((height - config['size'][0]) / 2 * s_osf)
         w_pad = int((width - config['size'][1]) / 2 * s_osf)
 
-        psf = gen_from_poppy(osys, config['wavelengths'], config['weights'])
+        psf = normalize_psf(
+            gen_from_poppy(osys, config['wavelengths'], config['weights']),
+            config.get('normalization'),
+        )
         psf_pad = np.pad(psf, ((h_pad, h_pad),(w_pad, w_pad)))
 
         return psf_pad
@@ -185,7 +199,10 @@ def gen_from_poppy_configuration(height, width, y_ifov, x_ifov, s_osf, config):
         npix = _calc_npix(osys, ifov * m * u.pixel, config['wavelengths'])
         osys.npix = npix
 
-        return gen_from_poppy(osys, config['wavelengths'], config['weights'])
+        return normalize_psf(
+            gen_from_poppy(osys, config['wavelengths'], config['weights']),
+            config.get('normalization'),
+        )
 
 
 def _calc_npix(optical_system, fov, wavelengths):

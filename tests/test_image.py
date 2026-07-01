@@ -212,6 +212,9 @@ def test_radial_cos2d():
     assert(image[256,128] == 1)
     np.testing.assert_almost_equal(image[256,256], 0)
 
+    image = radial_cos2d(h, w, power=4.0, xy_scale=0.1, normalize="median", clip=None)
+    np.testing.assert_allclose(np.median(image), 1.0)
+
 
 def test_radial_cos2d_falloff_size():
 
@@ -264,6 +267,12 @@ def test_deformable_radial_models():
 
     normalized = deformable_radial_falloff2d(h, w, [0.5], normalize=True, clip=None)
     np.testing.assert_allclose(np.max(normalized), 1.0)
+
+    median_normalized = deformable_radial_falloff2d(h, w, [0.5], normalize="median", clip=None)
+    np.testing.assert_allclose(np.median(median_normalized), 1.0)
+
+    mean_normalized = deformable_radial_poly2d(h, w, [1.0, -0.5], normalize="mean", clip=None)
+    np.testing.assert_allclose(np.mean(mean_normalized), 1.0)
 
     circular = deformable_radial_falloff2d(h, w, [0.5], eta=1.0, clip=None)
     elliptical = deformable_radial_falloff2d(h, w, [0.5], eta=2.0, clip=None)
