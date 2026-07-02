@@ -187,6 +187,17 @@ def test_add_counts_bilinear_interpolation():
     np.testing.assert_allclose(_centroid(d), [1.25, 2.75])
 
 
+def test_add_counts_bilinear_interpolation_integer_fpa_uses_floor_behavior():
+
+    a = tf.Variable(tf.zeros([8, 8], dtype=tf.int32))
+
+    d = add_counts(a, [1.25], [2.75], [100], interpolation='bilinear').numpy()
+
+    assert(np.sum(d.flatten()) == 100)
+    assert(d[1, 2] == 100)
+    assert(np.count_nonzero(d) == 1)
+
+
 def test_add_counts_bilinear_interpolation_multiple_points_preserves_flux_and_centroid():
 
     a = tf.Variable(tf.zeros([16, 16]))

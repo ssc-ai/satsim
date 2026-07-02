@@ -268,7 +268,9 @@ def add_counts(fpa, r, c, cnt, r_offset=0, c_offset=0, interpolation='floor'):
             image pad.
         interpolation: `str`, either `floor` to preserve the legacy integer
             scatter behavior, or `bilinear` to distribute fractional counts
-            over the four neighboring pixels.
+            over the four neighboring pixels. Bilinear deposition requires a
+            floating point `fpa`; integer FPAs use floor deposition because
+            fractional weights cannot be represented in an integer tensor.
 
     Returns:
         A `Tensor`, a reference to the modified input `fpa` image
@@ -277,6 +279,8 @@ def add_counts(fpa, r, c, cnt, r_offset=0, c_offset=0, interpolation='floor'):
     if interpolation not in ('floor', 'bilinear'):
         raise ValueError("interpolation must be 'floor' or 'bilinear'")
 
+    # Integer tensors cannot receive fractional bilinear weights, so preserve
+    # the legacy integer scatter behavior for those FPAs.
     if interpolation == 'bilinear' and not fpa.dtype.is_integer:
         return _add_counts_bilinear(fpa, r, c, cnt, r_offset, c_offset)
 

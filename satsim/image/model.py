@@ -118,11 +118,6 @@ def _deformable_radius_grid(height, width, eta=1.0, center=None, center_x=None, 
     return rr / r_max if r_max > 0 else rr
 
 
-def _normalize_peak(z):
-    z_max = np.max(z)
-    return z / z_max if z_max != 0 else z
-
-
 def _normalize_values(z, normalize):
     if normalize is None or normalize is False:
         return z
@@ -141,7 +136,10 @@ def _normalize_values(z, normalize):
     else:
         raise ValueError("normalize must be false, true, 'peak', 'median', or 'mean'")
 
-    return z / denom if denom != 0 else z
+    if denom <= 0:
+        raise ValueError("normalize denominator must be positive")
+
+    return z / denom
 
 
 def deformable_radial_poly2d(height, width, coefficients, eta=1.0, center=None, center_x=None, center_y=None,

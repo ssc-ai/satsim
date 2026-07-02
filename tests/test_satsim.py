@@ -19,6 +19,7 @@ from astropy.io import fits as afits
 from satsim import config, gen_images
 from satsim.satsim import (
     _epsf_lut_cache_param,
+    _gen_psf,
     _gen_psf_shape,
     _load_epsf_lut_cache,
     _parse_render_size,
@@ -725,6 +726,26 @@ def test_epsf_psf_generation_shape_matches_reference_parity():
     assert(_gen_psf_shape(ssp, 600, 603, 3) == (186, 183))
 
 
+def test_epsf_psf_generation_shape_uses_full_frame_when_fft_fallback_enabled():
+
+    ssp = {
+        'sim': {
+            'mode': 'epsf',
+            'epsf': {
+                'kernel_size': 31,
+                'fallback_to_fft_for_models': True,
+            },
+        },
+        'fpa': {
+            'psf': {
+                'mode': 'gaussian',
+            },
+        },
+    }
+
+    assert(_gen_psf_shape(ssp, 600, 603, 3) == (600, 603))
+
+
 def test_epsf_lut_cache_uses_render_mode_specific_key(tmp_path):
 
     ssp = {
@@ -820,8 +841,12 @@ def test_epsf_cache_hit_with_fft_fallback_still_generates_psf(tmp_path):
     configure_eager()
 
     ssp = _small_no_noise_target_config('epsf')
+    ssp['fpa']['psf'] = {
+        'mode': 'gaussian',
+        'eod': 0.5,
+    }
     ssp['sim']['epsf'] = {
-        'kernel_size': 1,
+        'kernel_size': 9,
         '$cache': str(tmp_path),
         'fallback_to_fft_for_models': True,
     }
@@ -829,10 +854,12 @@ def test_epsf_cache_hit_with_fft_fallback_still_generates_psf(tmp_path):
 
     y_ifov = ssp['fpa']['y_fov'] / ssp['fpa']['height']
     x_ifov = ssp['fpa']['x_fov'] / ssp['fpa']['width']
-    cache_param = _epsf_lut_cache_param(ssp, 1, 1, y_ifov, x_ifov, 1)
-    _save_epsf_lut_cache(cache_param, np.ones([1, 1, 1, 1], dtype=np.float32))
+    psf_h_os = ssp['fpa']['height'] + 2 * ssp['sim']['padding']
+    psf_w_os = ssp['fpa']['width'] + 2 * ssp['sim']['padding']
+    cache_param = _epsf_lut_cache_param(ssp, psf_h_os, psf_w_os, y_ifov, x_ifov, 1)
+    _save_epsf_lut_cache(cache_param, np.ones([1, 1, 9, 9], dtype=np.float32))
 
-    with mock.patch('satsim.satsim._gen_psf', return_value=None) as gen_psf_mock:
+    with mock.patch('satsim.satsim._gen_psf', wraps=_gen_psf) as gen_psf_mock:
         dirname = gen_images(
             ssp,
             eager=True,
@@ -842,11 +869,51 @@ def test_epsf_cache_hit_with_fft_fallback_still_generates_psf(tmp_path):
         )
 
     assert(gen_psf_mock.call_count == 1)
-    np.testing.assert_allclose(
-        np.sum(_load_debug_frame(dirname, 'fpa_conv_star') + _load_debug_frame(dirname, 'fpa_conv_targ')),
-        100.0,
-        atol=1e-4,
+    rendered_flux = np.sum(_load_debug_frame(dirname, 'fpa_conv_star') + _load_debug_frame(dirname, 'fpa_conv_targ'))
+    assert(np.isfinite(rendered_flux))
+    assert(rendered_flux > 0.0)
+
+
+def test_epsf_fft_fallback_with_gaussian_psf_matches_fftconv2p_runtime():
+
+    configure_eager()
+
+    ssp_fft = _small_no_noise_target_config('fftconv2p')
+    ssp_fft['sim']['star_render_mode'] = 'fft'
+    ssp_fft['fpa']['psf'] = {
+        'mode': 'gaussian',
+        'eod': 0.5,
+    }
+
+    ssp_epsf = copy.deepcopy(ssp_fft)
+    ssp_epsf['sim']['mode'] = 'epsf'
+    ssp_epsf['sim']['render_size'] = [9, 9]
+    ssp_epsf['sim']['epsf'] = {
+        'kernel_size': 9,
+        'fallback_to_fft_for_models': True,
+    }
+
+    dirname_fft = gen_images(
+        ssp_fft,
+        eager=True,
+        output_dir='./.images',
+        output_debug=True,
+        set_name=_gen_name('test_fft_runtime_reference'),
     )
+    dirname_epsf = gen_images(
+        ssp_epsf,
+        eager=True,
+        output_dir='./.images',
+        output_debug=True,
+        set_name=_gen_name('test_epsf_fft_fallback_gaussian'),
+    )
+
+    for name in ('fpa_conv_star', 'fpa_conv_targ'):
+        np.testing.assert_allclose(
+            _load_debug_frame(dirname_epsf, name),
+            _load_debug_frame(dirname_fft, name),
+            atol=1e-5,
+        )
 
 
 def test_piecewise():

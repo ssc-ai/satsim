@@ -2,6 +2,7 @@
 
 import tensorflow as tf
 import numpy as np
+import pytest
 
 from satsim.image.augment import null, flip, crop_and_resize, scatter_shift_polar, pow, rotate, resize, scatter_shift_random, load_from_file
 from satsim.image.model import (
@@ -277,6 +278,18 @@ def test_deformable_radial_models():
     circular = deformable_radial_falloff2d(h, w, [0.5], eta=1.0, clip=None)
     elliptical = deformable_radial_falloff2d(h, w, [0.5], eta=2.0, clip=None)
     assert(not np.allclose(circular, elliptical))
+
+
+def test_deformable_radial_normalize_rejects_nonpositive_denominator():
+
+    h = 8
+    w = 8
+
+    with pytest.raises(ValueError, match='normalize denominator must be positive'):
+        deformable_radial_poly2d(h, w, [-1.0], normalize=True, clip=None)
+
+    with pytest.raises(ValueError, match='normalize denominator must be positive'):
+        deformable_radial_poly2d(h, w, [0.0], normalize="mean", clip=None)
 
 
 def test_radial_polygrid2d():

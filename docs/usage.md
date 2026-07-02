@@ -251,7 +251,10 @@ image-plane target:
   `normalize` defaults to `false` so finite ePSF kernels do not boost
   photometry when energy falls outside the stamp; set it to `true` only when
   each cropped stamp should be forced to unit flux. `batch_size` defaults to
-  `1024`, and `fallback_to_fft_for_models` defaults to `false`. ePSF currently
+  `1024`, and `fallback_to_fft_for_models` defaults to `false`. When
+  `fallback_to_fft_for_models` is enabled, the optical PSF is generated at the
+  full padded frame size and `psf_generation_size`/`psf_generation_padding`
+  are ignored. ePSF currently
   renders full detector-space frames; a list-valued `render_size` is used only
   as the PSF-generation reference, not for tiling. Sprite/model targets and
   `star_render_mode: "fft"` require FFT fallback.

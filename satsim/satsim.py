@@ -445,7 +445,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         psf_w_sub = w_sub
     psf_h_sub_pad_os = psf_h_sub * s_osf + h_pad_os
     psf_w_sub_pad_os = psf_w_sub * s_osf + w_pad_os
-    psf_h_os, psf_w_os = _gen_psf_shape(ssp, psf_h_sub_pad_os, psf_w_sub_pad_os, s_osf)
+    epsf_uses_fft_fallback = (
+        ssp['sim']['mode'] == 'epsf'
+        and ssp['sim'].get('epsf', {}).get('fallback_to_fft_for_models', False)
+    )
+    psf_shape_h_os = h_fpa_pad_os if epsf_uses_fft_fallback else psf_h_sub_pad_os
+    psf_shape_w_os = w_fpa_pad_os if epsf_uses_fft_fallback else psf_w_sub_pad_os
+    psf_h_os, psf_w_os = _gen_psf_shape(ssp, psf_shape_h_os, psf_shape_w_os, s_osf)
 
     t_exposure = ssp['fpa']['time']['exposure']
     t_frame = ssp['fpa']['time']['gap'] + t_exposure
@@ -1572,6 +1578,8 @@ def _gen_psf_shape(ssp, height, width, s_osf):
         raise ValueError('sim.epsf.kernel_size is required when sim.mode is "epsf"')
 
     kernel_size = _validate_odd_detector_size(epsf_cfg['kernel_size'], 'sim.epsf.kernel_size')
+    if epsf_cfg.get('fallback_to_fft_for_models', False):
+        return height, width
 
     explicit_psf_size = 'psf_generation_size' in epsf_cfg
     if explicit_psf_size:
