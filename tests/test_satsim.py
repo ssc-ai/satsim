@@ -7,14 +7,24 @@ import pickle
 import json
 import copy
 from datetime import datetime
+from unittest import mock
 
 import numpy as np
 import scipy
+import pytest
 from tifffile import imread
 from astropy.io import fits as afits
 
 
 from satsim import config, gen_images
+from satsim.satsim import (
+    _epsf_lut_cache_param,
+    _gen_psf_shape,
+    _load_epsf_lut_cache,
+    _parse_render_size,
+    _psf_config_for_generation,
+    _save_epsf_lut_cache,
+)
 from satsim.util import configure_eager
 from satsim.util.system import is_tensorflow_running_on_cpu
 from satsim.util import MultithreadedTaskQueue
@@ -494,6 +504,348 @@ def test_default_point_rendering_matches_bilinear_no_noise_photometry_and_centro
         scipy.ndimage.center_of_mass(default_targ),
         [(ssp['fpa']['height'] - 1) / 2.0, (ssp['fpa']['width'] - 1) / 2.0],
         atol=0.02,
+    )
+
+
+def _small_no_noise_target_config(mode='fftconv2p'):
+    ssp = config.load_json('./tests/config_static.json')
+    ssp['sim']['mode'] = mode
+    ssp['sim']['spacial_osf'] = 1
+    ssp['sim']['temporal_osf'] = 1
+    ssp['sim']['padding'] = 2
+    ssp['sim']['enable_shot_noise'] = False
+    ssp['sim']['calculate_snr'] = False
+    ssp['sim']['save_jpeg'] = False
+    ssp['sim']['save_czml'] = False
+    ssp['fpa']['height'] = 17
+    ssp['fpa']['width'] = 19
+    ssp['fpa']['num_frames'] = 1
+    ssp['fpa']['time']['exposure'] = 1
+    ssp['fpa']['dark_current'] = 0
+    ssp['fpa']['noise']['read'] = 0
+    ssp['fpa']['noise']['electronic'] = 0
+    ssp['fpa']['psf'] = {
+        'mode': 'none',
+    }
+    ssp['background']['galactic'] = 0
+    ssp['geometry']['stars']['mv']['bins'] = []
+    ssp['geometry']['stars']['mv']['density'] = []
+    ssp['geometry']['obs']['list'] = [
+        {
+            "mode": "line",
+            "origin": [0.5, 0.5],
+            "velocity": [0, 0],
+            "pe": 100.0
+        },
+    ]
+
+    if mode == 'epsf':
+        ssp['sim']['epsf'] = {
+            'kernel_size': 1,
+            'batch_size': 32,
+        }
+
+    return ssp
+
+
+def _load_debug_frame(dirname, name):
+    with open(os.path.join(dirname, 'Debug', '{}_0.pickle'.format(name)), 'rb') as f:
+        return pickle.load(f)
+
+
+def test_parse_render_size_accepts_full_string_and_validates_tiles():
+    assert(_parse_render_size(None) is None)
+    assert(_parse_render_size('full') is None)
+    assert(_parse_render_size('FULL') is None)
+    assert(_parse_render_size([10, 20]) == (10, 20))
+
+    with pytest.raises(ValueError):
+        _parse_render_size('tile')
+
+    with pytest.raises(ValueError):
+        _parse_render_size([10])
+
+    with pytest.raises(ValueError):
+        _parse_render_size([0, 20])
+
+
+def test_render_size_full_string_matches_absent_render_size_for_fft_and_epsf():
+    configure_eager()
+
+    for mode in ('fftconv2p', 'epsf'):
+        ssp_default = _small_no_noise_target_config(mode)
+        ssp_full = copy.deepcopy(ssp_default)
+        ssp_full['sim']['render_size'] = 'full'
+
+        dirname_default = gen_images(
+            ssp_default,
+            eager=True,
+            output_dir='./.images',
+            output_debug=True,
+            set_name=_gen_name('test_render_size_default_{}'.format(mode)),
+        )
+        dirname_full = gen_images(
+            ssp_full,
+            eager=True,
+            output_dir='./.images',
+            output_debug=True,
+            set_name=_gen_name('test_render_size_full_{}'.format(mode)),
+        )
+
+        np.testing.assert_array_equal(
+            _load_debug_frame(dirname_full, 'fpa_conv_targ'),
+            _load_debug_frame(dirname_default, 'fpa_conv_targ'),
+        )
+
+
+def test_epsf_mode_pipeline_smoke_debug_output():
+
+    configure_eager()
+
+    ssp = config.load_json('./tests/config_static.json')
+    ssp['sim']['mode'] = 'epsf'
+    ssp['sim']['epsf'] = {
+        'kernel_size': 31,
+        'normalize': True,
+        'batch_size': 128
+    }
+    ssp['sim']['spacial_osf'] = 3
+    ssp['sim']['temporal_osf'] = 1
+    ssp['sim']['padding'] = 8
+    ssp['sim']['enable_shot_noise'] = False
+    ssp['fpa']['height'] = 61
+    ssp['fpa']['width'] = 63
+    ssp['fpa']['num_frames'] = 1
+    ssp['fpa']['time']['exposure'] = 1
+    ssp['fpa']['dark_current'] = 0
+    ssp['fpa']['noise']['read'] = 0
+    ssp['fpa']['noise']['electronic'] = 0
+    ssp['background']['galactic'] = 0
+    ssp['geometry']['stars']['mv']['bins'] = []
+    ssp['geometry']['stars']['mv']['density'] = []
+    ssp['geometry']['obs']['list'] = [
+        {
+            "mode": "line",
+            "origin": [0.5, 0.5],
+            "velocity": [0, 0],
+            "pe": 1000.0
+        },
+    ]
+
+    dirname = gen_images(
+        ssp,
+        eager=True,
+        output_dir='./.images',
+        output_debug=True,
+        set_name=_gen_name('test_epsf_mode_pipeline'),
+    )
+
+    with open(os.path.join(dirname, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
+        epsf_targ = pickle.load(f)
+
+    np.testing.assert_allclose(np.sum(epsf_targ), 1000.0, atol=1e-3)
+    np.testing.assert_allclose(
+        scipy.ndimage.center_of_mass(epsf_targ),
+        [(ssp['fpa']['height'] - 1) / 2.0, (ssp['fpa']['width'] - 1) / 2.0],
+        atol=0.05,
+    )
+
+
+def test_epsf_psf_generation_shape_pads_before_kernel_crop():
+
+    ssp = {
+        'sim': {
+            'mode': 'epsf',
+            'epsf': {
+                'kernel_size': 31,
+            },
+        },
+        'fpa': {
+            'psf': {
+                'mode': 'poppy',
+                'size': [16, 16],
+            },
+        },
+    }
+
+    assert(_gen_psf_shape(ssp, 600, 600, 3) == (186, 186))
+
+    psf_config = _psf_config_for_generation(ssp, 186, 186, 3)
+    assert(psf_config['size'] == [62, 62])
+    assert(ssp['fpa']['psf']['size'] == [16, 16])
+
+
+def test_epsf_psf_generation_shape_accepts_explicit_size_and_rejects_invalid_values():
+
+    ssp = {
+        'sim': {
+            'mode': 'epsf',
+            'epsf': {
+                'kernel_size': 31,
+                'psf_generation_size': 51,
+            },
+        },
+        'fpa': {
+            'psf': {
+                'mode': 'gaussian',
+            },
+        },
+    }
+
+    assert(_gen_psf_shape(ssp, 600, 600, 3) == (153, 153))
+
+    ssp['sim']['epsf']['psf_generation_size'] = 52
+    assert(_gen_psf_shape(ssp, 600, 600, 3) == (156, 156))
+
+    ssp['sim']['epsf']['psf_generation_size'] = 29
+    with pytest.raises(ValueError):
+        _gen_psf_shape(ssp, 600, 600, 3)
+
+    ssp['sim']['epsf']['psf_generation_size'] = 0
+    with pytest.raises(ValueError):
+        _gen_psf_shape(ssp, 600, 600, 3)
+
+
+def test_epsf_psf_generation_shape_matches_reference_parity():
+
+    ssp = {
+        'sim': {
+            'mode': 'epsf',
+            'epsf': {
+                'kernel_size': 31,
+            },
+        },
+        'fpa': {
+            'psf': {
+                'mode': 'gaussian',
+            },
+        },
+    }
+
+    assert(_gen_psf_shape(ssp, 600, 603, 3) == (186, 183))
+
+
+def test_epsf_lut_cache_uses_render_mode_specific_key(tmp_path):
+
+    ssp = {
+        'sim': {
+            'mode': 'epsf',
+            'epsf': {
+                'kernel_size': 5,
+                'normalize': True,
+                '$cache': str(tmp_path),
+            },
+        },
+        'fpa': {
+            'psf': {
+                'mode': 'gaussian',
+                'eod': 0.5,
+            },
+        },
+    }
+
+    cache_param = _epsf_lut_cache_param(ssp, 15, 15, 0.01, 0.02, 3)
+    assert(cache_param['cache_type'] == 'epsf_lut')
+    assert(cache_param['render_mode'] == 'epsf')
+
+    lut = np.arange(3 * 3 * 5 * 5, dtype=np.float32).reshape([3, 3, 5, 5])
+    _save_epsf_lut_cache(cache_param, lut)
+    cached = _load_epsf_lut_cache(cache_param).numpy()
+    np.testing.assert_array_equal(cached, lut)
+
+    ssp['sim']['epsf']['kernel_size'] = 7
+    cache_param_changed = _epsf_lut_cache_param(ssp, 21, 21, 0.01, 0.02, 3)
+    assert(_load_epsf_lut_cache(cache_param_changed) is None)
+
+
+def test_epsf_pipeline_cache_hit_skips_psf_generation(tmp_path):
+
+    configure_eager()
+
+    ssp = config.load_json('./tests/config_static.json')
+    ssp['sim']['mode'] = 'epsf'
+    ssp['sim']['epsf'] = {
+        'kernel_size': 1,
+        'normalize': True,
+        '$cache': str(tmp_path),
+    }
+    ssp['sim']['spacial_osf'] = 1
+    ssp['sim']['temporal_osf'] = 1
+    ssp['sim']['padding'] = 0
+    ssp['sim']['enable_shot_noise'] = False
+    ssp['fpa']['height'] = 11
+    ssp['fpa']['width'] = 13
+    ssp['fpa']['num_frames'] = 1
+    ssp['fpa']['time']['exposure'] = 1
+    ssp['fpa']['psf'] = {
+        'mode': 'none',
+    }
+    ssp['fpa']['dark_current'] = 0
+    ssp['fpa']['noise']['read'] = 0
+    ssp['fpa']['noise']['electronic'] = 0
+    ssp['background']['galactic'] = 0
+    ssp['geometry']['stars']['mv']['bins'] = []
+    ssp['geometry']['stars']['mv']['density'] = []
+    ssp['geometry']['obs']['list'] = [
+        {
+            "mode": "line",
+            "origin": [0.5, 0.5],
+            "velocity": [0, 0],
+            "pe": 100.0
+        },
+    ]
+
+    y_ifov = ssp['fpa']['y_fov'] / ssp['fpa']['height']
+    x_ifov = ssp['fpa']['x_fov'] / ssp['fpa']['width']
+    cache_param = _epsf_lut_cache_param(ssp, 1, 1, y_ifov, x_ifov, 1)
+    _save_epsf_lut_cache(cache_param, np.ones([1, 1, 1, 1], dtype=np.float32))
+
+    with mock.patch('satsim.satsim._gen_psf', side_effect=AssertionError('cache miss')):
+        dirname = gen_images(
+            ssp,
+            eager=True,
+            output_dir='./.images',
+            output_debug=True,
+            set_name=_gen_name('test_epsf_lut_cache_hit'),
+        )
+
+    with open(os.path.join(dirname, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
+        epsf_targ = pickle.load(f)
+
+    np.testing.assert_allclose(np.sum(epsf_targ), 100.0, atol=1e-4)
+
+
+def test_epsf_cache_hit_with_fft_fallback_still_generates_psf(tmp_path):
+
+    configure_eager()
+
+    ssp = _small_no_noise_target_config('epsf')
+    ssp['sim']['epsf'] = {
+        'kernel_size': 1,
+        '$cache': str(tmp_path),
+        'fallback_to_fft_for_models': True,
+    }
+    ssp['sim']['star_render_mode'] = 'fft'
+
+    y_ifov = ssp['fpa']['y_fov'] / ssp['fpa']['height']
+    x_ifov = ssp['fpa']['x_fov'] / ssp['fpa']['width']
+    cache_param = _epsf_lut_cache_param(ssp, 1, 1, y_ifov, x_ifov, 1)
+    _save_epsf_lut_cache(cache_param, np.ones([1, 1, 1, 1], dtype=np.float32))
+
+    with mock.patch('satsim.satsim._gen_psf', return_value=None) as gen_psf_mock:
+        dirname = gen_images(
+            ssp,
+            eager=True,
+            output_dir='./.images',
+            output_debug=True,
+            set_name=_gen_name('test_epsf_cache_fft_fallback'),
+        )
+
+    assert(gen_psf_mock.call_count == 1)
+    np.testing.assert_allclose(
+        np.sum(_load_debug_frame(dirname, 'fpa_conv_star') + _load_debug_frame(dirname, 'fpa_conv_targ')),
+        100.0,
+        atol=1e-4,
     )
 
 

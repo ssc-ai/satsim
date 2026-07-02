@@ -548,7 +548,7 @@ def save_debug(configs, output_dir):
                 json.dump(config, json_file, indent=4, default=lambda o: "n/a")
 
 
-def _cache(config, original):
+def _cache(config, original, path=()):
     """Evaluate caches.
 
     Args:
@@ -559,14 +559,31 @@ def _cache(config, original):
         A `dict`, in place transformation of `config`
     """
     for k, v in config.items():
+        current_path = path + (k,)
         if isinstance(v, dict):
-            if _has_rkey(v, '$cache'):
+            if _has_rkey(v, '$cache') and not _defer_render_mode_cache(original, current_path):
                 config[k], is_cache = parse_cache(v)
                 logger.debug('Cache found for {}: {}'.format(k, is_cache))
             else:
-                config[k] = _cache(v, original)
+                config[k] = _cache(v, original, current_path)
 
     return config
+
+
+def _defer_render_mode_cache(original, path):
+    """Leave render-mode-specific cache objects intact for the renderer."""
+    if path == ('sim', 'epsf'):
+        return True
+
+    try:
+        mode = original.get('sim', {}).get('mode')
+    except AttributeError:
+        mode = None
+
+    if mode != 'epsf':
+        return False
+
+    return path == ('fpa', 'psf')
 
 
 def _ref(config, original):

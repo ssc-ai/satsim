@@ -3,9 +3,11 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
 
 import numpy as np
+import pytest
 import tensorflow as tf
 
-from satsim.image.render import render_full, render_piecewise
+from satsim.image.render import render_full, render_piecewise, render_epsf
+from satsim.image.epsf import build_epsf_lut
 from satsim.image.psf import gen_gaussian
 
 
@@ -107,6 +109,60 @@ def _render_star(row, col, pe=1000.0, star_render_mode='transform'):
         [0.0, 0.0],
         render_separate=True,
         star_render_mode=star_render_mode,
+    )
+
+
+def _render_epsf_target(row, col, pe=1000.0, point_rendering='bilinear', kernel_size=31):
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, kernel_size)
+
+    return render_epsf(
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+        epsf_lut,
+        [_detector_to_oversampled(row, osf)],
+        [_detector_to_oversampled(col, osf)],
+        [pe],
+        [],
+        [],
+        [],
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+        render_separate=True,
+        point_rendering=point_rendering,
+    )
+
+
+def _delta_render_setup(osf=3):
+    h = 24
+    w = 26
+    pad = 4
+    h_fpa_os = h * osf
+    w_fpa_os = w * osf
+    h_fpa_pad_os = (h + 2 * pad) * osf
+    w_fpa_pad_os = (w + 2 * pad) * osf
+    h_pad_os_div2 = pad * osf
+    w_pad_os_div2 = pad * osf
+    psf_os = np.zeros([h_fpa_pad_os, w_fpa_pad_os], dtype=np.float32)
+    psf_os[h_fpa_pad_os // 2, w_fpa_pad_os // 2] = 1.0
+    return (
+        h_fpa_os,
+        w_fpa_os,
+        h_fpa_pad_os,
+        w_fpa_pad_os,
+        h_pad_os_div2,
+        w_pad_os_div2,
+        osf,
+        psf_os,
     )
 
 
@@ -273,6 +329,337 @@ def test_render_full_bilinear_star_centroid_and_photometry_are_phase_stable():
 
             np.testing.assert_allclose(np.sum(star), pe, atol=1e-3)
             np.testing.assert_allclose(_centroid(star), [row, col], atol=0.02)
+
+
+def test_render_epsf_matches_fft_delta_psf_for_all_integer_phases():
+    args = _delta_render_setup(osf=3)
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 5, normalize=False)
+
+    for phase_r in range(osf):
+        for phase_c in range(osf):
+            r_obs_os = [10 * osf + phase_r]
+            c_obs_os = [11 * osf + phase_c]
+            pe_obs_os = [123.0]
+
+            full = render_full(
+                args[0],
+                args[1],
+                args[2],
+                args[3],
+                args[4],
+                args[5],
+                osf,
+                args[7],
+                r_obs_os,
+                c_obs_os,
+                pe_obs_os,
+                [],
+                [],
+                [],
+                0.0,
+                1.0,
+                1,
+                0.0,
+                [0.0, 0.0],
+                render_separate=True,
+                point_rendering='floor',
+            )[1].numpy()
+
+            epsf = render_epsf(
+                args[0],
+                args[1],
+                args[2],
+                args[3],
+                args[4],
+                args[5],
+                osf,
+                epsf_lut,
+                r_obs_os,
+                c_obs_os,
+                pe_obs_os,
+                [],
+                [],
+                [],
+                0.0,
+                1.0,
+                1,
+                0.0,
+                [0.0, 0.0],
+                render_separate=True,
+                point_rendering='floor',
+            )[1].numpy()
+
+            np.testing.assert_allclose(epsf, full, atol=1e-4)
+
+
+def test_render_epsf_matches_fft_gaussian_with_even_psf_support():
+    pe = 1234.0
+    for row_phase, col_phase in [(0.10, 0.20), (0.25, 0.75), (0.50, 0.50), (0.73, 0.37)]:
+        row = 20 + row_phase
+        col = 21 + col_phase
+        full = _render_target(row, col, pe=pe, point_rendering='bilinear')[1].numpy()
+        epsf = _render_epsf_target(row, col, pe=pe, point_rendering='bilinear', kernel_size=31)[1].numpy()
+
+        np.testing.assert_allclose(epsf, full, atol=1e-4)
+        np.testing.assert_allclose(_centroid(epsf), _centroid(full), atol=1e-5)
+
+
+def test_render_epsf_default_does_not_renormalize_cropped_kernel_photometry():
+    args = _render_setup()
+    osf = args[6]
+    pe = 1000.0
+    row = 20.0
+    col = 21.0
+    broad_psf = gen_gaussian(args[2], args[3], 8.0 * osf).numpy()
+    default_lut = build_epsf_lut(broad_psf, osf, 5)
+    normalized_lut = build_epsf_lut(broad_psf, osf, 5, normalize=True)
+
+    render_args = (
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+    )
+    source_args = (
+        [_detector_to_oversampled(row, osf)],
+        [_detector_to_oversampled(col, osf)],
+        [pe],
+        [],
+        [],
+        [],
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+    )
+
+    default = render_epsf(*render_args, default_lut, *source_args, render_separate=True)[1].numpy()
+    normalized = render_epsf(*render_args, normalized_lut, *source_args, render_separate=True)[1].numpy()
+
+    assert(np.sum(default) < 0.95 * pe)
+    np.testing.assert_allclose(np.sum(normalized), pe, atol=1e-3)
+
+
+def test_render_epsf_bilinear_target_centroid_and_photometry_are_phase_stable():
+    pe = 4321.0
+    for row_phase, col_phase in [(0.10, 0.20), (0.25, 0.75), (0.50, 0.50), (0.73, 0.37)]:
+        row = 20 + row_phase
+        col = 21 + col_phase
+        target = _render_epsf_target(row, col, pe=pe)[1].numpy()
+
+        np.testing.assert_allclose(np.sum(target), pe, atol=1e-3)
+        np.testing.assert_allclose(_centroid(target), [row, col], atol=0.03)
+
+
+def test_render_epsf_bilinear_star_centroid_and_photometry_are_phase_stable():
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 31)
+    pe = 3210.0
+
+    for row_phase, col_phase in [(0.10, 0.20), (0.25, 0.75), (0.73, 0.37)]:
+        row = 20 + row_phase
+        col = 21 + col_phase
+        star = render_epsf(
+            args[0],
+            args[1],
+            args[2],
+            args[3],
+            args[4],
+            args[5],
+            osf,
+            epsf_lut,
+            [],
+            [],
+            [],
+            [args[4] + _detector_to_oversampled(row, osf)],
+            [args[5] + _detector_to_oversampled(col, osf)],
+            [pe],
+            0.0,
+            1.0,
+            1,
+            0.0,
+            [0.0, 0.0],
+            render_separate=True,
+        )[0].numpy()
+
+        np.testing.assert_allclose(np.sum(star), pe, atol=1e-3)
+        np.testing.assert_allclose(_centroid(star), [row, col], atol=0.03)
+
+
+def test_render_epsf_unsupported_star_fft_raises_without_fallback():
+    args = _render_setup()
+    epsf_lut = build_epsf_lut(args[7], args[6], 7)
+
+    with pytest.raises(NotImplementedError):
+        render_epsf(
+            args[0],
+            args[1],
+            args[2],
+            args[3],
+            args[4],
+            args[5],
+            args[6],
+            epsf_lut,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            0.0,
+            1.0,
+            1,
+            0.0,
+            [0.0, 0.0],
+            star_render_mode='fft',
+        )
+
+
+def test_render_epsf_unsupported_obs_model_raises_without_fallback():
+    args = _render_setup()
+    epsf_lut = build_epsf_lut(args[7], args[6], 7)
+    obs_model = [np.zeros([args[2], args[3]], dtype=np.float32)]
+
+    with pytest.raises(NotImplementedError):
+        render_epsf(
+            args[0],
+            args[1],
+            args[2],
+            args[3],
+            args[4],
+            args[5],
+            args[6],
+            epsf_lut,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            0.0,
+            1.0,
+            1,
+            0.0,
+            [0.0, 0.0],
+            obs_model=obs_model,
+        )
+
+
+def test_render_epsf_fallback_star_fft_matches_render_full():
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 31)
+    r_stars_os = [
+        args[4] + _detector_to_oversampled(20.25, osf),
+        args[4] + _detector_to_oversampled(22.75, osf),
+    ]
+    c_stars_os = [
+        args[5] + _detector_to_oversampled(21.50, osf),
+        args[5] + _detector_to_oversampled(23.10, osf),
+    ]
+    pe_stars_os = [500.0, 750.0]
+
+    expected = render_full(
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+        args[7],
+        [],
+        [],
+        [],
+        r_stars_os,
+        c_stars_os,
+        pe_stars_os,
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+        render_separate=True,
+        star_render_mode='fft',
+    )[0].numpy()
+    actual = render_epsf(
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+        epsf_lut,
+        [],
+        [],
+        [],
+        r_stars_os,
+        c_stars_os,
+        pe_stars_os,
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+        render_separate=True,
+        star_render_mode='fft',
+        fallback_to_fft_for_models=True,
+        psf_os=args[7],
+    )[0].numpy()
+
+    np.testing.assert_allclose(actual, expected)
+
+
+def test_render_epsf_fallback_obs_model_matches_render_full():
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 31)
+    model = np.zeros([args[2], args[3]], dtype=np.float32)
+    model[args[4] + 8:args[4] + 12, args[5] + 7:args[5] + 11] = 5.0
+    obs_model = [model]
+
+    common = (
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+    )
+    source_args = (
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+    )
+
+    expected = render_full(*common, args[7], *source_args, render_separate=False, obs_model=obs_model)[0].numpy()
+    actual = render_epsf(
+        *common,
+        epsf_lut,
+        *source_args,
+        render_separate=False,
+        obs_model=obs_model,
+        fallback_to_fft_for_models=True,
+        psf_os=args[7],
+    )[0].numpy()
+
+    np.testing.assert_allclose(actual, expected)
 
 
 def test_render_piecewise():

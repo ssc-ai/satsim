@@ -23,7 +23,8 @@ from satsim.geometry.sprite import load_sprite_from_file
 from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch, crop
 from satsim.image.psf import gen_gaussian, eod_to_sigma, gen_from_poppy_configuration
 from satsim.image.noise import add_photon_noise, add_read_noise
-from satsim.image.render import render_piecewise, render_full
+from satsim.image.render import render_piecewise, render_full, render_epsf
+from satsim.image.epsf import build_epsf_lut
 from satsim.geometry.draw import gen_line, gen_line_from_endpoints, gen_curve_from_points
 from satsim.geometry.random import gen_random_points
 from satsim.geometry.sstr7 import query_by_los
@@ -76,6 +77,7 @@ from satsim.config import (
     save_debug,
     _transform,
     save_cache,
+    parse_cache,
     _ref,
     _has_rkey_deep,
     get_spatial_osf,
@@ -387,6 +389,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     s_osf = get_spatial_osf(ssp)
     t_osf = ssp['sim']['temporal_osf']
     point_rendering = ssp['sim'].get('point_rendering', 'bilinear')
+    if 'mode' not in ssp['sim']:
+        ssp['sim']['mode'] = 'fftconv2p'
 
     h_pad_os = 2 * ssp['sim']['padding'] * s_osf
     w_pad_os = 2 * ssp['sim']['padding'] * s_osf
@@ -412,19 +416,36 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     y_fov_pad = h_fpa_pad_os * y_ifov_os
     x_fov_pad = w_fpa_pad_os * x_ifov_os
 
-    if 'render_size' in ssp['sim']:
-        h_sub = ssp['sim']['render_size'][0]
-        w_sub = ssp['sim']['render_size'][1]
-        render_mode = 'piecewise'
-    else:
+    render_size_pair = _parse_render_size(ssp['sim'].get('render_size'))
+    psf_h_sub = None
+    psf_w_sub = None
+    if render_size_pair is None:
         h_sub = h
         w_sub = w
         render_mode = 'full'
+    elif ssp['sim']['mode'] == 'epsf':
+        logger.warning(
+            'sim.render_size is ignored for ePSF tiling; rendering full detector-space frames '
+            'and using render_size only as the PSF-generation reference.'
+        )
+        psf_h_sub, psf_w_sub = render_size_pair
+        h_sub = h
+        w_sub = w
+        render_mode = 'full'
+    else:
+        h_sub, w_sub = render_size_pair
+        render_mode = 'piecewise'
 
     h_sub_os = h_sub * s_osf
     w_sub_os = w_sub * s_osf
     h_sub_pad_os = h_sub_os + h_pad_os
     w_sub_pad_os = w_sub_os + w_pad_os
+    if psf_h_sub is None:
+        psf_h_sub = h_sub
+        psf_w_sub = w_sub
+    psf_h_sub_pad_os = psf_h_sub * s_osf + h_pad_os
+    psf_w_sub_pad_os = psf_w_sub * s_osf + w_pad_os
+    psf_h_os, psf_w_os = _gen_psf_shape(ssp, psf_h_sub_pad_os, psf_w_sub_pad_os, s_osf)
 
     t_exposure = ssp['fpa']['time']['exposure']
     t_frame = ssp['fpa']['time']['gap'] + t_exposure
@@ -523,9 +544,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     if 'save_segmentation' not in ssp['sim']:
         ssp['sim']['save_segmentation'] = False
 
-    if 'mode' not in ssp['sim']:
-        ssp['sim']['mode'] = 'fftconv2p'
-
     if 'save_pickle' not in ssp['sim']:
         ssp['sim']['save_pickle'] = False
 
@@ -614,11 +632,57 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     pipeline_profiler = Profiler.from_sim(ssp['sim'], logger)
 
+    epsf_cfg = ssp['sim'].get('epsf', {})
+    epsf_lut_cache_param = _epsf_lut_cache_param(ssp, psf_h_os, psf_w_os, y_ifov, x_ifov, s_osf)
+
+    def _load_epsf_lut_for_mode():
+        if ssp['sim']['mode'] != 'epsf':
+            return None
+        return _load_epsf_lut_cache(epsf_lut_cache_param)
+
+    def _build_epsf_lut_for_mode(psf, use_cache=True, cached_lut=None):
+        if ssp['sim']['mode'] != 'epsf':
+            return None
+        if 'kernel_size' not in epsf_cfg:
+            raise ValueError('sim.epsf.kernel_size is required when sim.mode is "epsf"')
+        if cached_lut is not None:
+            return cached_lut
+        if use_cache:
+            epsf_lut_cached = _load_epsf_lut_for_mode()
+            if epsf_lut_cached is not None:
+                return epsf_lut_cached
+        epsf_lut_built = build_epsf_lut(
+            psf,
+            s_osf,
+            epsf_cfg['kernel_size'],
+            normalize=epsf_cfg.get('normalize', False),
+            dtype=tf.float32,
+        )
+        if use_cache:
+            _save_epsf_lut_cache(epsf_lut_cache_param, epsf_lut_built)
+        return epsf_lut_built
+
+    def _can_use_cached_epsf_lut_without_psf():
+        return (
+            ssp['sim']['mode'] == 'epsf'
+            and not pydash.objects.has(ssp, 'augment.fpa.psf')
+            and not epsf_cfg.get('fallback_to_fft_for_models', False)
+        )
+
+    def _gen_psf_and_epsf_lut():
+        epsf_lut_cached = _load_epsf_lut_for_mode()
+        if epsf_lut_cached is not None and _can_use_cached_epsf_lut_without_psf():
+            return None, epsf_lut_cached
+        psf = _gen_psf(ssp, psf_h_os, psf_w_os, y_ifov, x_ifov, s_osf)
+        return psf, _build_epsf_lut_for_mode(psf, cached_lut=epsf_lut_cached)
+
     # gen psf
+    psf_os = None
+    epsf_lut = None
     if ssp['sim']['psf_sample_frequency'] == 'once':
         psf_profiler = pipeline_profiler.child('PSF generation (once)')
         with psf_profiler.time('total'):
-            psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
+            psf_os, epsf_lut = _gen_psf_and_epsf_lut()
         psf_profiler.log(order_times=['total'])
 
     set_number = 0
@@ -756,7 +820,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         if ssp['sim']['psf_sample_frequency'] == 'collect':
             psf_profiler = pipeline_profiler.child('PSF generation (collect)')
             with psf_profiler.time('total'):
-                psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
+                psf_os, epsf_lut = _gen_psf_and_epsf_lut()
             psf_profiler.log(order_times=['total'])
 
         if pydash.objects.has(ssp, 'augment.background.stray'):
@@ -870,7 +934,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
             if ssp['sim']['psf_sample_frequency'] == 'frame':
                 with frame_profiler.time('psf'):
-                    psf_os = _gen_psf(ssp, h_sub_pad_os, w_sub_pad_os, y_ifov, x_ifov, s_osf)
+                    psf_os, epsf_lut = _gen_psf_and_epsf_lut()
 
             t_start = frame_num * t_frame
             t_end = t_start + t_exposure
@@ -1061,11 +1125,34 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             if pydash.objects.has(ssp, 'augment.fpa.psf'):
                 psf_os_curr = ssp['augment']['fpa']['psf'](psf_os)
                 psf_os_curr = tf.cast(psf_os_curr, tf.float32)
+                epsf_lut_curr = _build_epsf_lut_for_mode(psf_os_curr, use_cache=False)
             else:
                 psf_os_curr = psf_os
+                epsf_lut_curr = epsf_lut
 
             # helper function for image rendering and segmentation rendering
             def _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, render_separate):
+                if ssp['sim']['mode'] == 'epsf':
+                    return render_epsf(
+                        h_fpa_os, w_fpa_os,
+                        h_fpa_pad_os, w_fpa_pad_os,
+                        h_pad_os_div2, w_pad_os_div2,
+                        s_osf,
+                        epsf_lut_curr,
+                        r_obs_os, c_obs_os, pe_obs_os,
+                        r_stars_os, c_stars_os, pe_stars_os,
+                        t_start_star, t_end_star,
+                        t_osf,
+                        star_rot_rate,
+                        star_tran_os,
+                        render_separate=render_separate,
+                        obs_model=obs_model,
+                        star_render_mode=ssp['sim']['star_render_mode'],
+                        point_rendering=point_rendering,
+                        batch_size=epsf_cfg.get('batch_size', 1024),
+                        fallback_to_fft_for_models=epsf_cfg.get('fallback_to_fft_for_models', False),
+                        psf_os=psf_os_curr,
+                    )
                 if render_mode == 'piecewise':
                     return render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=ssp['sim']['star_render_mode'], point_rendering=point_rendering)
                 else:
@@ -1451,14 +1538,158 @@ def _gen_psf(ssp, height, width, y_ifov, x_ifov, s_osf):
             save_cache(ssp['fpa']['psf'], psf_os)
         elif ssp['fpa']['psf']['mode'] == 'poppy':
             logger.debug('Generating {} PSF.'.format(ssp['fpa']['psf']['mode']))
-            psf_os = gen_from_poppy_configuration(height / s_osf, width / s_osf, y_ifov, x_ifov, s_osf, ssp['fpa']['psf'])
-            save_cache(ssp['fpa']['psf'], psf_os)
+            psf_config = _psf_config_for_generation(ssp, height, width, s_osf)
+            psf_os = gen_from_poppy_configuration(height / s_osf, width / s_osf, y_ifov, x_ifov, s_osf, psf_config)
+            save_cache(psf_config, psf_os)
             psf_os = tf.cast(psf_os, tf.float32)
         elif ssp['fpa']['psf']['mode'] == 'none':
             logger.debug('PSF disabled (mode=none).')
             psf_os = None
 
     return psf_os
+
+
+def _psf_config_for_generation(ssp, height_os, width_os, s_osf):
+    psf_config = ssp['fpa']['psf']
+    if ssp['sim'].get('mode') != 'epsf' or not isinstance(psf_config, dict):
+        return psf_config
+
+    if psf_config.get('mode') != 'poppy':
+        return psf_config
+
+    psf_config = copy.deepcopy(psf_config)
+    psf_config['size'] = [int(height_os // s_osf), int(width_os // s_osf)]
+    return psf_config
+
+
+def _gen_psf_shape(ssp, height, width, s_osf):
+    """Return the oversampled PSF generation shape for the active render mode."""
+    if ssp['sim'].get('mode') != 'epsf':
+        return height, width
+
+    epsf_cfg = ssp['sim'].get('epsf', {})
+    if 'kernel_size' not in epsf_cfg:
+        raise ValueError('sim.epsf.kernel_size is required when sim.mode is "epsf"')
+
+    kernel_size = _validate_odd_detector_size(epsf_cfg['kernel_size'], 'sim.epsf.kernel_size')
+
+    explicit_psf_size = 'psf_generation_size' in epsf_cfg
+    if explicit_psf_size:
+        psf_h = _validate_positive_detector_size(epsf_cfg['psf_generation_size'], 'sim.epsf.psf_generation_size')
+        psf_w = psf_h
+        if psf_h < kernel_size:
+            raise ValueError('sim.epsf.psf_generation_size must be greater than or equal to sim.epsf.kernel_size')
+    else:
+        padding = int(epsf_cfg.get('psf_generation_padding', kernel_size // 2))
+        if padding < 0:
+            raise ValueError('sim.epsf.psf_generation_padding must be non-negative')
+        psf_h = kernel_size + 2 * padding
+        psf_w = psf_h
+
+    psf_cfg = ssp.get('fpa', {}).get('psf')
+    if isinstance(psf_cfg, dict) and 'size' in psf_cfg:
+        psf_h = max(psf_h, int(psf_cfg['size'][0]))
+        psf_w = max(psf_w, int(psf_cfg['size'][1]))
+
+    if not explicit_psf_size:
+        ref_h = int(height // s_osf)
+        ref_w = int(width // s_osf)
+        psf_h = _match_detector_parity(psf_h, ref_h)
+        psf_w = _match_detector_parity(psf_w, ref_w)
+
+    return psf_h * s_osf, psf_w * s_osf
+
+
+def _epsf_lut_cache_param(ssp, height_os, width_os, y_ifov, x_ifov, s_osf):
+    """Return a render-mode-specific cache key for a final detector ePSF LUT."""
+    if ssp['sim'].get('mode') != 'epsf':
+        return None
+
+    epsf_cfg = ssp['sim'].get('epsf', {})
+    psf_cfg = ssp.get('fpa', {}).get('psf')
+    cache_path = epsf_cfg.get('$cache')
+    if cache_path is None and isinstance(psf_cfg, dict):
+        cache_path = psf_cfg.get('$cache')
+    if cache_path is None or not isinstance(psf_cfg, dict):
+        return None
+
+    epsf_key = {}
+    for key in ('kernel_size', 'normalize', 'psf_generation_padding', 'psf_generation_size'):
+        if key in epsf_cfg:
+            epsf_key[key] = epsf_cfg[key]
+
+    return {
+        '$cache': cache_path,
+        'cache_type': 'epsf_lut',
+        'cache_version': 1,
+        'render_mode': 'epsf',
+        's_osf': int(s_osf),
+        'psf_generation_shape_os': [int(height_os), int(width_os)],
+        'y_ifov': float(y_ifov),
+        'x_ifov': float(x_ifov),
+        'epsf': epsf_key,
+        'psf': _psf_config_for_generation(ssp, height_os, width_os, s_osf),
+    }
+
+
+def _load_epsf_lut_cache(cache_param):
+    if cache_param is None:
+        return None
+
+    value, from_cache = parse_cache(cache_param)
+    if not from_cache:
+        return None
+
+    logger.debug('Loaded ePSF LUT cache.')
+    return tf.cast(value, tf.float32)
+
+
+def _save_epsf_lut_cache(cache_param, epsf_lut):
+    if cache_param is None:
+        return
+
+    value = epsf_lut.numpy() if hasattr(epsf_lut, 'numpy') else epsf_lut
+    save_cache(cache_param, value)
+
+
+def _validate_odd_detector_size(value, name):
+    value = int(value)
+    if value <= 0 or value % 2 == 0:
+        raise ValueError('{} must be a positive odd integer in detector pixels'.format(name))
+    return value
+
+
+def _validate_positive_detector_size(value, name):
+    value = int(value)
+    if value <= 0:
+        raise ValueError('{} must be a positive integer in detector pixels'.format(name))
+    return value
+
+
+def _parse_render_size(render_size):
+    if render_size is None:
+        return None
+
+    if isinstance(render_size, str):
+        if render_size.lower() == 'full':
+            return None
+        raise ValueError('sim.render_size must be "full" or [height, width]')
+
+    if not isinstance(render_size, (list, tuple)) or len(render_size) != 2:
+        raise ValueError('sim.render_size must be "full" or [height, width]')
+
+    h_sub = int(render_size[0])
+    w_sub = int(render_size[1])
+    if h_sub <= 0 or w_sub <= 0:
+        raise ValueError('sim.render_size tile dimensions must be positive')
+
+    return h_sub, w_sub
+
+
+def _match_detector_parity(size, reference_size):
+    if size % 2 != reference_size % 2:
+        return size + 1
+    return size
 
 
 def _offset_seed_tree(value, offset):

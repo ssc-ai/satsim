@@ -425,3 +425,45 @@ def test_cache():
 
     import shutil
     shutil.rmtree('./tests/.satsim_cache/')
+
+
+def test_epsf_transform_defers_render_mode_cache(tmp_path):
+
+    cache_dir = str(tmp_path)
+    psf_param = {
+        '$cache': cache_dir,
+        'mode': 'poppy',
+        'optical_system': []
+    }
+    epsf_param = {
+        '$cache': cache_dir,
+        'kernel_size': 31
+    }
+
+    config.save_cache(psf_param, 'wrong_psf_cache_for_epsf')
+    config.save_cache(epsf_param, 'wrong_lut_cache_for_epsf')
+
+    full_param = {
+        'version': 1,
+        'sim': {
+            'mode': 'epsf',
+            'epsf': copy.deepcopy(epsf_param),
+        },
+        'fpa': {
+            'psf': copy.deepcopy(psf_param),
+        },
+    }
+
+    tform = config.transform(copy.deepcopy(full_param), max_stages=1)
+
+    assert(tform['fpa']['psf']['mode'] == 'poppy')
+    assert(tform['fpa']['psf']['$cache'] == cache_dir)
+    assert(tform['sim']['epsf']['kernel_size'] == 31)
+    assert(tform['sim']['epsf']['$cache'] == cache_dir)
+
+    full_param['sim']['mode'] = 'fftconv2p'
+    tform = config.transform(copy.deepcopy(full_param), max_stages=1)
+
+    assert(tform['fpa']['psf'] == 'wrong_psf_cache_for_epsf')
+    assert(tform['sim']['epsf']['kernel_size'] == 31)
+    assert(tform['sim']['epsf']['$cache'] == cache_dir)

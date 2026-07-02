@@ -6,7 +6,7 @@
     "type": "object",
     "properties": {
         "mode": {
-            "description": "The rendering mode. `none` disables rendering. `fftconv2p` uses 2D FFT convolution renderer.",
+            "description": "The rendering mode. `none` disables rendering. `fftconv2p` uses 2D FFT convolution renderer. `epsf` is an opt-in detector-space ePSF lookup-table renderer.",
             "type": "string",
             "default": "fftconv2p"
         },
@@ -59,6 +59,52 @@
             "type": "string",
             "enum": ["bilinear", "floor"],
             "default": "bilinear"
+        },
+        "epsf": {
+            "description": "Configuration for opt-in detector-space ePSF rendering when mode is `epsf`.",
+            "type": "object",
+            "properties": {
+                "kernel_size": {
+                    "description": "The ePSF stamp size in detector pixels. Must be a positive odd integer.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "not": {
+                        "multipleOf": 2
+                    }
+                },
+                "psf_generation_size": {
+                    "description": "Optional detector-pixel field size used to generate the optical PSF before center-cropping ePSF stamps. Must be a positive integer greater than or equal to kernel_size. If omitted, kernel_size plus psf_generation_padding on each side is used, adjusted as needed to match the FFT reference support parity.",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "psf_generation_padding": {
+                    "description": "Detector-pixel padding added around kernel_size when generating the optical PSF before center-cropping ePSF stamps. Defaults to kernel_size // 2.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "normalize": {
+                    "description": "Normalize each ePSF phase stamp to unit flux before edge clipping. Leave false for detector-like finite-aperture photometry; set true only when cropped stamps should conserve all source flux.",
+                    "type": "boolean",
+                    "default": false
+                },
+                "batch_size": {
+                    "description": "Number of sources to deposit per ePSF scatter batch.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1024
+                },
+                "fallback_to_fft_for_models": {
+                    "description": "Fall back to the existing FFT renderer for unsupported ePSF paths such as obs_model targets or star_render_mode `fft`.",
+                    "type": "boolean",
+                    "default": false
+                },
+                "$cache": {
+                    "description": "Optional disk cache directory for the final render-mode-specific ePSF LUT. FFT mode continues to use fpa.psf.$cache for single-PSF caching.",
+                    "type": "string"
+                }
+            },
+            "required": ["kernel_size"],
+            "additionalProperties": false
         },
         "show_obs_boxes": {
             "description": "Show observation boxes in annotated images.",

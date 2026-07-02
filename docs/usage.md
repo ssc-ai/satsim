@@ -222,7 +222,8 @@ image-plane target:
 ### Important `sim` Options
 
 - `mode`: `fftconv2p` renders images; `none` disables image rendering.
-  `none` is useful with `analytical_obs`.
+  `none` is useful with `analytical_obs`. `epsf` enables the experimental
+  detector-space ePSF lookup-table renderer.
 - `render_size`: `"full"` renders the full frame at once. A two-element
   list renders tiles and can reduce peak GPU memory for large images.
 - `spatial_osf`: spatial oversampling factor. `spacial_osf` is also accepted (pre v0.24.0).
@@ -236,6 +237,24 @@ image-plane target:
 - `point_rendering`: `bilinear` is the default and preserves sub-pixel point
   centroids by distributing fractional sources over neighboring oversampled
   pixels. Use `floor` to preserve legacy integer-pixel deposition behavior.
+- `epsf`: options for `sim.mode: "epsf"`. `kernel_size` is required and is
+  specified in detector pixels. The optical PSF can be generated on a larger
+  detector-pixel field before center-cropping the final ePSF stamps by setting
+  `psf_generation_padding` or `psf_generation_size`; this avoids POPPY crop
+  artifacts while keeping the final stamp size controlled by `kernel_size`.
+  When `psf_generation_size` is omitted, SatSim adjusts the generated PSF field
+  parity to match the FFT reference support so the ePSF LUT keeps the same
+  center convention as FFT rendering.
+  Set `sim.epsf.$cache` to cache the final phase-indexed ePSF LUT. FFT mode
+  continues to use `fpa.psf.$cache` for single optical PSF caching; ePSF cache
+  entries are keyed separately by render mode and LUT parameters.
+  `normalize` defaults to `false` so finite ePSF kernels do not boost
+  photometry when energy falls outside the stamp; set it to `true` only when
+  each cropped stamp should be forced to unit flux. `batch_size` defaults to
+  `1024`, and `fallback_to_fft_for_models` defaults to `false`. ePSF currently
+  renders full detector-space frames; a list-valued `render_size` is used only
+  as the PSF-generation reference, not for tiling. Sprite/model targets and
+  `star_render_mode: "fft"` require FFT fallback.
 - `star_catalog_query_mode`: `frame` refreshes catalog stars every frame;
   `at_start` queries once.
 - `apply_star_wrap_around`: repeats stars as they drift through the padded

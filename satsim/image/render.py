@@ -8,6 +8,7 @@ import numpy as np
 
 from satsim.math import fftconv2p
 from satsim.image.fpa import downsample, crop, add_counts, transform_and_add_counts, transform_and_fft
+from satsim.image.epsf import add_epsf_counts, transform_and_add_epsf
 
 logger = logging.getLogger(__name__)
 
@@ -214,3 +215,114 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
         fpa_conv_ds = downsample(fpa_conv_crop, s_osf, downsample_method)
 
         return fpa_conv_ds, tf.zeros_like(fpa_conv_ds), fpa_os_w_targets, fpa_conv_os, fpa_conv_crop
+
+
+def render_epsf(
+        h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os,
+        h_pad_os_div2, w_pad_os_div2, s_osf, epsf_lut,
+        r_obs_os, c_obs_os, pe_obs_os,
+        r_stars_os, c_stars_os, pe_stars_os,
+        t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os,
+        render_separate=True, obs_model=None, star_render_mode='transform',
+        point_rendering='bilinear', batch_size=1024,
+        fallback_to_fft_for_models=False, psf_os=None):
+    """Render directly in detector space using an ePSF lookup table."""
+    point_rendering = str(point_rendering).lower()
+    if point_rendering not in ('floor', 'bilinear'):
+        raise ValueError("point_rendering must be 'floor' or 'bilinear'")
+
+    unsupported_model = obs_model is not None and len(obs_model) > 0
+    unsupported_star_fft = str(star_render_mode).lower() == 'fft'
+    if unsupported_model or unsupported_star_fft:
+        if fallback_to_fft_for_models:
+            return render_full(
+                h_fpa_os,
+                w_fpa_os,
+                h_fpa_pad_os,
+                w_fpa_pad_os,
+                h_pad_os_div2,
+                w_pad_os_div2,
+                s_osf,
+                psf_os,
+                r_obs_os,
+                c_obs_os,
+                pe_obs_os,
+                r_stars_os,
+                c_stars_os,
+                pe_stars_os,
+                t_start_star,
+                t_end_star,
+                t_osf,
+                star_rot_rate,
+                star_tran_os,
+                render_separate=render_separate,
+                obs_model=obs_model,
+                star_render_mode=star_render_mode,
+                point_rendering=point_rendering,
+            )
+
+        if unsupported_model:
+            raise NotImplementedError('sim.mode="epsf" does not support obs_model targets without fallback_to_fft_for_models')
+        raise NotImplementedError('sim.mode="epsf" supports star_render_mode="transform" only without fallback_to_fft_for_models')
+
+    s_osf_i = tf.cast(s_osf, tf.int32)
+    h_fpa_os_i = tf.cast(h_fpa_os, tf.int32)
+    w_fpa_os_i = tf.cast(w_fpa_os, tf.int32)
+    h_fpa_pad_os_i = tf.cast(h_fpa_pad_os, tf.int32)
+    w_fpa_pad_os_i = tf.cast(w_fpa_pad_os, tf.int32)
+    h_pad_os_div2_i = tf.cast(h_pad_os_div2, tf.int32)
+    w_pad_os_div2_i = tf.cast(w_pad_os_div2, tf.int32)
+
+    with tf.control_dependencies([
+        tf.debugging.assert_equal(tf.math.floormod(h_fpa_os_i, s_osf_i), 0, message='h_fpa_os must be divisible by s_osf'),
+        tf.debugging.assert_equal(tf.math.floormod(w_fpa_os_i, s_osf_i), 0, message='w_fpa_os must be divisible by s_osf'),
+        tf.debugging.assert_equal(tf.math.floormod(h_fpa_pad_os_i, s_osf_i), 0, message='h_fpa_pad_os must be divisible by s_osf'),
+        tf.debugging.assert_equal(tf.math.floormod(w_fpa_pad_os_i, s_osf_i), 0, message='w_fpa_pad_os must be divisible by s_osf'),
+        tf.debugging.assert_equal(tf.math.floormod(h_pad_os_div2_i, s_osf_i), 0, message='h_pad_os_div2 must be divisible by s_osf'),
+        tf.debugging.assert_equal(tf.math.floormod(w_pad_os_div2_i, s_osf_i), 0, message='w_pad_os_div2 must be divisible by s_osf'),
+    ]):
+        h_det = h_fpa_os_i // s_osf_i
+        w_det = w_fpa_os_i // s_osf_i
+        h_pad_det = h_fpa_pad_os_i // s_osf_i
+        w_pad_det = w_fpa_pad_os_i // s_osf_i
+        h_pad_det_div2 = h_pad_os_div2_i // s_osf_i
+        w_pad_det_div2 = w_pad_os_div2_i // s_osf_i
+
+    fpa_star = tf.zeros([h_pad_det, w_pad_det], tf.float32)
+    fpa_star = transform_and_add_epsf(
+        fpa_star,
+        r_stars_os,
+        c_stars_os,
+        pe_stars_os,
+        t_start_star,
+        t_end_star,
+        t_osf,
+        star_rot_rate,
+        star_tran_os,
+        epsf_lut,
+        s_osf,
+        batch_size=batch_size,
+        point_rendering=point_rendering,
+    )
+
+    fpa_targ = tf.zeros([h_pad_det, w_pad_det], tf.float32)
+    fpa_targ = add_epsf_counts(
+        fpa_targ,
+        r_obs_os,
+        c_obs_os,
+        pe_obs_os,
+        epsf_lut,
+        s_osf,
+        r_offset_os=h_pad_os_div2,
+        c_offset_os=w_pad_os_div2,
+        batch_size=batch_size,
+        point_rendering=point_rendering,
+    )
+
+    if render_separate:
+        fpa_conv_star = crop(fpa_star, h_pad_det_div2, w_pad_det_div2, h_det, w_det)
+        fpa_conv_targ = crop(fpa_targ, h_pad_det_div2, w_pad_det_div2, h_det, w_det)
+        return fpa_conv_star, fpa_conv_targ, None, None, None
+
+    combined = crop(fpa_star + fpa_targ, h_pad_det_div2, w_pad_det_div2, h_det, w_det)
+    return combined, tf.zeros_like(combined), None, None, None
