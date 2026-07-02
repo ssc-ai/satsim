@@ -54,6 +54,12 @@
             "type": "string",
             "default": "fftconv2p"
         },
+        "point_rendering": {
+            "description": "The point source rendering mode. `bilinear` distributes fractional point sources over neighboring oversampled pixels for sub-pixel centroid accuracy. `floor` preserves the legacy integer-pixel deposition behavior.",
+            "type": "string",
+            "enum": ["bilinear", "floor"],
+            "default": "bilinear"
+        },
         "show_obs_boxes": {
             "description": "Show observation boxes in annotated images.",
             "type": "boolean",

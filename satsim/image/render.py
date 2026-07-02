@@ -12,7 +12,7 @@ from satsim.image.fpa import downsample, crop, add_counts, transform_and_add_cou
 logger = logging.getLogger(__name__)
 
 
-def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=True, star_render_mode='transform'):
+def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=True, star_render_mode='transform', point_rendering='bilinear'):
     """ Render an image in sub sections. Useful if target supersample image does not fit in GPU memory.
 
     Args:
@@ -37,6 +37,9 @@ def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_ob
         star_tran_os: `[float, float]`, star translation rate in oversampled pixel per second (row, col).
         render_separate: `boolean`, if `True` render targets and stars seperately, required to calculate SNR.
         star_render_mode: `string`, star render mode. `fft` or `transform`. default=transform
+        point_rendering: `string`, point source rendering mode. `bilinear`
+            preserves sub-pixel centroids; `floor` preserves legacy integer
+            deposition.
 
     Returns:
         A `tuple`, containing:
@@ -87,7 +90,7 @@ def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_ob
             c_obs_sub = c_obs_os - c_sub_os_start
             pe_obs_sub = pe_obs_os
 
-            fpa_conv_star[ir][ic], fpa_conv_targ[ir][ic], _, _, _ = render_full(h_sub_os, w_sub_os, h_sub_pad_os, w_sub_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os, r_obs_sub, c_obs_sub, pe_obs_sub, r_stars_sub, c_stars_sub, pe_stars_sub, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=star_render_mode)
+            fpa_conv_star[ir][ic], fpa_conv_targ[ir][ic], _, _, _ = render_full(h_sub_os, w_sub_os, h_sub_pad_os, w_sub_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os, r_obs_sub, c_obs_sub, pe_obs_sub, r_stars_sub, c_stars_sub, pe_stars_sub, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=star_render_mode, point_rendering=point_rendering)
 
     fpa_conv_star_stitch = tf.cast(fpa_conv_star, tf.float32)
     fpa_conv_targ_stitch = tf.cast(fpa_conv_targ, tf.float32)
@@ -103,7 +106,7 @@ def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_ob
     return fpa_conv_star, fpa_conv_targ, None, None, None
 
 
-def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=True, obs_model=None, star_render_mode='transform'):
+def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=True, obs_model=None, star_render_mode='transform', point_rendering='bilinear'):
     """ Render an image.
 
     Args:
@@ -130,6 +133,9 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
         obs_model: `list`, list of image arrays in photoelectrons. each array should be the size
             `h_fpa_pad_os` by `w_fpa_pad_os` and is simply added into the image. default=None
         star_render_mode: `string`, star render mode. `fft` or `transform`. default=transform
+        point_rendering: `string`, point source rendering mode. `bilinear`
+            preserves sub-pixel centroids; `floor` preserves legacy integer
+            deposition.
 
     Returns:
         A `tuple`, containing:
@@ -142,10 +148,15 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
     """
     # render stars
     fpa_os_w_stars = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
+    point_rendering = str(point_rendering).lower()
+    if point_rendering not in ('floor', 'bilinear'):
+        raise ValueError("point_rendering must be 'floor' or 'bilinear'")
+    downsample_method = 'block_sum' if point_rendering == 'bilinear' else 'pool'
+
     if star_render_mode == 'fft':
-        fpa_os_w_stars = transform_and_fft(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os)
+        fpa_os_w_stars = transform_and_fft(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering)
     else:
-        fpa_os_w_stars = transform_and_add_counts(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os)
+        fpa_os_w_stars = transform_and_add_counts(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering)
 
     # render modeled targets
     fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
@@ -158,21 +169,21 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
         fpa_os_w_stars = tf.where(condition, tf.zeros_like(fpa_os_w_stars, tf.float32), fpa_os_w_stars)
 
     # render point source targets
-    fpa_os_w_targets = add_counts(fpa_os_w_targets, r_obs_os, c_obs_os, pe_obs_os, h_pad_os_div2, w_pad_os_div2)
+    fpa_os_w_targets = add_counts(fpa_os_w_targets, r_obs_os, c_obs_os, pe_obs_os, h_pad_os_div2, w_pad_os_div2, interpolation=point_rendering)
 
     if psf_os is None:
         if render_separate:
             fpa_conv_crop = crop(fpa_os_w_stars, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
-            fpa_conv_star = downsample(fpa_conv_crop, s_osf, 'pool')
+            fpa_conv_star = downsample(fpa_conv_crop, s_osf, downsample_method)
 
             fpa_conv_crop_targ = crop(fpa_os_w_targets, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
-            fpa_conv_targ = downsample(fpa_conv_crop_targ, s_osf, 'pool')
+            fpa_conv_targ = downsample(fpa_conv_crop_targ, s_osf, downsample_method)
 
             return fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, None, fpa_conv_crop
 
         fpa_os_sum = fpa_os_w_stars + fpa_os_w_targets
         fpa_conv_crop = crop(fpa_os_sum, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
-        fpa_conv_ds = downsample(fpa_conv_crop, s_osf, 'pool')
+        fpa_conv_ds = downsample(fpa_conv_crop, s_osf, downsample_method)
 
         return fpa_conv_ds, tf.zeros_like(fpa_conv_ds), fpa_os_w_targets, None, fpa_conv_crop
 
@@ -181,12 +192,12 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
         # blur stars
         fpa_conv_os = fftconv2p(fpa_os_w_stars, psf_os, pad=1)
         fpa_conv_crop = crop(fpa_conv_os, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
-        fpa_conv_star = downsample(fpa_conv_crop, s_osf, 'pool')
+        fpa_conv_star = downsample(fpa_conv_crop, s_osf, downsample_method)
 
         # blur targets
         fpa_conv_os = fftconv2p(fpa_os_w_targets, psf_os, pad=1)
         fpa_conv_crop = crop(fpa_conv_os, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
-        fpa_conv_targ = downsample(fpa_conv_crop, s_osf, 'pool')
+        fpa_conv_targ = downsample(fpa_conv_crop, s_osf, downsample_method)
 
         return fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop
 
@@ -200,6 +211,6 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
             fpa_conv_os = fftconv2p(fpa_os_sum, psf_os, pad=1)
 
         fpa_conv_crop = crop(fpa_conv_os, h_pad_os_div2, w_pad_os_div2, h_fpa_os, w_fpa_os)
-        fpa_conv_ds = downsample(fpa_conv_crop, s_osf, 'pool')
+        fpa_conv_ds = downsample(fpa_conv_crop, s_osf, downsample_method)
 
         return fpa_conv_ds, tf.zeros_like(fpa_conv_ds), fpa_os_w_targets, fpa_conv_os, fpa_conv_crop

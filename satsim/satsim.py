@@ -386,6 +386,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     s_osf = get_spatial_osf(ssp)
     t_osf = ssp['sim']['temporal_osf']
+    point_rendering = ssp['sim'].get('point_rendering', 'bilinear')
 
     h_pad_os = 2 * ssp['sim']['padding'] * s_osf
     w_pad_os = 2 * ssp['sim']['padding'] * s_osf
@@ -1066,9 +1067,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             # helper function for image rendering and segmentation rendering
             def _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, render_separate):
                 if render_mode == 'piecewise':
-                    return render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=ssp['sim']['star_render_mode'])
+                    return render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=ssp['sim']['star_render_mode'], point_rendering=point_rendering)
                 else:
-                    return render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'])
+                    return render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'], point_rendering=point_rendering)
 
             frame_cloud_field = None
             cloud_transmission_tf = None

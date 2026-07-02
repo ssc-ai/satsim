@@ -25,7 +25,7 @@ def downsample(fpa, osf, method='conv2d'):
     Args:
         fpa: `Tensor`, input image as a 2D tensor in oversampled pixel space.
         osf: `int`, oversample factor of the input image.
-        method: `string`, conv2d or pool algorithm
+        method: `string`, conv2d, pool, or block_sum algorithm
 
     Returns:
         A `Tensor`, the downsampled 2D image tensor.
@@ -33,6 +33,23 @@ def downsample(fpa, osf, method='conv2d'):
     c = tf.shape(fpa)
     h = tf.cast(c[0], tf.int32)
     w = tf.cast(c[1], tf.int32)
+
+    if method == 'block_sum':
+        osf = tf.cast(osf, tf.int32)
+        with tf.control_dependencies([
+            tf.debugging.assert_equal(
+                tf.math.floormod(h, osf),
+                0,
+                message='downsample block_sum requires height to be divisible by osf',
+            ),
+            tf.debugging.assert_equal(
+                tf.math.floormod(w, osf),
+                0,
+                message='downsample block_sum requires width to be divisible by osf',
+            ),
+        ]):
+            fpa = tf.reshape(fpa, tf.stack([h // osf, osf, w // osf, osf]))
+            return tf.reduce_sum(fpa, axis=[1, 3])
 
     if method == 'pool':
         n = tf.cast(osf * osf, tf.float32)
@@ -53,7 +70,7 @@ def downsample(fpa, osf, method='conv2d'):
                 input=tf.reshape(fpa, [1, h, w, 1]),
                 filters=filt,
                 strides=[1, osf, osf, 1],
-                padding="SAME"))
+                padding="VALID"))
 
 
 def crop(fpa, y_pad, x_pad, y_size, x_size):
@@ -235,7 +252,7 @@ def add_patch(fpa, r, c, cnt, patch, r_offset=0, c_offset=0, mode='fft'):
     return fpa
 
 
-def add_counts(fpa, r, c, cnt, r_offset=0, c_offset=0):
+def add_counts(fpa, r, c, cnt, r_offset=0, c_offset=0, interpolation='floor'):
     """Add counts (e.g. digital number (dn), photoelectrons (pe)) to the input
     image.
 
@@ -249,16 +266,30 @@ def add_counts(fpa, r, c, cnt, r_offset=0, c_offset=0):
             image pad.
         c_offset: `int`, offset to add to `c` values. Useful to account for
             image pad.
+        interpolation: `str`, either `floor` to preserve the legacy integer
+            scatter behavior, or `bilinear` to distribute fractional counts
+            over the four neighboring pixels.
 
     Returns:
         A `Tensor`, a reference to the modified input `fpa` image
     """
+    interpolation = str(interpolation).lower()
+    if interpolation not in ('floor', 'bilinear'):
+        raise ValueError("interpolation must be 'floor' or 'bilinear'")
+
+    if interpolation == 'bilinear' and not fpa.dtype.is_integer:
+        return _add_counts_bilinear(fpa, r, c, cnt, r_offset, c_offset)
+
     r = tf.cast(r, tf.int32) + tf.cast(r_offset, tf.int32)
     c = tf.cast(c, tf.int32) + tf.cast(c_offset, tf.int32)
 
     # fix for no bounds checking if fpa is int32 or if running CPU
-    if is_tensorflow_running_on_cpu() or fpa.dtype == 'int32':
+    if is_tensorflow_running_on_cpu() or fpa.dtype.is_integer:
         h, w = fpa.get_shape().as_list()
+        if h is None or w is None:
+            shape = tf.shape(fpa)
+            h = shape[0]
+            w = shape[1]
         valid = (r >= 0) & (r < h) & (c >= 0) & (c < w)
         r = tf.boolean_mask(r, valid)
         c = tf.boolean_mask(c, valid)
@@ -268,7 +299,45 @@ def add_counts(fpa, r, c, cnt, r_offset=0, c_offset=0):
     return tf.compat.v1.tensor_scatter_nd_add(fpa, rc, cnt)
 
 
-def transform_and_fft(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation):
+def _add_counts_bilinear(fpa, r, c, cnt, r_offset=0, c_offset=0):
+    dtype = fpa.dtype
+    r = tf.reshape(tf.cast(r, tf.float32), [-1]) + tf.cast(r_offset, tf.float32)
+    c = tf.reshape(tf.cast(c, tf.float32), [-1]) + tf.cast(c_offset, tf.float32)
+    cnt = tf.reshape(tf.cast(cnt, dtype), [-1])
+
+    r0_float = tf.floor(r)
+    c0_float = tf.floor(c)
+    dr = tf.cast(r - r0_float, dtype)
+    dc = tf.cast(c - c0_float, dtype)
+
+    r0 = tf.cast(r0_float, tf.int32)
+    c0 = tf.cast(c0_float, tf.int32)
+    r1 = r0 + 1
+    c1 = c0 + 1
+
+    rr = tf.concat([r0, r0, r1, r1], axis=0)
+    cc = tf.concat([c0, c1, c0, c1], axis=0)
+    weights = tf.concat([
+        (1 - dr) * (1 - dc),
+        (1 - dr) * dc,
+        dr * (1 - dc),
+        dr * dc,
+    ], axis=0)
+    values = tf.tile(cnt, [4]) * weights
+
+    shape = tf.shape(fpa)
+    h = shape[0]
+    w = shape[1]
+    valid = (rr >= 0) & (rr < h) & (cc >= 0) & (cc < w)
+    rr = tf.boolean_mask(rr, valid)
+    cc = tf.boolean_mask(cc, valid)
+    values = tf.boolean_mask(values, valid)
+
+    rc = tf.stack([rr, cc], axis=1)
+    return tf.compat.v1.tensor_scatter_nd_add(fpa, rc, values)
+
+
+def transform_and_fft(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, interpolation='floor'):
     """Applies discrete rotation and translation transformations to the center
     point and applies the smear to all other points with an FFT. This has the
     effect of  "smearing" or "streaking" the point between times `t_start` and
@@ -308,19 +377,33 @@ def transform_and_fft(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translati
 
     h_mid = h_minus_1 / 2.0
     w_mid = w_minus_1 / 2.0
+    if str(interpolation).lower() == 'bilinear':
+        h_mid = tf.floor(h_mid)
+        w_mid = tf.floor(w_mid)
 
     # create PSF by creating point source in the middle then transforming it
-    blur = transform_and_add_counts(tf.zeros_like(fpa, tf.float32), [h_mid], [w_mid], [1.0], t_start, t_end, t_osf, rotation, translation)
+    blur = transform_and_add_counts(
+        tf.zeros_like(fpa, tf.float32),
+        [h_mid],
+        [w_mid],
+        [1.0],
+        t_start,
+        t_end,
+        t_osf,
+        rotation,
+        translation,
+        interpolation=interpolation,
+    )
 
     # create delta functions
     (rr, cc) = rotate_and_translate(h_minus_1, w_minus_1, r, c, 0.0, rotation, translation)
-    delta = add_counts(tf.zeros_like(fpa, tf.float32), rr, cc, cnt)
+    delta = add_counts(tf.zeros_like(fpa, tf.float32), rr, cc, cnt, interpolation=interpolation)
 
     # FFT
     return fftconv2p(delta, blur, pad=1)
 
 
-def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, batch_size=500, filter_out_of_bounds=True):
+def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, batch_size=500, filter_out_of_bounds=True, interpolation='floor'):
     """Applies discrete rotation and translation transformations to a set of
     input points. This has the effect of "smearing" or "streaking" the point
     between times `t_start` and `t_end`. The number of transforms calculated is
@@ -403,7 +486,7 @@ def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, tr
         # perform transformation
         (rr, cc) = rotate_and_translate(h_minus_1, w_minus_1, rr, cc, tt, rotation, translation)
 
-        return [i + 1, add_counts(img, rr, cc, cnt_os), r_batch, c_batch, cnt_os_batch]
+        return [i + 1, add_counts(img, rr, cc, cnt_os, interpolation=interpolation), r_batch, c_batch, cnt_os_batch]
 
     i = tf.constant(0)
     i, image, _, _, _ = tf.while_loop(func_condition, func_eval, (i, fpa, r_batch, c_batch, cnt_os_batch))

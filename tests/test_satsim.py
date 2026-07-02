@@ -438,6 +438,65 @@ def test_render_modes():
         np.testing.assert_array_almost_equal(fpa_conv_star_1, fpa_conv_star_3, 1)
 
 
+def test_default_point_rendering_matches_bilinear_no_noise_photometry_and_centroid():
+
+    configure_eager()
+
+    ssp = config.load_json('./tests/config_static.json')
+    ssp['sim'].pop('point_rendering', None)
+    ssp['sim']['enable_shot_noise'] = False
+    ssp['sim']['spacial_osf'] = 3
+    ssp['fpa']['height'] = 81
+    ssp['fpa']['width'] = 83
+    ssp['fpa']['num_frames'] = 1
+    ssp['fpa']['time']['exposure'] = 1
+    ssp['fpa']['dark_current'] = 0
+    ssp['fpa']['noise']['read'] = 0
+    ssp['fpa']['noise']['electronic'] = 0
+    ssp['background']['galactic'] = 0
+    ssp['geometry']['stars']['mv']['bins'] = []
+    ssp['geometry']['stars']['mv']['density'] = []
+    ssp['geometry']['obs']['list'] = [
+        {
+            "mode": "line",
+            "origin": [0.5, 0.5],
+            "velocity": [0, 0],
+            "pe": 1000.0
+        },
+    ]
+
+    ssp_explicit = copy.deepcopy(ssp)
+    ssp_explicit['sim']['point_rendering'] = 'bilinear'
+
+    dirname_default = gen_images(
+        ssp,
+        eager=True,
+        output_dir='./.images',
+        output_debug=True,
+        set_name=_gen_name('test_default_point_rendering'),
+    )
+    dirname_bilinear = gen_images(
+        ssp_explicit,
+        eager=True,
+        output_dir='./.images',
+        output_debug=True,
+        set_name=_gen_name('test_explicit_bilinear_point_rendering'),
+    )
+
+    with open(os.path.join(dirname_default, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
+        default_targ = pickle.load(f)
+    with open(os.path.join(dirname_bilinear, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
+        bilinear_targ = pickle.load(f)
+
+    np.testing.assert_array_equal(default_targ, bilinear_targ)
+    np.testing.assert_allclose(np.sum(default_targ), 1000.0, atol=1e-3)
+    np.testing.assert_allclose(
+        scipy.ndimage.center_of_mass(default_targ),
+        [(ssp['fpa']['height'] - 1) / 2.0, (ssp['fpa']['width'] - 1) / 2.0],
+        atol=0.02,
+    )
+
+
 def test_piecewise():
 
     configure_eager()

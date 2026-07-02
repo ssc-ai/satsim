@@ -233,6 +233,9 @@ image-plane target:
 - `samples`: number of independent transformed configurations to generate.
 - `star_render_mode`: `transform` renders per-star motion; `fft` uses a
   shared FFT-convolved star streak shape.
+- `point_rendering`: `bilinear` is the default and preserves sub-pixel point
+  centroids by distributing fractional sources over neighboring oversampled
+  pixels. Use `floor` to preserve legacy integer-pixel deposition behavior.
 - `star_catalog_query_mode`: `frame` refreshes catalog stars every frame;
   `at_start` queries once.
 - `apply_star_wrap_around`: repeats stars as they drift through the padded
@@ -969,6 +972,9 @@ dataset = augment_satnet_with_satsim(
   `sim.analytical_obs` for EO observation-only runs.
 - `sim.render_size` can tile large images when full-frame rendering exceeds
   available memory.
+- `sim.point_rendering` defaults to `bilinear` for sub-pixel point-source
+  centroid accuracy. Set it to `floor` only when legacy integer deposition is
+  required.
 - `--jobs` multiplies the number of processes per GPU; reduce
   `spatial_osf`, `padding`, frame size, or jobs if memory is exhausted.
 - Use the schema in `schema/v1` to audit accepted keys. Newer blocks such as
