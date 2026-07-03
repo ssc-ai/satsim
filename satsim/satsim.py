@@ -23,7 +23,7 @@ from satsim.geometry.sprite import load_sprite_from_file
 from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch, crop
 from satsim.image.psf import gen_gaussian, eod_to_sigma, gen_from_poppy_configuration
 from satsim.image.noise import add_photon_noise, add_read_noise
-from satsim.image.render import render_piecewise, render_full, render_epsf
+from satsim.image.render import render_piecewise, render_full, render_epsf, normalize_star_render_mode
 from satsim.image.epsf import build_epsf_lut
 from satsim.geometry.draw import gen_line, gen_line_from_endpoints, gen_curve_from_points
 from satsim.geometry.random import gen_random_points
@@ -504,6 +504,11 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'star_render_mode' not in ssp['sim']:
         ssp['sim']['star_render_mode'] = 'transform'
+    else:
+        raw_star_render_mode = ssp['sim']['star_render_mode']
+        ssp['sim']['star_render_mode'] = normalize_star_render_mode(raw_star_render_mode)
+        if str(raw_star_render_mode).lower() == 'fft':
+            logger.warning('sim.star_render_mode="fft" is deprecated; use "streak" for shared-streak star rendering.')
 
     if 'show_obs_boxes' not in ssp['sim']:
         ssp['sim']['show_obs_boxes'] = True
@@ -673,6 +678,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             ssp['sim']['mode'] == 'epsf'
             and not pydash.objects.has(ssp, 'augment.fpa.psf')
             and not epsf_cfg.get('fallback_to_fft_for_models', False)
+            and ssp['sim'].get('star_render_mode', 'transform') != 'streak'
         )
 
     def _gen_psf_and_epsf_lut():
@@ -1158,6 +1164,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         batch_size=epsf_cfg.get('batch_size', 1024),
                         fallback_to_fft_for_models=epsf_cfg.get('fallback_to_fft_for_models', False),
                         psf_os=psf_os_curr,
+                        epsf_normalize=epsf_cfg.get('normalize', False),
                     )
                 if render_mode == 'piecewise':
                     return render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=ssp['sim']['star_render_mode'], point_rendering=point_rendering)

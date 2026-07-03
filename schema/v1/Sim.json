@@ -50,9 +50,10 @@
             "default": 1
         },
         "star_render_mode": {
-            "description": "The star rendering mode. `fft` uses FFT convolution renderer and all stars will have save the same streak shape. `transform` uses discrete transform renderer. `transform` is more computationally expensive with many stars.",
+            "description": "The star rendering mode. `streak` uses a shared streak shape for all stars and is recommended for dense rate-track star fields. In `epsf` mode, `streak` is implemented natively with a per-frame trailed ePSF LUT. `transform` uses discrete per-star transforms and is more computationally expensive with many stars. `fft` is accepted as a legacy alias for `streak`.",
             "type": "string",
-            "default": "fftconv2p"
+            "enum": ["transform", "streak", "fft"],
+            "default": "transform"
         },
         "point_rendering": {
             "description": "The point source rendering mode. `bilinear` distributes fractional point sources over neighboring oversampled pixels for sub-pixel centroid accuracy. `floor` preserves the legacy integer-pixel deposition behavior.",
@@ -94,7 +95,7 @@
                     "default": 1024
                 },
                 "fallback_to_fft_for_models": {
-                    "description": "Fall back to the existing FFT renderer for unsupported ePSF paths such as obs_model targets or star_render_mode `fft`.",
+                    "description": "Fall back to the existing FFT renderer for unsupported ePSF paths such as obs_model targets. Native ePSF star_render_mode `streak` does not require this fallback.",
                     "type": "boolean",
                     "default": false
                 },

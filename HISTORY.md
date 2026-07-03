@@ -6,6 +6,7 @@ History
 
 * **BEHAVIORAL CHANGE:** Add sub-pixel bilinear point rendering for stars and targets, enabled by default. Rendered images differ slightly from v0.24.0; set `sim.point_rendering` to `floor` for legacy rendering.
 * Add detector-space ePSF lookup-table renderer. Set `sim.mode` to `epsf` and configure `sim.epsf.*`.
+* Add native ePSF trailed star rendering for `star_render_mode: streak` to speed dense rate-track star fields.
 * Add block-sum downsampling and normalization options for radial image models and PSF generation.
 
 

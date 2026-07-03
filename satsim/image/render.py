@@ -8,9 +8,27 @@ import numpy as np
 
 from satsim.math import fftconv2p
 from satsim.image.fpa import downsample, crop, add_counts, transform_and_add_counts, transform_and_fft
-from satsim.image.epsf import add_epsf_counts, transform_and_add_epsf
+from satsim.image.epsf import (
+    add_epsf_counts,
+    build_trailed_epsf_lut,
+    transform_and_add_epsf,
+    transform_and_add_trailed_epsf,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_star_render_mode(star_render_mode):
+    """Normalize supported star rendering modes.
+
+    ``fft`` is kept as a compatibility alias for the shared-streak renderer.
+    """
+    star_render_mode = str(star_render_mode).lower()
+    if star_render_mode == 'fft':
+        return 'streak'
+    if star_render_mode not in ('transform', 'streak'):
+        raise ValueError("star_render_mode must be 'transform', 'streak', or legacy alias 'fft'")
+    return star_render_mode
 
 
 def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=True, star_render_mode='transform', point_rendering='bilinear'):
@@ -37,7 +55,7 @@ def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_ob
         star_rot_rate: `float`, star rotation rate in degrees per second.
         star_tran_os: `[float, float]`, star translation rate in oversampled pixel per second (row, col).
         render_separate: `boolean`, if `True` render targets and stars seperately, required to calculate SNR.
-        star_render_mode: `string`, star render mode. `fft` or `transform`. default=transform
+        star_render_mode: `string`, star render mode. `streak` or `transform`. default=transform
         point_rendering: `string`, point source rendering mode. `bilinear`
             preserves sub-pixel centroids; `floor` preserves legacy integer
             deposition.
@@ -50,6 +68,7 @@ def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_ob
             _: `None`, to make output compatible with `render_full`
             _: `None`, to make output compatible with `render_full`
     """
+    star_render_mode = normalize_star_render_mode(star_render_mode)
 
     # calculate subsection render dimensions
     h_fpa_os = tf.cast(h * s_osf, tf.int32)
@@ -133,7 +152,7 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
         render_separate: `boolean`, if `True` render targets and stars seperately, required to calculate SNR.
         obs_model: `list`, list of image arrays in photoelectrons. each array should be the size
             `h_fpa_pad_os` by `w_fpa_pad_os` and is simply added into the image. default=None
-        star_render_mode: `string`, star render mode. `fft` or `transform`. default=transform
+        star_render_mode: `string`, star render mode. `streak` or `transform`. default=transform
         point_rendering: `string`, point source rendering mode. `bilinear`
             preserves sub-pixel centroids; `floor` preserves legacy integer
             deposition.
@@ -148,13 +167,14 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
 
     """
     # render stars
+    star_render_mode = normalize_star_render_mode(star_render_mode)
     fpa_os_w_stars = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
     point_rendering = str(point_rendering).lower()
     if point_rendering not in ('floor', 'bilinear'):
         raise ValueError("point_rendering must be 'floor' or 'bilinear'")
     downsample_method = 'block_sum' if point_rendering == 'bilinear' else 'pool'
 
-    if star_render_mode == 'fft':
+    if star_render_mode == 'streak':
         fpa_os_w_stars = transform_and_fft(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering)
     else:
         fpa_os_w_stars = transform_and_add_counts(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering)
@@ -225,15 +245,15 @@ def render_epsf(
         t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os,
         render_separate=True, obs_model=None, star_render_mode='transform',
         point_rendering='bilinear', batch_size=1024,
-        fallback_to_fft_for_models=False, psf_os=None):
+        fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=False):
     """Render directly in detector space using an ePSF lookup table."""
     point_rendering = str(point_rendering).lower()
     if point_rendering not in ('floor', 'bilinear'):
         raise ValueError("point_rendering must be 'floor' or 'bilinear'")
 
+    star_render_mode = normalize_star_render_mode(star_render_mode)
     unsupported_model = obs_model is not None and len(obs_model) > 0
-    unsupported_star_fft = str(star_render_mode).lower() == 'fft'
-    if unsupported_model or unsupported_star_fft:
+    if unsupported_model:
         if fallback_to_fft_for_models:
             return render_full(
                 h_fpa_os,
@@ -261,9 +281,7 @@ def render_epsf(
                 point_rendering=point_rendering,
             )
 
-        if unsupported_model:
-            raise NotImplementedError('sim.mode="epsf" does not support obs_model targets without fallback_to_fft_for_models')
-        raise NotImplementedError('sim.mode="epsf" supports star_render_mode="transform" only without fallback_to_fft_for_models')
+        raise NotImplementedError('sim.mode="epsf" does not support obs_model targets without fallback_to_fft_for_models')
 
     s_osf_i = tf.cast(s_osf, tf.int32)
     h_fpa_os_i = tf.cast(h_fpa_os, tf.int32)
@@ -289,21 +307,54 @@ def render_epsf(
         w_pad_det_div2 = w_pad_os_div2_i // s_osf_i
 
     fpa_star = tf.zeros([h_pad_det, w_pad_det], tf.float32)
-    fpa_star = transform_and_add_epsf(
-        fpa_star,
-        r_stars_os,
-        c_stars_os,
-        pe_stars_os,
-        t_start_star,
-        t_end_star,
-        t_osf,
-        star_rot_rate,
-        star_tran_os,
-        epsf_lut,
-        s_osf,
-        batch_size=batch_size,
-        point_rendering=point_rendering,
-    )
+    if star_render_mode == 'streak':
+        base_kernel_size = epsf_lut.shape.as_list()[2]
+        if base_kernel_size is None:
+            base_kernel_size = int(tf.shape(epsf_lut)[2].numpy())
+        trailed_epsf_lut, _ = build_trailed_epsf_lut(
+            psf_os,
+            s_osf,
+            base_kernel_size,
+            t_start_star,
+            t_end_star,
+            t_osf,
+            star_rot_rate,
+            star_tran_os,
+            normalize=epsf_normalize,
+            point_rendering=point_rendering,
+            dtype=tf.float32,
+            max_kernel_size=tf.minimum(h_pad_det, w_pad_det),
+        )
+        fpa_star = transform_and_add_trailed_epsf(
+            fpa_star,
+            r_stars_os,
+            c_stars_os,
+            pe_stars_os,
+            t_start_star,
+            t_end_star,
+            star_rot_rate,
+            star_tran_os,
+            trailed_epsf_lut,
+            s_osf,
+            batch_size=batch_size,
+            point_rendering=point_rendering,
+        )
+    else:
+        fpa_star = transform_and_add_epsf(
+            fpa_star,
+            r_stars_os,
+            c_stars_os,
+            pe_stars_os,
+            t_start_star,
+            t_end_star,
+            t_osf,
+            star_rot_rate,
+            star_tran_os,
+            epsf_lut,
+            s_osf,
+            batch_size=batch_size,
+            point_rendering=point_rendering,
+        )
 
     fpa_targ = tf.zeros([h_pad_det, w_pad_det], tf.float32)
     fpa_targ = add_epsf_counts(

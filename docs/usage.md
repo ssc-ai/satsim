@@ -232,8 +232,10 @@ image-plane target:
 - `padding`: extra real pixels around the image for off-frame sources and
   convolution.
 - `samples`: number of independent transformed configurations to generate.
-- `star_render_mode`: `transform` renders per-star motion; `fft` uses a
-  shared FFT-convolved star streak shape.
+- `star_render_mode`: `transform` renders per-star motion; `streak` uses a
+  shared star streak shape. In `epsf` mode, `streak` is implemented natively
+  with a per-frame trailed ePSF LUT and is recommended for dense rate-track
+  star fields. `fft` is accepted as a legacy alias for `streak`.
 - `point_rendering`: `bilinear` is the default and preserves sub-pixel point
   centroids by distributing fractional sources over neighboring oversampled
   pixels. Use `floor` to preserve legacy integer-pixel deposition behavior.
@@ -251,13 +253,15 @@ image-plane target:
   `normalize` defaults to `false` so finite ePSF kernels do not boost
   photometry when energy falls outside the stamp; set it to `true` only when
   each cropped stamp should be forced to unit flux. `batch_size` defaults to
-  `1024`, and `fallback_to_fft_for_models` defaults to `false`. When
+  `1024`, and `fallback_to_fft_for_models` defaults to `false`. Native ePSF
+  `star_render_mode: "streak"` builds a trailed LUT in memory per frame; that
+  trailed LUT is not disk-cached. When
   `fallback_to_fft_for_models` is enabled, the optical PSF is generated at the
   full padded frame size and `psf_generation_size`/`psf_generation_padding`
   are ignored. ePSF currently
   renders full detector-space frames; a list-valued `render_size` is used only
-  as the PSF-generation reference, not for tiling. Sprite/model targets and
-  `star_render_mode: "fft"` require FFT fallback.
+  as the PSF-generation reference, not for tiling. Sprite/model targets require
+  FFT fallback.
 - `star_catalog_query_mode`: `frame` refreshes catalog stars every frame;
   `at_start` queries once.
 - `apply_star_wrap_around`: repeats stars as they drift through the padded

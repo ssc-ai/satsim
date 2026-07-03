@@ -6,7 +6,12 @@ import numpy as np
 import pytest
 import tensorflow as tf
 
-from satsim.image.epsf import build_epsf_lut, add_epsf_counts, transform_and_add_epsf
+from satsim.image.epsf import (
+    add_epsf_counts,
+    build_epsf_lut,
+    build_trailed_epsf_lut,
+    transform_and_add_epsf,
+)
 from satsim.util import configure_eager
 
 
@@ -48,6 +53,91 @@ def test_build_epsf_lut_rejects_invalid_kernel_size():
 
     with pytest.raises(ValueError):
         build_epsf_lut(None, 3, 4)
+
+
+def test_build_trailed_epsf_lut_kernel_growth_and_static_degenerate_case():
+    static_lut = build_epsf_lut(None, 3, 5)
+    trailed_static_lut, effective_kernel = build_trailed_epsf_lut(
+        None,
+        3,
+        5,
+        0.0,
+        1.0,
+        5,
+        0.0,
+        [0.0, 0.0],
+    )
+
+    assert(effective_kernel == 5)
+    np.testing.assert_allclose(trailed_static_lut.numpy(), static_lut.numpy(), atol=1e-6)
+
+    _, effective_kernel = build_trailed_epsf_lut(
+        None,
+        3,
+        5,
+        0.0,
+        1.0,
+        20,
+        0.0,
+        [0.0, 7.0],
+    )
+
+    assert(effective_kernel == 9)
+
+
+def test_build_trailed_epsf_lut_preserves_flux_inside_effective_kernel():
+    lut, _ = build_trailed_epsf_lut(
+        None,
+        3,
+        5,
+        0.0,
+        1.0,
+        20,
+        0.0,
+        [3.0, 6.0],
+        normalize=False,
+    )
+
+    np.testing.assert_allclose(
+        tf.reduce_sum(lut, axis=[2, 3]).numpy(),
+        np.ones([3, 3]),
+        atol=2e-3,
+    )
+
+
+def test_build_trailed_epsf_lut_rebases_absolute_frame_times():
+    lut, _ = build_trailed_epsf_lut(
+        None,
+        1,
+        5,
+        5.0,
+        6.0,
+        20,
+        0.0,
+        [3.0, 0.0],
+        normalize=False,
+    )
+
+    np.testing.assert_allclose(
+        tf.reduce_sum(lut, axis=[2, 3]).numpy(),
+        np.ones([1, 1]),
+        atol=2e-3,
+    )
+
+
+def test_build_trailed_epsf_lut_rejects_absurd_kernel_growth():
+    with pytest.raises(ValueError, match='trailed ePSF effective kernel_size'):
+        build_trailed_epsf_lut(
+            None,
+            3,
+            5,
+            0.0,
+            1.0,
+            20,
+            0.0,
+            [300.0, 0.0],
+            max_kernel_size=21,
+        )
 
 
 def test_add_epsf_counts_bilinear_weights_and_centroid():
