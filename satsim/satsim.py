@@ -24,7 +24,12 @@ from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch, c
 from satsim.image.psf import gen_gaussian, eod_to_sigma, gen_from_poppy_configuration
 from satsim.image.noise import add_photon_noise, add_read_noise
 from satsim.image.render import render_piecewise, render_full, render_epsf, normalize_star_render_mode
-from satsim.image.epsf import build_epsf_lut
+from satsim.image.epsf import (
+    EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
+    build_epsf_lut,
+    phase_nearest_error_bound_px,
+    resolve_phase_oversample,
+)
 from satsim.geometry.draw import gen_line, gen_line_from_endpoints, gen_curve_from_points
 from satsim.geometry.random import gen_random_points
 from satsim.geometry.sstr7 import query_by_los
@@ -388,9 +393,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     s_osf = get_spatial_osf(ssp)
     t_osf = ssp['sim']['temporal_osf']
-    point_rendering = ssp['sim'].get('point_rendering', 'bilinear')
     if 'mode' not in ssp['sim']:
         ssp['sim']['mode'] = 'fftconv2p'
+    point_rendering = str(ssp['sim'].get('point_rendering', 'bilinear')).lower()
+    if point_rendering not in ('floor', 'bilinear', 'phase_nearest'):
+        raise ValueError("sim.point_rendering must be 'floor', 'bilinear', or 'phase_nearest'")
+    if point_rendering == 'phase_nearest' and ssp['sim']['mode'] != 'epsf':
+        raise ValueError('sim.point_rendering="phase_nearest" requires sim.mode="epsf"')
 
     h_pad_os = 2 * ssp['sim']['padding'] * s_osf
     w_pad_os = 2 * ssp['sim']['padding'] * s_osf
@@ -644,7 +653,54 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     pipeline_profiler = Profiler.from_sim(ssp['sim'], logger)
 
     epsf_cfg = ssp['sim'].get('epsf', {})
+    epsf_phase_oversample = 1
+    if ssp['sim']['mode'] == 'epsf' and point_rendering == 'phase_nearest':
+        epsf_phase_oversample = resolve_phase_oversample(
+            s_osf,
+            epsf_cfg.get('phase_oversample'),
+        )
+        logger.debug(
+            'ePSF phase_nearest phase_oversample set to {} (worst-case centroid quantization {:.4f} detector px).'.format(
+                epsf_phase_oversample,
+                phase_nearest_error_bound_px(s_osf, epsf_phase_oversample),
+            )
+        )
+    epsf_batch_size_cap = epsf_cfg['batch_size'] if 'batch_size' in epsf_cfg else None
+    epsf_batch_element_budget = epsf_cfg.get('batch_element_budget', EPSF_BATCH_ELEMENT_BUDGET_DEFAULT)
+    epsf_crop_cfg = _normalize_epsf_crop_config(epsf_cfg) if ssp['sim']['mode'] == 'epsf' else {'mode': 'off'}
     epsf_lut_cache_param = _epsf_lut_cache_param(ssp, psf_h_os, psf_w_os, y_ifov, x_ifov, s_osf)
+
+    def _tensor_mean_float(value):
+        value = tf.cast(value, tf.float32)
+        return float(tf.reduce_mean(value).numpy()) if hasattr(value, 'numpy') else float(np.mean(value))
+
+    def _epsf_crop_config_for_frame(frame_bg_tf):
+        if epsf_crop_cfg.get('mode') == 'off':
+            return None
+
+        crop_frame_cfg = copy.deepcopy(epsf_crop_cfg)
+        if crop_frame_cfg['mode'] == 'manual':
+            crop_frame_cfg['threshold_pe'] = float(mv_to_pe(zeropoint, crop_frame_cfg['threshold_mv']) * t_exposure)
+        elif crop_frame_cfg['mode'] == 'auto':
+            bg_mean = _tensor_mean_float(frame_bg_tf)
+            dc_mean = _tensor_mean_float(dc_tf)
+            crop_frame_cfg['sigma_pix'] = math.sqrt(max(0.0, rn * rn + en * en + bg_mean + dc_mean))
+        return crop_frame_cfg
+
+    def _finalize_epsf_metadata(epsf_metadata):
+        if not epsf_metadata:
+            return None
+
+        for tier in epsf_metadata.get('tiers', []):
+            flux_max_pe = tier.get('flux_max_pe')
+            if flux_max_pe is None:
+                tier['flux_max_mv'] = None
+            else:
+                tier['flux_max_mv'] = float(pe_to_mv(zeropoint, flux_max_pe / t_exposure))
+
+        return {
+            'crop': epsf_metadata,
+        }
 
     def _load_epsf_lut_for_mode():
         if ssp['sim']['mode'] != 'epsf':
@@ -668,6 +724,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             epsf_cfg['kernel_size'],
             normalize=epsf_cfg.get('normalize', False),
             dtype=tf.float32,
+            phase_oversample=epsf_phase_oversample,
         )
         if use_cache:
             _save_epsf_lut_cache(epsf_lut_cache_param, epsf_lut_built)
@@ -808,10 +865,16 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
         if ssp['sim']['temporal_osf'] == 'auto':
             if star_mode != 'none':
-                rrr, ccc = rotate_and_translate(h_fpa_pad_os, w_fpa_pad_os, [0,h_fpa_pad_os], [0,w_fpa_pad_os], t_exposure, star_rot_rate, star_tran_os)
-                rrr -= [0, h_fpa_pad_os]
-                ccc -= [0, w_fpa_pad_os]
-                t_osf = tf.cast(max([tf.sqrt(rrr[0] * rrr[0] + ccc[0] * ccc[0]), tf.sqrt(rrr[1] * rrr[1] + ccc[1] * ccc[1])]) + 1, tf.int32)
+                t_osf = _auto_temporal_osf_for_star_motion(
+                    h_fpa_pad_os,
+                    w_fpa_pad_os,
+                    t_exposure,
+                    star_rot_rate,
+                    star_tran_os,
+                    s_osf,
+                    sim_mode=ssp['sim']['mode'],
+                    star_render_mode=ssp['sim']['star_render_mode'],
+                )
                 logger.debug('Auto temporal oversample factor set to {}.'.format(t_osf.numpy()))
             else:
                 t_osf = 1
@@ -1031,6 +1094,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 tf.cast(0.0, tf.float32),
             )
             frame_background_component_tfs['background_pre_cloud_pe'] = frame_pre_cloud_bg_tf
+            frame_epsf_crop_cfg = _epsf_crop_config_for_frame(frame_pre_cloud_bg_tf)
 
             # if image rendering is disabled, optionally generate analytical observations and return
             if ssp['sim']['mode'] == 'none':
@@ -1143,7 +1207,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 epsf_lut_curr = epsf_lut
 
             # helper function for image rendering and segmentation rendering
-            def _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, render_separate):
+            def _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, render_separate, epsf_metadata=None):
                 if ssp['sim']['mode'] == 'epsf':
                     return render_epsf(
                         h_fpa_os, w_fpa_os,
@@ -1161,10 +1225,14 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         obs_model=obs_model,
                         star_render_mode=ssp['sim']['star_render_mode'],
                         point_rendering=point_rendering,
-                        batch_size=epsf_cfg.get('batch_size', 1024),
+                        batch_size_cap=epsf_batch_size_cap,
+                        batch_element_budget=epsf_batch_element_budget,
+                        phase_oversample=epsf_phase_oversample,
                         fallback_to_fft_for_models=epsf_cfg.get('fallback_to_fft_for_models', False),
                         psf_os=psf_os_curr,
                         epsf_normalize=epsf_cfg.get('normalize', False),
+                        epsf_crop=frame_epsf_crop_cfg,
+                        epsf_metadata=epsf_metadata,
                     )
                 if render_mode == 'piecewise':
                     return render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=ssp['sim']['star_render_mode'], point_rendering=point_rendering)
@@ -1214,8 +1282,16 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 astrometrics['clouds'] = frame_cloud_field.metadata
 
             # render
+            epsf_render_metadata = {}
             with frame_profiler.time('render'):
-                fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, ssp['sim']['calculate_snr'])
+                fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, ssp['sim']['calculate_snr'], epsf_metadata=epsf_render_metadata)
+
+            if epsf_render_metadata:
+                epsf_render_metadata['noise_fraction'] = frame_epsf_crop_cfg.get('noise_fraction') if frame_epsf_crop_cfg else None
+                epsf_render_metadata['threshold_mv'] = frame_epsf_crop_cfg.get('threshold_mv') if frame_epsf_crop_cfg else None
+                epsf_render_metadata['threshold_pe'] = frame_epsf_crop_cfg.get('threshold_pe') if frame_epsf_crop_cfg else None
+                astrometrics['epsf'] = _finalize_epsf_metadata(epsf_render_metadata)
+                logger.debug('ePSF crop tiers: {}'.format(astrometrics['epsf']['crop']['tiers']))
 
             frame_bg_tf = frame_pre_cloud_bg_tf
             if cloud_transmission_tf is not None:
@@ -1615,6 +1691,60 @@ def _gen_psf_shape(ssp, height, width, s_osf):
     return psf_h * s_osf, psf_w * s_osf
 
 
+def _normalize_epsf_crop_config(epsf_cfg):
+    crop_cfg = copy.deepcopy(epsf_cfg.get('crop', {}))
+    mode = str(crop_cfg.get('mode', 'auto')).lower()
+    if mode not in ('off', 'manual', 'auto'):
+        raise ValueError("sim.epsf.crop.mode must be 'off', 'manual', or 'auto'")
+
+    allowed_keys = {'mode', 'noise_fraction', 'sizes', 'threshold_mv', 'kernel_size'}
+    unknown = set(crop_cfg.keys()) - allowed_keys
+    if unknown:
+        raise ValueError('Unknown sim.epsf.crop field(s): {}'.format(', '.join(sorted(unknown))))
+
+    result = {'mode': mode}
+    if mode == 'off':
+        return result
+
+    if 'kernel_size' not in epsf_cfg:
+        raise ValueError('sim.epsf.kernel_size is required when sim.mode is "epsf"')
+    full_kernel_size = _validate_odd_detector_size(epsf_cfg['kernel_size'], 'sim.epsf.kernel_size')
+
+    if mode == 'manual':
+        mixed = {'noise_fraction', 'sizes'} & set(crop_cfg.keys())
+        if mixed:
+            raise ValueError('sim.epsf.crop manual mode cannot set auto field(s): {}'.format(', '.join(sorted(mixed))))
+        if 'threshold_mv' not in crop_cfg:
+            raise ValueError('sim.epsf.crop.threshold_mv is required when crop.mode is "manual"')
+        if 'kernel_size' not in crop_cfg:
+            raise ValueError('sim.epsf.crop.kernel_size is required when crop.mode is "manual"')
+
+        result['threshold_mv'] = float(crop_cfg['threshold_mv'])
+        result['kernel_size'] = _validate_epsf_crop_size(
+            crop_cfg['kernel_size'],
+            full_kernel_size,
+            'sim.epsf.crop.kernel_size',
+        )
+        return result
+
+    mixed = {'threshold_mv', 'kernel_size'} & set(crop_cfg.keys())
+    if mixed:
+        raise ValueError('sim.epsf.crop auto mode cannot set manual field(s): {}'.format(', '.join(sorted(mixed))))
+
+    noise_fraction = float(crop_cfg.get('noise_fraction', 0.1))
+    if noise_fraction <= 0:
+        raise ValueError('sim.epsf.crop.noise_fraction must be positive')
+
+    default_sizes = [5, 9, 17, 33]
+    raw_sizes = crop_cfg.get('sizes', [size for size in default_sizes if size < full_kernel_size])
+    result['noise_fraction'] = noise_fraction
+    result['sizes'] = sorted(set(
+        _validate_epsf_crop_size(size, full_kernel_size, 'sim.epsf.crop.sizes')
+        for size in raw_sizes
+    ))
+    return result
+
+
 def _epsf_lut_cache_param(ssp, height_os, width_os, y_ifov, x_ifov, s_osf):
     """Return a render-mode-specific cache key for a final detector ePSF LUT."""
     if ssp['sim'].get('mode') != 'epsf':
@@ -1632,6 +1762,15 @@ def _epsf_lut_cache_param(ssp, height_os, width_os, y_ifov, x_ifov, s_osf):
     for key in ('kernel_size', 'normalize', 'psf_generation_padding', 'psf_generation_size'):
         if key in epsf_cfg:
             epsf_key[key] = epsf_cfg[key]
+    point_rendering = str(ssp['sim'].get('point_rendering', 'bilinear')).lower()
+    if point_rendering == 'phase_nearest':
+        epsf_key['point_rendering'] = 'phase_nearest'
+        epsf_key['phase_oversample'] = resolve_phase_oversample(
+            s_osf,
+            epsf_cfg.get('phase_oversample'),
+        )
+    else:
+        epsf_key['point_rendering'] = 'standard'
 
     return {
         '$cache': cache_path,
@@ -1674,6 +1813,13 @@ def _validate_odd_detector_size(value, name):
     return value
 
 
+def _validate_epsf_crop_size(value, full_kernel_size, name):
+    size = _validate_odd_detector_size(value, name)
+    if size >= int(full_kernel_size):
+        raise ValueError('{} must be strictly less than sim.epsf.kernel_size'.format(name))
+    return size
+
+
 def _validate_positive_detector_size(value, name):
     value = int(value)
     if value <= 0:
@@ -1705,6 +1851,32 @@ def _match_detector_parity(size, reference_size):
     if size % 2 != reference_size % 2:
         return size + 1
     return size
+
+
+def _auto_temporal_osf_for_star_motion(
+        h_fpa_pad_os, w_fpa_pad_os, t_exposure, star_rot_rate, star_tran_os,
+        s_osf, sim_mode='fftconv2p', star_render_mode='transform'):
+    """Return the automatic temporal oversampling factor for star rendering."""
+    rrr, ccc = rotate_and_translate(
+        h_fpa_pad_os,
+        w_fpa_pad_os,
+        [0, h_fpa_pad_os],
+        [0, w_fpa_pad_os],
+        t_exposure,
+        star_rot_rate,
+        star_tran_os,
+    )
+    rrr -= [0, h_fpa_pad_os]
+    ccc -= [0, w_fpa_pad_os]
+    trail_os = tf.reduce_max(tf.sqrt(rrr * rrr + ccc * ccc))
+
+    star_render_mode = normalize_star_render_mode(star_render_mode)
+    if sim_mode == 'epsf' and star_render_mode == 'transform':
+        t_osf = tf.cast(tf.math.ceil(trail_os / tf.cast(s_osf, tf.float32)) + 1, tf.int32)
+    else:
+        # Preserve the legacy FFT/streak oversampled-pixel rule.
+        t_osf = tf.cast(trail_os + 1, tf.int32)
+    return tf.maximum(t_osf, tf.constant(1, tf.int32))
 
 
 def _offset_seed_tree(value, offset):

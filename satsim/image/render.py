@@ -11,6 +11,10 @@ from satsim.image.fpa import downsample, crop, add_counts, transform_and_add_cou
 from satsim.image.epsf import (
     add_epsf_counts,
     build_trailed_epsf_lut,
+    EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
+    filter_epsf_sources_in_bounds,
+    resolve_epsf_tiers,
+    summarize_epsf_tiers,
     transform_and_add_epsf,
     transform_and_add_trailed_epsf,
 )
@@ -171,7 +175,7 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
     fpa_os_w_stars = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
     point_rendering = str(point_rendering).lower()
     if point_rendering not in ('floor', 'bilinear'):
-        raise ValueError("point_rendering must be 'floor' or 'bilinear'")
+        raise ValueError("point_rendering must be 'floor' or 'bilinear' for FFT rendering")
     downsample_method = 'block_sum' if point_rendering == 'bilinear' else 'pool'
 
     if star_render_mode == 'streak':
@@ -244,17 +248,24 @@ def render_epsf(
         r_stars_os, c_stars_os, pe_stars_os,
         t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os,
         render_separate=True, obs_model=None, star_render_mode='transform',
-        point_rendering='bilinear', batch_size=1024,
-        fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=False):
+        point_rendering='bilinear', batch_size=None,
+        batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
+        batch_size_cap=None, phase_oversample=1,
+        fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=False,
+        epsf_crop=None, epsf_metadata=None):
     """Render directly in detector space using an ePSF lookup table."""
     point_rendering = str(point_rendering).lower()
-    if point_rendering not in ('floor', 'bilinear'):
-        raise ValueError("point_rendering must be 'floor' or 'bilinear'")
+    if point_rendering not in ('floor', 'bilinear', 'phase_nearest'):
+        raise ValueError("point_rendering must be 'floor', 'bilinear', or 'phase_nearest'")
+    if batch_size_cap is None and batch_size is not None:
+        batch_size_cap = batch_size
 
     star_render_mode = normalize_star_render_mode(star_render_mode)
     unsupported_model = obs_model is not None and len(obs_model) > 0
     if unsupported_model:
         if fallback_to_fft_for_models:
+            if point_rendering == 'phase_nearest':
+                raise ValueError('point_rendering="phase_nearest" is only supported by native ePSF paths and cannot use FFT fallback')
             return render_full(
                 h_fpa_os,
                 w_fpa_os,
@@ -311,7 +322,7 @@ def render_epsf(
         base_kernel_size = epsf_lut.shape.as_list()[2]
         if base_kernel_size is None:
             base_kernel_size = int(tf.shape(epsf_lut)[2].numpy())
-        trailed_epsf_lut, _ = build_trailed_epsf_lut(
+        trailed_epsf_lut, _, trailed_info = build_trailed_epsf_lut(
             psf_os,
             s_osf,
             base_kernel_size,
@@ -324,7 +335,30 @@ def render_epsf(
             point_rendering=point_rendering,
             dtype=tf.float32,
             max_kernel_size=tf.minimum(h_pad_det, w_pad_det),
+            return_info=True,
+            phase_oversample=phase_oversample,
         )
+        epsf_tiers = resolve_epsf_tiers(
+            trailed_epsf_lut,
+            epsf_crop,
+            trail_det=trailed_info.get('trail_det', 0),
+        )
+        if epsf_metadata is not None and epsf_tiers is not None:
+            _, _, visible_pe_stars_os = filter_epsf_sources_in_bounds(
+                fpa_star,
+                r_stars_os,
+                c_stars_os,
+                pe_stars_os,
+                t_start_star,
+                t_end_star,
+                star_rot_rate,
+                star_tran_os,
+                s_osf,
+            )
+            epsf_metadata.update(summarize_epsf_tiers(epsf_tiers, visible_pe_stars_os))
+            epsf_metadata['mode'] = epsf_crop.get('mode')
+            epsf_metadata['sigma_pix'] = epsf_crop.get('sigma_pix')
+            epsf_metadata['trail_det'] = trailed_info.get('trail_det', 0)
         fpa_star = transform_and_add_trailed_epsf(
             fpa_star,
             r_stars_os,
@@ -338,8 +372,28 @@ def render_epsf(
             s_osf,
             batch_size=batch_size,
             point_rendering=point_rendering,
+            epsf_tiers=epsf_tiers,
+            batch_element_budget=batch_element_budget,
+            batch_size_cap=batch_size_cap,
         )
     else:
+        epsf_tiers = resolve_epsf_tiers(epsf_lut, epsf_crop)
+        if epsf_metadata is not None and epsf_tiers is not None:
+            _, _, visible_pe_stars_os = filter_epsf_sources_in_bounds(
+                fpa_star,
+                r_stars_os,
+                c_stars_os,
+                pe_stars_os,
+                t_start_star,
+                t_end_star,
+                star_rot_rate,
+                star_tran_os,
+                s_osf,
+            )
+            epsf_metadata.update(summarize_epsf_tiers(epsf_tiers, visible_pe_stars_os))
+            epsf_metadata['mode'] = epsf_crop.get('mode')
+            epsf_metadata['sigma_pix'] = epsf_crop.get('sigma_pix')
+            epsf_metadata['trail_det'] = 0
         fpa_star = transform_and_add_epsf(
             fpa_star,
             r_stars_os,
@@ -354,6 +408,9 @@ def render_epsf(
             s_osf,
             batch_size=batch_size,
             point_rendering=point_rendering,
+            epsf_tiers=epsf_tiers,
+            batch_element_budget=batch_element_budget,
+            batch_size_cap=batch_size_cap,
         )
 
     fpa_targ = tf.zeros([h_pad_det, w_pad_det], tf.float32)
@@ -368,6 +425,8 @@ def render_epsf(
         c_offset_os=w_pad_os_div2,
         batch_size=batch_size,
         point_rendering=point_rendering,
+        batch_element_budget=batch_element_budget,
+        batch_size_cap=batch_size_cap,
     )
 
     if render_separate:

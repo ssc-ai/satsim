@@ -112,10 +112,10 @@ def _render_star(row, col, pe=1000.0, star_render_mode='transform'):
     )
 
 
-def _render_epsf_target(row, col, pe=1000.0, point_rendering='bilinear', kernel_size=31):
+def _render_epsf_target(row, col, pe=1000.0, point_rendering='bilinear', kernel_size=31, phase_oversample=1):
     args = _render_setup()
     osf = args[6]
-    epsf_lut = build_epsf_lut(args[7], osf, kernel_size)
+    epsf_lut = build_epsf_lut(args[7], osf, kernel_size, phase_oversample=phase_oversample)
 
     return render_epsf(
         args[0],
@@ -139,6 +139,7 @@ def _render_epsf_target(row, col, pe=1000.0, point_rendering='bilinear', kernel_
         [0.0, 0.0],
         render_separate=True,
         point_rendering=point_rendering,
+        phase_oversample=phase_oversample,
     )
 
 
@@ -456,6 +457,27 @@ def test_render_epsf_bilinear_target_centroid_and_photometry_are_phase_stable():
         np.testing.assert_allclose(_centroid(target), [row, col], atol=0.03)
 
 
+def test_render_epsf_phase_nearest_target_centroid_within_quantization_bound():
+    pe = 4321.0
+    osf = _render_setup()[6]
+    phase_oversample = 4
+    bound = 1.0 / (2.0 * osf * phase_oversample)
+
+    for row_phase, col_phase in [(0.10, 0.20), (0.25, 0.75), (0.73, 0.37)]:
+        row = 20 + row_phase
+        col = 21 + col_phase
+        target = _render_epsf_target(
+            row,
+            col,
+            pe=pe,
+            point_rendering='phase_nearest',
+            phase_oversample=phase_oversample,
+        )[1].numpy()
+
+        np.testing.assert_allclose(np.sum(target), pe, atol=1e-3)
+        np.testing.assert_allclose(_centroid(target), [row, col], atol=bound + 0.01)
+
+
 def test_render_epsf_bilinear_star_centroid_and_photometry_are_phase_stable():
     args = _render_setup()
     osf = args[6]
@@ -490,6 +512,185 @@ def test_render_epsf_bilinear_star_centroid_and_photometry_are_phase_stable():
 
         np.testing.assert_allclose(np.sum(star), pe, atol=1e-3)
         np.testing.assert_allclose(_centroid(star), [row, col], atol=0.03)
+
+
+def test_render_epsf_tiered_bright_star_matches_full_kernel():
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 31)
+    r_stars_os = [args[4] + _detector_to_oversampled(20.25, osf)]
+    c_stars_os = [args[5] + _detector_to_oversampled(21.75, osf)]
+    pe_stars_os = [1000.0]
+
+    common = (
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+        epsf_lut,
+        [],
+        [],
+        [],
+        r_stars_os,
+        c_stars_os,
+        pe_stars_os,
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+    )
+
+    expected = render_epsf(*common, render_separate=True)[0].numpy()
+    metadata = {}
+    actual = render_epsf(
+        *common,
+        render_separate=True,
+        epsf_crop={
+            'mode': 'manual',
+            'threshold_pe': 10.0,
+            'kernel_size': 5,
+        },
+        epsf_metadata=metadata,
+    )[0].numpy()
+
+    np.testing.assert_allclose(actual, expected, atol=1e-5)
+    assert(metadata['source_count'] == 1)
+    assert(metadata['tiers'][0]['count'] == 0)
+    assert(metadata['tiers'][-1]['kernel_size'] == 31)
+    assert(metadata['tiers'][-1]['count'] == 1)
+
+
+def test_render_epsf_tiered_crop_applies_to_stars_not_targets():
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 31)
+    r_obs_os = [_detector_to_oversampled(20.25, osf)]
+    c_obs_os = [_detector_to_oversampled(21.75, osf)]
+    pe_obs_os = [1000.0]
+
+    common = (
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+        epsf_lut,
+        r_obs_os,
+        c_obs_os,
+        pe_obs_os,
+        [],
+        [],
+        [],
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+    )
+
+    expected = render_epsf(*common, render_separate=True)[1].numpy()
+    actual = render_epsf(
+        *common,
+        render_separate=True,
+        epsf_crop={
+            'mode': 'manual',
+            'threshold_pe': 1e9,
+            'kernel_size': 5,
+        },
+    )[1].numpy()
+
+    np.testing.assert_allclose(actual, expected, atol=1e-5)
+
+
+def test_render_epsf_crop_off_matches_absent_crop():
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 31)
+    r_stars_os = [args[4] + _detector_to_oversampled(20.25, osf)]
+    c_stars_os = [args[5] + _detector_to_oversampled(21.75, osf)]
+    pe_stars_os = [1000.0]
+
+    common = (
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+        epsf_lut,
+        [],
+        [],
+        [],
+        r_stars_os,
+        c_stars_os,
+        pe_stars_os,
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+    )
+
+    expected = render_epsf(*common, render_separate=True)[0].numpy()
+    metadata = {}
+    actual = render_epsf(
+        *common,
+        render_separate=True,
+        epsf_crop={'mode': 'off'},
+        epsf_metadata=metadata,
+    )[0].numpy()
+
+    np.testing.assert_allclose(actual, expected, atol=1e-5)
+    assert(metadata == {})
+
+
+def test_render_epsf_tier_metadata_counts_visible_stars_only():
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 31)
+
+    for star_render_mode in ('transform', 'streak'):
+        metadata = {}
+        render_epsf(
+            args[0],
+            args[1],
+            args[2],
+            args[3],
+            args[4],
+            args[5],
+            osf,
+            epsf_lut,
+            [],
+            [],
+            [],
+            [args[4] + _detector_to_oversampled(20.25, osf), -100.0],
+            [args[5] + _detector_to_oversampled(21.75, osf), -100.0],
+            [5.0, 5.0],
+            0.0,
+            1.0,
+            1,
+            0.0,
+            [0.0, 0.0],
+            render_separate=True,
+            star_render_mode=star_render_mode,
+            epsf_crop={
+                'mode': 'manual',
+                'threshold_pe': 10.0,
+                'kernel_size': 5,
+            },
+            epsf_metadata=metadata,
+            psf_os=args[7],
+        )
+
+        assert(metadata['source_count'] == 1)
+        assert(sum(tier['count'] for tier in metadata['tiers']) == 1)
 
 
 def test_render_epsf_star_streak_matches_render_full_moving_stars_without_fallback():
@@ -831,6 +1032,43 @@ def test_render_epsf_fallback_obs_model_matches_render_full():
     )[0].numpy()
 
     np.testing.assert_allclose(actual, expected)
+
+
+def test_render_epsf_phase_nearest_rejects_fft_fallback():
+    args = _render_setup()
+    osf = args[6]
+    phase_oversample = 4
+    epsf_lut = build_epsf_lut(args[7], osf, 31, phase_oversample=phase_oversample)
+    obs_model = [np.zeros([args[2], args[3]], dtype=np.float32)]
+
+    with pytest.raises(ValueError, match='phase_nearest'):
+        render_epsf(
+            args[0],
+            args[1],
+            args[2],
+            args[3],
+            args[4],
+            args[5],
+            osf,
+            epsf_lut,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            0.0,
+            1.0,
+            1,
+            0.0,
+            [0.0, 0.0],
+            render_separate=False,
+            obs_model=obs_model,
+            fallback_to_fft_for_models=True,
+            psf_os=args[7],
+            point_rendering='phase_nearest',
+            phase_oversample=phase_oversample,
+        )
 
 
 def test_render_piecewise():

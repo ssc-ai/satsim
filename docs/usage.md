@@ -228,7 +228,9 @@ image-plane target:
   list renders tiles and can reduce peak GPU memory for large images.
 - `spatial_osf`: spatial oversampling factor. `spacial_osf` is also accepted (pre v0.24.0).
 - `temporal_osf`: temporal samples used to smear motion. `"auto"` derives a
-  value from star motion.
+  value from star motion. In ePSF `star_render_mode: "transform"`, auto
+  sampling uses detector-pixel trail length, and samples are placed at
+  exposure-bin centers to avoid endpoint bias.
 - `padding`: extra real pixels around the image for off-frame sources and
   convolution.
 - `samples`: number of independent transformed configurations to generate.
@@ -239,6 +241,10 @@ image-plane target:
 - `point_rendering`: `bilinear` is the default and preserves sub-pixel point
   centroids by distributing fractional sources over neighboring oversampled
   pixels. Use `floor` to preserve legacy integer-pixel deposition behavior.
+  `phase_nearest` is an ePSF-only approximate mode that renders through a
+  fine phase-grid LUT without per-source bilinear splitting. It is intended
+  for high-density ePSF transform workloads where the configured quantization
+  error is acceptable.
 - `epsf`: options for `sim.mode: "epsf"`. `kernel_size` is required and is
   specified in detector pixels. The optical PSF can be generated on a larger
   detector-pixel field before center-cropping the final ePSF stamps by setting
@@ -252,16 +258,30 @@ image-plane target:
   entries are keyed separately by render mode and LUT parameters.
   `normalize` defaults to `false` so finite ePSF kernels do not boost
   photometry when energy falls outside the stamp; set it to `true` only when
-  each cropped stamp should be forced to unit flux. `batch_size` defaults to
-  `1024`, and `fallback_to_fft_for_models` defaults to `false`. Native ePSF
+  each cropped stamp should be forced to unit flux. `batch_element_budget`
+  defaults to `32000000` stamp elements per scatter batch; `batch_size` is an
+  optional cap and only limits batching when explicitly set. `phase_oversample`
+  controls the fine phase-grid multiplier for `point_rendering:
+  "phase_nearest"`; when omitted, SatSim derives it from a 0.02 detector-pixel
+  worst-case centroid quantization target. `fallback_to_fft_for_models`
+  defaults to `false`. Native ePSF
   `star_render_mode: "streak"` builds a trailed LUT in memory per frame; that
   trailed LUT is not disk-cached. When
   `fallback_to_fft_for_models` is enabled, the optical PSF is generated at the
   full padded frame size and `psf_generation_size`/`psf_generation_padding`
-  are ignored. ePSF currently
+  are ignored. `phase_nearest` cannot be used with FFT fallback. ePSF currently
   renders full detector-space frames; a list-valued `render_size` is used only
   as the PSF-generation reference, not for tiling. Sprite/model targets require
   FFT fallback.
+  `sim.epsf.crop.mode` defaults to `auto`, rendering dim stars with centered
+  crops of the full ePSF LUT. Auto mode derives total-flux thresholds from the
+  active ePSF wing signal and the per-pixel noise floor using
+  `noise_fraction` (default `0.1`) and optional candidate `sizes`.
+  `manual` mode uses `crop.kernel_size` for stars dimmer than
+  `crop.threshold_mv`; set `mode` to `off` for the bit-identical full-kernel
+  path. Cropped tiers are applied to stars only; targets keep the full kernel.
+  Per-frame tier thresholds, source counts, wing/loss candidate bounds, and
+  the binding criterion are recorded in frame metadata under `epsf.crop`.
 - `star_catalog_query_mode`: `frame` refreshes catalog stars every frame;
   `at_start` queries once.
 - `apply_star_wrap_around`: repeats stars as they drift through the padded

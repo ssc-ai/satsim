@@ -18,10 +18,12 @@ from astropy.io import fits as afits
 
 from satsim import config, gen_images
 from satsim.satsim import (
+    _auto_temporal_osf_for_star_motion,
     _epsf_lut_cache_param,
     _gen_psf,
     _gen_psf_shape,
     _load_epsf_lut_cache,
+    _normalize_epsf_crop_config,
     _parse_render_size,
     _psf_config_for_generation,
     _save_epsf_lut_cache,
@@ -554,6 +556,22 @@ def _load_debug_frame(dirname, name, frame=0):
         return pickle.load(f)
 
 
+def test_phase_nearest_requires_epsf_mode():
+    configure_eager()
+
+    ssp = _small_no_noise_target_config('fftconv2p')
+    ssp['sim']['point_rendering'] = 'phase_nearest'
+
+    with pytest.raises(ValueError, match='phase_nearest'):
+        gen_images(
+            ssp,
+            eager=True,
+            output_dir='./.images',
+            output_debug=True,
+            set_name=_gen_name('test_phase_nearest_requires_epsf'),
+        )
+
+
 def test_parse_render_size_accepts_full_string_and_validates_tiles():
     assert(_parse_render_size(None) is None)
     assert(_parse_render_size('full') is None)
@@ -652,6 +670,162 @@ def test_epsf_mode_pipeline_smoke_debug_output():
     )
 
 
+def test_epsf_crop_auto_runtime_matches_full_with_metadata(tmp_path):
+
+    configure_eager()
+
+    ra = 279.23410832
+    dec = 38.78299311
+    catalog_path = tmp_path / 'two_stars.csv'
+    catalog_path.write_text(
+        '1,12.0,{:.8f},{:.8f}\n'
+        '2,20.0,{:.8f},{:.8f}\n'.format(ra, dec, ra, dec)
+    )
+
+    ssp_full = _small_no_noise_target_config('epsf')
+    ssp_full['sim']['padding'] = 8
+    ssp_full['sim']['render_size'] = [41, 41]
+    ssp_full['sim']['epsf'] = {
+        'kernel_size': 9,
+        'psf_generation_size': 15,
+        'batch_size': 32,
+        'crop': {
+            'mode': 'off',
+        },
+    }
+    ssp_full['fpa']['height'] = 41
+    ssp_full['fpa']['width'] = 41
+    ssp_full['fpa']['y_fov'] = 5.0
+    ssp_full['fpa']['x_fov'] = 5.0
+    ssp_full['fpa']['noise']['read'] = 100.0
+    ssp_full['fpa']['psf'] = {
+        'mode': 'gaussian',
+        'eod': 0.8,
+    }
+    ssp_full['geometry']['obs']['list'] = []
+    ssp_full['geometry']['stars'] = {
+        'mode': 'csv',
+        'path': str(catalog_path),
+        'ra': ra,
+        'dec': dec,
+        'rotation': 0.0,
+        'pad': 0.0,
+        'motion': {
+            'mode': 'affine',
+            'rotation': 0.0,
+            'translation': [0.0, 0.0],
+        },
+    }
+
+    ssp_crop = copy.deepcopy(ssp_full)
+    ssp_crop['sim']['epsf']['crop'] = {
+        'mode': 'auto',
+        'noise_fraction': 0.1,
+        'sizes': [1, 3, 5, 7],
+    }
+
+    dirname_full = gen_images(
+        ssp_full,
+        eager=True,
+        output_dir='./.images',
+        output_debug=True,
+        set_name=_gen_name('test_epsf_crop_auto_full'),
+    )
+    dirname_crop = gen_images(
+        ssp_crop,
+        eager=True,
+        output_dir='./.images',
+        output_debug=True,
+        set_name=_gen_name('test_epsf_crop_auto_tiered'),
+    )
+
+    full_star = _load_debug_frame(dirname_full, 'fpa_conv_star')
+    crop_star = _load_debug_frame(dirname_crop, 'fpa_conv_star')
+    with open(os.path.join(dirname_crop, 'Debug', 'metadata_0.json'), 'r') as f:
+        metadata = json.load(f)
+    with open(os.path.join(dirname_crop, 'Debug', 'stars_os_0.pickle'), 'rb') as f:
+        stars_os = pickle.load(f)
+
+    crop_meta = metadata['data']['metadata']['epsf']['crop']
+    star_count = len(stars_os[0])
+    assert(star_count == 2)
+    assert(crop_meta['source_count'] == star_count)
+    assert(sum(tier['count'] for tier in crop_meta['tiers']) == star_count)
+    assert(crop_meta['stamp_elements'] < crop_meta['full_stamp_elements'])
+    auto_tiers = [tier for tier in crop_meta['tiers'] if tier['mode'] == 'auto']
+    assert(auto_tiers)
+    for tier in auto_tiers:
+        assert(tier['binding'] in ('wing', 'loss'))
+        assert(tier['wing_flux_max_pe'] is not None)
+        assert(tier['loss_flux_max_pe'] is not None)
+
+    max_error = np.max(np.abs(crop_star - full_star))
+    assert(max_error <= crop_meta['noise_fraction'] * crop_meta['sigma_pix'] * star_count + 1e-3)
+
+
+def test_epsf_crop_manual_runtime_threshold_mv_counts(tmp_path):
+
+    configure_eager()
+
+    ra = 279.23410832
+    dec = 38.78299311
+    catalog_path = tmp_path / 'threshold_stars.csv'
+    catalog_path.write_text(
+        '1,9.99,{:.8f},{:.8f}\n'
+        '2,10.01,{:.8f},{:.8f}\n'
+        '3,10.02,{:.8f},{:.8f}\n'.format(ra, dec, ra, dec, ra, dec)
+    )
+
+    ssp = _small_no_noise_target_config('epsf')
+    ssp['sim']['padding'] = 8
+    ssp['sim']['epsf'] = {
+        'kernel_size': 9,
+        'batch_size': 32,
+        'crop': {
+            'mode': 'manual',
+            'threshold_mv': 10.0,
+            'kernel_size': 3,
+        },
+    }
+    ssp['fpa']['height'] = 41
+    ssp['fpa']['width'] = 41
+    ssp['fpa']['y_fov'] = 5.0
+    ssp['fpa']['x_fov'] = 5.0
+    ssp['geometry']['obs']['list'] = []
+    ssp['geometry']['stars'] = {
+        'mode': 'csv',
+        'path': str(catalog_path),
+        'ra': ra,
+        'dec': dec,
+        'rotation': 0.0,
+        'pad': 0.0,
+        'motion': {
+            'mode': 'affine',
+            'rotation': 0.0,
+            'translation': [0.0, 0.0],
+        },
+    }
+
+    dirname = gen_images(
+        ssp,
+        eager=True,
+        output_dir='./.images',
+        output_debug=True,
+        set_name=_gen_name('test_epsf_crop_manual_threshold'),
+    )
+
+    with open(os.path.join(dirname, 'Debug', 'metadata_0.json'), 'r') as f:
+        metadata = json.load(f)
+
+    crop_meta = metadata['data']['metadata']['epsf']['crop']
+    assert(crop_meta['source_count'] == 3)
+    assert(crop_meta['threshold_mv'] == 10.0)
+    assert(crop_meta['tiers'][0]['kernel_size'] == 3)
+    assert(crop_meta['tiers'][0]['count'] == 2)
+    assert(crop_meta['tiers'][-1]['kernel_size'] == 9)
+    assert(crop_meta['tiers'][-1]['count'] == 1)
+
+
 def test_epsf_psf_generation_shape_pads_before_kernel_crop():
 
     ssp = {
@@ -746,6 +920,76 @@ def test_epsf_psf_generation_shape_uses_full_frame_when_fft_fallback_enabled():
     assert(_gen_psf_shape(ssp, 600, 603, 3) == (600, 603))
 
 
+def test_normalize_epsf_crop_config_defaults_to_auto():
+    assert(_normalize_epsf_crop_config({'kernel_size': 9}) == {
+        'mode': 'auto',
+        'noise_fraction': 0.1,
+        'sizes': [5],
+    })
+
+
+def test_normalize_epsf_crop_config_manual_validation():
+    cfg = {
+        'kernel_size': 9,
+        'crop': {
+            'mode': 'manual',
+            'threshold_mv': 12.0,
+            'kernel_size': 5,
+        },
+    }
+    assert(_normalize_epsf_crop_config(cfg) == {
+        'mode': 'manual',
+        'threshold_mv': 12.0,
+        'kernel_size': 5,
+    })
+
+    bad_cfg = copy.deepcopy(cfg)
+    bad_cfg['crop']['kernel_size'] = 4
+    with pytest.raises(ValueError):
+        _normalize_epsf_crop_config(bad_cfg)
+
+    bad_cfg = copy.deepcopy(cfg)
+    bad_cfg['crop']['kernel_size'] = 9
+    with pytest.raises(ValueError):
+        _normalize_epsf_crop_config(bad_cfg)
+
+    bad_cfg = copy.deepcopy(cfg)
+    bad_cfg['crop']['noise_fraction'] = 0.1
+    with pytest.raises(ValueError):
+        _normalize_epsf_crop_config(bad_cfg)
+
+
+def test_normalize_epsf_crop_config_auto_validation():
+    cfg = {
+        'kernel_size': 15,
+        'crop': {
+            'mode': 'auto',
+            'noise_fraction': 0.05,
+            'sizes': [7, 3, 5, 3],
+        },
+    }
+    assert(_normalize_epsf_crop_config(cfg) == {
+        'mode': 'auto',
+        'noise_fraction': 0.05,
+        'sizes': [3, 5, 7],
+    })
+
+    bad_cfg = copy.deepcopy(cfg)
+    bad_cfg['crop']['threshold_mv'] = 10
+    with pytest.raises(ValueError):
+        _normalize_epsf_crop_config(bad_cfg)
+
+    bad_cfg = copy.deepcopy(cfg)
+    bad_cfg['crop']['noise_fraction'] = 0
+    with pytest.raises(ValueError):
+        _normalize_epsf_crop_config(bad_cfg)
+
+    bad_cfg = copy.deepcopy(cfg)
+    bad_cfg['crop']['unknown'] = True
+    with pytest.raises(ValueError):
+        _normalize_epsf_crop_config(bad_cfg)
+
+
 def test_epsf_lut_cache_uses_render_mode_specific_key(tmp_path):
 
     ssp = {
@@ -777,6 +1021,106 @@ def test_epsf_lut_cache_uses_render_mode_specific_key(tmp_path):
     ssp['sim']['epsf']['kernel_size'] = 7
     cache_param_changed = _epsf_lut_cache_param(ssp, 21, 21, 0.01, 0.02, 3)
     assert(_load_epsf_lut_cache(cache_param_changed) is None)
+
+
+def test_epsf_lut_cache_key_shares_standard_floor_and_bilinear_modes(tmp_path):
+    ssp = {
+        'sim': {
+            'mode': 'epsf',
+            'point_rendering': 'floor',
+            'epsf': {
+                'kernel_size': 5,
+                '$cache': str(tmp_path),
+            },
+        },
+        'fpa': {
+            'psf': {
+                'mode': 'gaussian',
+                'eod': 0.5,
+            },
+        },
+    }
+
+    floor_param = _epsf_lut_cache_param(ssp, 15, 15, 0.01, 0.02, 3)
+    ssp['sim']['point_rendering'] = 'bilinear'
+    bilinear_param = _epsf_lut_cache_param(ssp, 15, 15, 0.01, 0.02, 3)
+
+    assert(floor_param['epsf']['point_rendering'] == 'standard')
+    assert(bilinear_param['epsf']['point_rendering'] == 'standard')
+    assert(floor_param == bilinear_param)
+
+
+def test_epsf_lut_cache_key_includes_phase_nearest_grid(tmp_path):
+    ssp = {
+        'sim': {
+            'mode': 'epsf',
+            'point_rendering': 'phase_nearest',
+            'epsf': {
+                'kernel_size': 5,
+                'phase_oversample': 4,
+                '$cache': str(tmp_path),
+            },
+        },
+        'fpa': {
+            'psf': {
+                'mode': 'gaussian',
+                'eod': 0.5,
+            },
+        },
+    }
+
+    cache_param = _epsf_lut_cache_param(ssp, 15, 15, 0.01, 0.02, 3)
+    assert(cache_param['epsf']['point_rendering'] == 'phase_nearest')
+    assert(cache_param['epsf']['phase_oversample'] == 4)
+
+    ssp['sim']['epsf']['phase_oversample'] = 5
+    changed = _epsf_lut_cache_param(ssp, 15, 15, 0.01, 0.02, 3)
+    assert(changed['epsf']['phase_oversample'] == 5)
+    assert(changed != cache_param)
+
+
+def test_auto_temporal_osf_reduces_only_epsf_transform():
+    h = 90
+    w = 90
+    t_exp = 1.0
+    rotation = 0.0
+    translation = [18.2, 0.0]
+    s_osf = 3
+
+    fft_osf = _auto_temporal_osf_for_star_motion(
+        h,
+        w,
+        t_exp,
+        rotation,
+        translation,
+        s_osf,
+        sim_mode='fftconv2p',
+        star_render_mode='transform',
+    ).numpy()
+    epsf_transform_osf = _auto_temporal_osf_for_star_motion(
+        h,
+        w,
+        t_exp,
+        rotation,
+        translation,
+        s_osf,
+        sim_mode='epsf',
+        star_render_mode='transform',
+    ).numpy()
+    epsf_streak_osf = _auto_temporal_osf_for_star_motion(
+        h,
+        w,
+        t_exp,
+        rotation,
+        translation,
+        s_osf,
+        sim_mode='epsf',
+        star_render_mode='streak',
+    ).numpy()
+
+    assert(fft_osf == 19)
+    assert(epsf_streak_osf == fft_osf)
+    assert(epsf_transform_osf == 8)
 
 
 def test_epsf_pipeline_cache_hit_skips_psf_generation(tmp_path):
@@ -903,6 +1247,9 @@ def test_epsf_star_streak_with_fallback_flag_matches_fftconv2p_runtime():
         'kernel_size': 31,
         'psf_generation_size': 57,
         'fallback_to_fft_for_models': True,
+        'crop': {
+            'mode': 'off',
+        },
     }
 
     np.random.seed(42)
@@ -958,6 +1305,9 @@ def test_epsf_native_star_streak_with_gaussian_psf_matches_fftconv2p_runtime():
     ssp_epsf['sim']['epsf'] = {
         'kernel_size': 31,
         'psf_generation_size': 57,
+        'crop': {
+            'mode': 'off',
+        },
     }
 
     np.random.seed(42)
