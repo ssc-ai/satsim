@@ -17,6 +17,14 @@ satsim.image.augment module
    :undoc-members:
    :show-inheritance:
 
+satsim.image.epsf module
+------------------------
+
+.. automodule:: satsim.image.epsf
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.image.fpa module
 -----------------------
 

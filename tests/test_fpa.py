@@ -3,6 +3,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
 
 import numpy as np
+import pytest
 import tensorflow as tf
 
 from satsim.image.fpa import downsample, crop, analog_to_digital, mv_to_pe, pe_to_mv, add_counts, transform_and_add_counts, add_patch
@@ -10,6 +11,13 @@ from satsim.geometry.transform import apply_wrap_around
 from satsim.util import configure_eager
 
 configure_eager()
+
+
+def _centroid(image):
+    image = np.asarray(image, dtype=float)
+    yy, xx = np.indices(image.shape)
+    total = np.sum(image)
+    return np.sum(yy * image) / total, np.sum(xx * image) / total
 
 
 def test_downsample():
@@ -28,6 +36,21 @@ def test_downsample():
 
     c = downsample(a, osf, method='pool')
     np.testing.assert_array_equal(c.numpy(), np.ones([hds,wds]) * na)
+
+
+def test_downsample_block_sum():
+
+    a = tf.reshape(tf.range(16, dtype=tf.float32), [4, 4])
+
+    b = downsample(a, 2, method='block_sum')
+
+    np.testing.assert_array_equal(b.numpy(), np.array([
+        [10.0, 18.0],
+        [42.0, 50.0],
+    ]))
+
+    with pytest.raises(tf.errors.InvalidArgumentError):
+        downsample(tf.ones([5, 4], dtype=tf.float32), 2, method='block_sum').numpy()
 
 
 def test_crop():
@@ -138,6 +161,71 @@ def test_add_counts():
         assert(d[r[i],c[i]] == dn[i])
 
 
+def test_add_counts_floor_interpolation_preserves_legacy_behavior():
+
+    a = tf.Variable(tf.zeros([8, 8]))
+
+    d = add_counts(a, [2.75], [3.25], [100.0], interpolation='floor').numpy()
+
+    assert(np.sum(d.flatten()) == 100.0)
+    assert(d[2, 3] == 100.0)
+    assert(np.count_nonzero(d) == 1)
+
+
+def test_add_counts_bilinear_interpolation():
+
+    a = tf.Variable(tf.zeros([8, 8]))
+
+    d = add_counts(a, [1.25], [2.75], [100.0], interpolation='bilinear').numpy()
+
+    np.testing.assert_allclose(d[1:3, 2:4], np.array([
+        [18.75, 56.25],
+        [6.25, 18.75],
+    ]))
+    assert(np.sum(d.flatten()) == 100.0)
+
+    np.testing.assert_allclose(_centroid(d), [1.25, 2.75])
+
+
+def test_add_counts_bilinear_interpolation_integer_fpa_uses_floor_behavior():
+
+    a = tf.Variable(tf.zeros([8, 8], dtype=tf.int32))
+
+    d = add_counts(a, [1.25], [2.75], [100], interpolation='bilinear').numpy()
+
+    assert(np.sum(d.flatten()) == 100)
+    assert(d[1, 2] == 100)
+    assert(np.count_nonzero(d) == 1)
+
+
+def test_add_counts_bilinear_interpolation_multiple_points_preserves_flux_and_centroid():
+
+    a = tf.Variable(tf.zeros([16, 16]))
+    r = np.array([2.25, 6.50, 10.75])
+    c = np.array([3.75, 7.25, 12.50])
+    dn = np.array([100.0, 250.0, 400.0])
+
+    d = add_counts(a, r, c, dn, interpolation='bilinear').numpy()
+
+    np.testing.assert_allclose(np.sum(d), np.sum(dn), atol=1e-5)
+    np.testing.assert_allclose(
+        _centroid(d),
+        [np.average(r, weights=dn), np.average(c, weights=dn)],
+        atol=1e-6,
+    )
+
+
+def test_add_counts_bilinear_interpolation_drops_out_of_bounds_weights():
+
+    a = tf.Variable(tf.zeros([4, 4]))
+
+    d = add_counts(a, [-0.25], [0.25], [100.0], interpolation='bilinear').numpy()
+
+    np.testing.assert_allclose(d[0, 0], 56.25)
+    np.testing.assert_allclose(d[0, 1], 18.75)
+    np.testing.assert_allclose(np.sum(d.flatten()), 75.0)
+
+
 def test_transform_and_add_counts():
 
     h = 8
@@ -205,6 +293,54 @@ def test_transform_and_add_counts():
     assert(a.numpy()[5,5] == 10)
     assert(a.numpy()[6,5] ==  5)
     assert(a.numpy()[7,5] ==  5)
+
+
+def test_transform_and_add_counts_bilinear_static_centroid_and_flux():
+
+    a = tf.Variable(tf.zeros([16, 16]))
+    r = np.array([4.25, 10.75])
+    c = np.array([5.50, 12.125])
+    dn = np.array([100.0, 300.0])
+
+    d = transform_and_add_counts(
+        a,
+        r,
+        c,
+        dn,
+        0.0,
+        1.0,
+        1,
+        0.0,
+        [0.0, 0.0],
+        interpolation='bilinear',
+    ).numpy()
+
+    np.testing.assert_allclose(np.sum(d), np.sum(dn), atol=1e-5)
+    np.testing.assert_allclose(
+        _centroid(d),
+        [np.average(r, weights=dn), np.average(c, weights=dn)],
+        atol=1e-6,
+    )
+
+
+def test_transform_and_add_counts_bilinear_motion_conserves_flux():
+
+    a = tf.Variable(tf.zeros([20, 20]))
+
+    d = transform_and_add_counts(
+        a,
+        [5.25],
+        [6.75],
+        [500.0],
+        0.0,
+        1.0,
+        5,
+        0.0,
+        [2.0, 1.0],
+        interpolation='bilinear',
+    ).numpy()
+
+    np.testing.assert_allclose(np.sum(d), 500.0, atol=1e-5)
 
 
 def test_wrap_around():

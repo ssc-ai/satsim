@@ -6,7 +6,7 @@
     "type": "object",
     "properties": {
         "mode": {
-            "description": "The rendering mode. `none` disables rendering. `fftconv2p` uses 2D FFT convolution renderer.",
+            "description": "The rendering mode. `none` disables rendering. `fftconv2p` uses 2D FFT convolution renderer. `epsf` is an opt-in detector-space ePSF lookup-table renderer.",
             "type": "string",
             "default": "fftconv2p"
         },
@@ -50,9 +50,116 @@
             "default": 1
         },
         "star_render_mode": {
-            "description": "The star rendering mode. `fft` uses FFT convolution renderer and all stars will have save the same streak shape. `transform` uses discrete transform renderer. `transform` is more computationally expensive with many stars.",
+            "description": "The star rendering mode. `streak` uses a shared streak shape for all stars and is recommended for dense rate-track star fields. In `epsf` mode, `streak` is implemented natively with a per-frame trailed ePSF LUT. `transform` uses discrete per-star transforms and is more computationally expensive with many stars. `fft` is accepted as a legacy alias for `streak`.",
             "type": "string",
-            "default": "fftconv2p"
+            "enum": ["transform", "streak", "fft"],
+            "default": "transform"
+        },
+        "point_rendering": {
+            "description": "The point source rendering mode. `bilinear` distributes fractional point sources over neighboring oversampled pixels for sub-pixel centroid accuracy. `floor` preserves the legacy integer-pixel deposition behavior. `phase_nearest` is an approximate fine-phase ePSF-only mode.",
+            "type": "string",
+            "enum": ["bilinear", "floor", "phase_nearest"],
+            "default": "bilinear"
+        },
+        "epsf": {
+            "description": "Configuration for opt-in detector-space ePSF rendering when mode is `epsf`.",
+            "type": "object",
+            "properties": {
+                "kernel_size": {
+                    "description": "The ePSF stamp size in detector pixels. Must be a positive odd integer.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "not": {
+                        "multipleOf": 2
+                    }
+                },
+                "psf_generation_size": {
+                    "description": "Optional detector-pixel field size used to generate the optical PSF before center-cropping ePSF stamps. Must be a positive integer greater than or equal to kernel_size. If omitted, kernel_size plus psf_generation_padding on each side is used, adjusted as needed to match the FFT reference support parity.",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "psf_generation_padding": {
+                    "description": "Detector-pixel padding added around kernel_size when generating the optical PSF before center-cropping ePSF stamps. Defaults to kernel_size // 2.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "normalize": {
+                    "description": "Normalize each ePSF phase stamp to unit flux before edge clipping. Leave false for detector-like finite-aperture photometry; set true only when cropped stamps should conserve all source flux.",
+                    "type": "boolean",
+                    "default": false
+                },
+                "batch_size": {
+                    "description": "Optional maximum number of sources to deposit per ePSF scatter batch. When omitted, SatSim derives batch sizes from batch_element_budget.",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "batch_element_budget": {
+                    "description": "Approximate maximum stamp elements per ePSF scatter batch. Larger values reduce scatter-op count at higher peak memory.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 32000000
+                },
+                "phase_oversample": {
+                    "description": "Fine phase-grid multiplier for sim.point_rendering `phase_nearest`. If omitted, it is derived from a 0.02 detector-pixel worst-case centroid quantization target.",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "fallback_to_fft_for_models": {
+                    "description": "Fall back to the existing FFT renderer for unsupported ePSF paths such as obs_model targets. Native ePSF star_render_mode `streak` does not require this fallback.",
+                    "type": "boolean",
+                    "default": false
+                },
+                "crop": {
+                    "description": "Tiered ePSF crop rendering for stars. `auto` derives flux thresholds from ePSF wing signal and the per-pixel noise floor and is the default when crop is omitted. `off` uses the full kernel for all sources. `manual` uses crop.kernel_size for sources at or below threshold_mv converted to photoelectrons. Targets always use the full kernel.",
+                    "type": "object",
+                    "default": {
+                        "mode": "auto"
+                    },
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["off", "manual", "auto"],
+                            "default": "auto"
+                        },
+                        "noise_fraction": {
+                            "description": "Auto mode truncation budget as a fraction of the per-pixel noise floor.",
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "default": 0.1
+                        },
+                        "sizes": {
+                            "description": "Auto mode candidate core crop sizes in detector pixels. Values must be positive odd integers strictly smaller than sim.epsf.kernel_size.",
+                            "type": "array",
+                            "items": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "not": {
+                                    "multipleOf": 2
+                                }
+                            }
+                        },
+                        "threshold_mv": {
+                            "description": "Manual mode visual magnitude threshold. Sources dimmer than this threshold use the cropped kernel.",
+                            "type": "number"
+                        },
+                        "kernel_size": {
+                            "description": "Manual mode core crop size in detector pixels. Must be a positive odd integer strictly smaller than sim.epsf.kernel_size.",
+                            "type": "integer",
+                            "minimum": 1,
+                            "not": {
+                                "multipleOf": 2
+                            }
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "$cache": {
+                    "description": "Optional disk cache directory for the final render-mode-specific ePSF LUT. FFT mode continues to use fpa.psf.$cache for single-PSF caching.",
+                    "type": "string"
+                }
+            },
+            "required": ["kernel_size"],
+            "additionalProperties": false
         },
         "show_obs_boxes": {
             "description": "Show observation boxes in annotated images.",
