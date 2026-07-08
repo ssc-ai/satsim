@@ -1,6 +1,12 @@
 History
 =======
 
+0.25.1
+---------------------
+
+* Add cloud transmission truth planes, standalone cloud transmission TIFF output, and sampled cloud transmission annotations.
+
+
 0.25.0
 ---------------------
 

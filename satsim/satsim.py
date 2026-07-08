@@ -339,6 +339,75 @@ def _parse_sensor_params(ssp):
     return num_frames, t_exposure, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width
 
 
+def _sample_bilinear_clamped(values, row, col):
+    values = np.asarray(values, dtype=np.float32)
+    row = float(np.clip(row, 0.0, values.shape[0] - 1))
+    col = float(np.clip(col, 0.0, values.shape[1] - 1))
+    r0 = int(np.floor(row))
+    c0 = int(np.floor(col))
+    r1 = min(r0 + 1, values.shape[0] - 1)
+    c1 = min(c0 + 1, values.shape[1] - 1)
+    dr = row - r0
+    dc = col - c0
+    top = values[r0, c0] * (1.0 - dc) + values[r0, c1] * dc
+    bottom = values[r1, c0] * (1.0 - dc) + values[r1, c1] * dc
+    return float(top * (1.0 - dr) + bottom * dr)
+
+
+def _weighted_detector_centroid(rows, cols, weights):
+    rows = np.asarray(rows, dtype=np.float64)
+    cols = np.asarray(cols, dtype=np.float64)
+    weights = np.asarray(weights, dtype=np.float64)
+    mask = np.isfinite(rows) & np.isfinite(cols)
+    if weights.shape == rows.shape:
+        mask &= np.isfinite(weights) & (weights > 0.0)
+    else:
+        weights = np.ones_like(rows, dtype=np.float64)
+    if not np.any(mask):
+        return None
+    total = float(np.sum(weights[mask]))
+    if total <= 0.0:
+        return float(np.mean(rows[mask])), float(np.mean(cols[mask]))
+    return (
+        float(np.sum(rows[mask] * weights[mask]) / total),
+        float(np.sum(cols[mask] * weights[mask]) / total),
+    )
+
+
+def _add_cloud_transmission_to_objects(obs_os_pix, cloud_transmission):
+    if cloud_transmission is None:
+        return
+    for ob in obs_os_pix:
+        rows = np.asarray(ob.get('rrr', []), dtype=np.float64)
+        cols = np.asarray(ob.get('rcc', []), dtype=np.float64)
+        weights = np.asarray(ob.get('pp', []), dtype=np.float64)
+        centroid = _weighted_detector_centroid(rows, cols, weights)
+        if centroid is None:
+            continue
+        ob['cloud_transmission'] = _sample_bilinear_clamped(
+            cloud_transmission,
+            centroid[0],
+            centroid[1],
+        )
+        path_mask = np.isfinite(rows) & np.isfinite(cols)
+        if np.count_nonzero(path_mask) > 1:
+            path_rows = rows[path_mask]
+            path_cols = cols[path_mask]
+        else:
+            path_rows = np.array([], dtype=np.float64)
+            path_cols = np.array([], dtype=np.float64)
+        if path_rows.size > 1 and (
+                np.max(path_rows) - np.min(path_rows) > 1e-6 or
+                np.max(path_cols) - np.min(path_cols) > 1e-6):
+            mid = path_rows.size // 2
+            samples = [
+                _sample_bilinear_clamped(cloud_transmission, path_rows[0], path_cols[0]),
+                _sample_bilinear_clamped(cloud_transmission, path_rows[mid], path_cols[mid]),
+                _sample_bilinear_clamped(cloud_transmission, path_rows[-1], path_cols[-1]),
+            ]
+            ob['cloud_transmission_min'] = float(np.min(samples))
+
+
 def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug', with_meta=False, eager=True, num_sets=0):
     """Generator function for a single set of images.
 
@@ -563,6 +632,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'save_segmentation' not in ssp['sim']:
         ssp['sim']['save_segmentation'] = False
+
+    if 'save_cloud_transmission' not in ssp['sim']:
+        ssp['sim']['save_cloud_transmission'] = False
 
     if 'save_pickle' not in ssp['sim']:
         ssp['sim']['save_pickle'] = False
@@ -1280,6 +1352,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     or np.any(cloud_brightness_components_np['cloud_source_brightness_pe'])
                 )
                 astrometrics['clouds'] = frame_cloud_field.metadata
+                if ssp['sim'].get('save_cloud_transmission', False):
+                    astrometrics['clouds']['cloud_transmission'] = {
+                        'scale': 65535,
+                        'dtype': 'uint16',
+                        'clear_value': 65535,
+                    }
 
             # render
             epsf_render_metadata = {}
@@ -1409,6 +1487,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             crop_dc_tf = dc_tf
             crop_rn_tf = rn_tf
             crop_background_component_tfs = dict(frame_background_component_tfs)
+            crop_pre_cloud_bg_tf = frame_pre_cloud_bg_tf
+            crop_cloud_transmission_tf = cloud_transmission_tf
             crop_h_fpa_os = h_fpa_os
             crop_w_fpa_os = w_fpa_os
             crop_gain_tf = gain_tf
@@ -1423,6 +1503,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     fpa_conv_star = crop(fpa_conv_star, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     if len(frame_bg_tf.shape) == 2:
                         crop_bg_tf = crop(frame_bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if len(frame_pre_cloud_bg_tf.shape) == 2:
+                        crop_pre_cloud_bg_tf = crop(frame_pre_cloud_bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if cloud_transmission_tf is not None:
+                        crop_cloud_transmission_tf = crop(cloud_transmission_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     for key, value in frame_background_component_tfs.items():
                         if len(value.shape) == 2:
                             crop_background_component_tfs[key] = crop(value, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
@@ -1451,8 +1535,16 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     opp['rrr'] = opp['rrr'] - cp['height_offset']
                     opp['rcc'] = opp['rcc'] - cp['width_offset']
 
-            if segmentation is not None:
-                if frame_cloud_field is not None:
+            crop_cloud_transmission_np = None
+            if crop_cloud_transmission_tf is not None:
+                crop_cloud_transmission_np = crop_cloud_transmission_tf.numpy()
+                _add_cloud_transmission_to_objects(obs_os_pix, crop_cloud_transmission_np)
+
+            if frame_cloud_field is not None and (
+                    ssp['sim']['save_segmentation'] or ssp['sim'].get('save_cloud_transmission', False)):
+                if segmentation is None:
+                    segmentation = OrderedDict()
+                if ssp['sim']['save_segmentation']:
                     cloud_mask = frame_cloud_field.mask.astype(np.uint16)
                     if 'crop' in ssp['fpa']:
                         cp = ssp['fpa']['crop']
@@ -1461,7 +1553,17 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                             cp['width_offset']:cp['width_offset'] + cp['width'],
                         ]
                     segmentation['cloud_segmentation'] = cloud_mask
+                if ssp['sim'].get('save_cloud_transmission', False) and crop_cloud_transmission_np is not None:
+                    transmission_scaled = np.round(
+                        np.clip(crop_cloud_transmission_np, 0.0, 1.0) * 65535.0
+                    ).astype(np.uint16)
+                    segmentation['cloud_transmission'] = transmission_scaled
 
+            has_photometry_segmentation = segmentation is not None and (
+                segmentation.get('object_segmentation') is not None or
+                segmentation.get('star_segmentation') is not None
+            )
+            if has_photometry_segmentation:
                 def _to_numpy(value):
                     if hasattr(value, 'numpy'):
                         return value.numpy()
@@ -1535,6 +1637,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     'tran': star_tran_os,
                     'min_mv': ssp['sim']['star_annotation_threshold'] if isinstance(ssp['sim']['star_annotation_threshold'], numbers.Number) else 15
                 }
+                if crop_cloud_transmission_np is not None:
+                    star_os_pix['cloud_transmission'] = crop_cloud_transmission_np
             else:
                 star_os_pix = None
 
@@ -1543,6 +1647,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 ground_truth['target_pe'] = fpa_conv_targ.numpy()
                 ground_truth['star_pe'] = fpa_conv_star.numpy()
                 ground_truth['background_pe'] = crop_bg_tf.numpy()
+                if crop_cloud_transmission_tf is not None:
+                    ground_truth['background_pre_cloud_pe'] = crop_pre_cloud_bg_tf.numpy()
+                    ground_truth['cloud_transmission'] = crop_cloud_transmission_tf.numpy()
                 for key in frame_pre_cloud_component_keys:
                     if frame_background_component_active.get(key, False):
                         ground_truth[key] = crop_background_component_tfs[key].numpy()

@@ -2,10 +2,14 @@
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
 
+from collections import OrderedDict
+from datetime import datetime
+
 import numpy as np
+import tifffile
 
 from satsim.geometry.draw import gen_line
-from satsim.io.satnet import init_annotation, set_frame_annotation
+from satsim.io.satnet import init_annotation, set_frame_annotation, write_frame
 
 
 def test_annotation():
@@ -237,6 +241,71 @@ def test_annotation_star():
     assert(c['ra'] == 0.0)
     assert(c['dec'] == 0.0)
     assert(c['seg_id'] == 1)
+
+
+def test_annotation_star_cloud_transmission_samples_detector_plane():
+
+    h = 22
+    w = 42
+    cloud_transmission = np.arange(11 * 21, dtype=np.float32).reshape(11, 21) / 1000.0
+
+    pix = {
+        'h': h,
+        'w': w,
+        'h_pad': 0,
+        'w_pad': 0,
+        'rr': [10.0],
+        'cc': [18.0],
+        'pe': [100.0],
+        'mv': [13.0],
+        'ra': [0.0],
+        'dec': [0.0],
+        'seg_id': [1],
+        't_start': 0.0,
+        't_end': 1.0,
+        'rot': 0.0,
+        'tran': [0.0, 2.0],
+        'min_mv': 15,
+        'cloud_transmission': cloud_transmission,
+    }
+
+    a = init_annotation('./', 0, h, w, 2., 3.)
+    b = set_frame_annotation(a, 0, h, w, [], [5, 5], filter_ob=True, star_os_pix=pix)
+
+    c = b['data']['objects'][0]
+    expected = (cloud_transmission[5, 9] + cloud_transmission[5, 10]) * 0.5
+    np.testing.assert_allclose(c['cloud_transmission'], expected)
+
+
+def test_write_frame_ground_truth_min_exempts_cloud_transmission(tmp_path):
+
+    h = 2
+    w = 2
+    fpa_digital = np.zeros((h, w), dtype=np.uint16)
+    meta_data = init_annotation(str(tmp_path), [], h, w, 1.0, 1.0)
+    ground_truth = OrderedDict([
+        ('background_pe', np.full((h, w), 0.25, dtype=np.float32)),
+        ('cloud_transmission', np.full((h, w), 0.25, dtype=np.float32)),
+    ])
+
+    write_frame(
+        str(tmp_path),
+        'sat',
+        fpa_digital,
+        meta_data,
+        0,
+        1.0,
+        datetime(2026, 1, 1),
+        {},
+        save_jpeg=False,
+        ground_truth=ground_truth,
+        ground_truth_min=0.5,
+    )
+
+    truth = tifffile.imread(tmp_path / 'Annotations' / 'sat.0000.tiff')
+    assert truth.shape == (2, h, w)
+    np.testing.assert_allclose(truth[0], 0.0)
+    np.testing.assert_allclose(truth[1], 0.25)
 
 
 def test_annotation_empty():

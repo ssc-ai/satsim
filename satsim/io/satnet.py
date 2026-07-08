@@ -110,6 +110,10 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
         if 'ra' in o and 'dec' in o:
             annotation['ra'] = _cast_to_float(o['ra'])
             annotation['dec'] = _cast_to_float(o['dec'])
+        if 'cloud_transmission' in o:
+            annotation['cloud_transmission'] = _cast_to_float(o['cloud_transmission'])
+        if 'cloud_transmission_min' in o:
+            annotation['cloud_transmission_min'] = _cast_to_float(o['cloud_transmission_min'])
         objs.append(annotation)
 
     if star_os_pix is not None:
@@ -132,6 +136,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
             star_os_pix.get('snr_aperture'),
             star_os_pix['min_mv'],
             variable=star_os_pix.get('variable'),
+            cloud_transmission=star_os_pix.get('cloud_transmission'),
         )
         objs.extend(star_annotations)
 
@@ -202,19 +207,29 @@ def write_frame(dir_name, sat_name, fpa_digital, meta_data, frame_num, exposure_
     # save ground truth
     if ground_truth is not None:
 
-        keys = ','.join(ground_truth.keys())
+        ground_truth_keys = list(ground_truth.keys())
+        keys = ','.join(ground_truth_keys)
 
         # broadcast scalars
         def f(x):
+            x = np.asarray(x)
             return x if x.shape == fpa_digital.shape else np.resize(x, fpa_digital.shape)
 
-        ground_truth = np.stack(list(map(f, ground_truth.values())))
+        ground_truth_planes = list(map(f, ground_truth.values()))
 
         # clip values
         if ground_truth_min is not None:
-            ground_truth[ground_truth < ground_truth_min] = 0
+            clipped_planes = []
+            for key, plane in zip(ground_truth_keys, ground_truth_planes):
+                plane = np.array(plane, copy=True)
+                if key != 'cloud_transmission':
+                    plane[plane < ground_truth_min] = 0
+                clipped_planes.append(plane)
+            ground_truth_planes = clipped_planes
 
-        tifffile.imwrite(os.path.join(annotation_dir, '{}.tiff'.format(file_name)), np.stack(ground_truth), dtype='float32', bigtiff=True, compression='lzw',
+        ground_truth = np.stack(ground_truth_planes)
+
+        tifffile.imwrite(os.path.join(annotation_dir, '{}.tiff'.format(file_name)), ground_truth, dtype='float32', bigtiff=True, compression='lzw',
                          metadata={'ImageDescription': keys})
 
     if segmentation is not None:
@@ -249,7 +264,7 @@ def write_annotation(dir_name, sat_name, meta_data, frame_num, ssp, save_pickle=
     save_json(os.path.join(dir_name, 'config.json'), ssp, save_pickle=save_pickle)
 
 
-def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, snr_aperture=None, min_mv=10, box_size=None, box_pad=0, variable=None):
+def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, snr_aperture=None, min_mv=10, box_size=None, box_pad=0, variable=None, cloud_transmission=None):
     """Generates the star annotation data from the SatSim internal star data. Data is typically in oversampled pixel space.
 
     Args:
@@ -308,6 +323,12 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
 
     rr = np.stack([rr0, rrm, rr1], axis=1) - h_pad_os
     cc = np.stack([cc0, ccm, cc1], axis=1) - w_pad_os
+    cloud_transmission = None if cloud_transmission is None else np.asarray(cloud_transmission, dtype=np.float32)
+    cloud_row_osf = None
+    cloud_col_osf = None
+    if cloud_transmission is not None and cloud_transmission.ndim == 2:
+        cloud_row_osf = float(height) / float(cloud_transmission.shape[0])
+        cloud_col_osf = float(width) / float(cloud_transmission.shape[1])
 
     objs = []
     for r, c, pe, mv, ra, dec, sid, var, snr_ap in zip(
@@ -330,6 +351,12 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
             annotation['variable'] = var
             if snr_aperture is not None:
                 annotation['snr_aperture'] = _cast_to_float(snr_ap) if snr_ap is not None else None
+            if cloud_transmission is not None and cloud_row_osf is not None and cloud_col_osf is not None:
+                annotation['cloud_transmission'] = _sample_bilinear_clamped(
+                    cloud_transmission,
+                    r[1] / cloud_row_osf,
+                    c[1] / cloud_col_osf,
+                )
             objs.append(annotation)
 
     return objs
@@ -435,6 +462,21 @@ def _cast_to_int(num):
         return num.astype(int)
     else:
         return int(num)
+
+
+def _sample_bilinear_clamped(values, row, col):
+    values = np.asarray(values, dtype=np.float32)
+    row = float(np.clip(row, 0.0, values.shape[0] - 1))
+    col = float(np.clip(col, 0.0, values.shape[1] - 1))
+    r0 = int(np.floor(row))
+    c0 = int(np.floor(col))
+    r1 = min(r0 + 1, values.shape[0] - 1)
+    c1 = min(c0 + 1, values.shape[1] - 1)
+    dr = row - r0
+    dc = col - c0
+    top = values[r0, c0] * (1.0 - dc) + values[r0, c1] * dc
+    bottom = values[r1, c0] * (1.0 - dc) + values[r1, c1] * dc
+    return float(top * (1.0 - dr) + bottom * dr)
 
 
 def _is_out_of_bounds(a, b):
