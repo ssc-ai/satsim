@@ -5,6 +5,7 @@ History
 ---------------------
 
 * Add cloud transmission truth planes, standalone cloud transmission TIFF output, and sampled cloud transmission annotations.
+* Fix coordinate registration between oversampled source positions, rendered flux centroids, SatNet annotations, and cloud-transmission samples using one zero-based pixel-center convention.
 
 
 0.25.0

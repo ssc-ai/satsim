@@ -767,6 +767,19 @@ writes `Annotations/*_cloud_transmission.tiff` with clear pixels scaled to
 65535. Cloud ground truth includes `cloud_transmission` and
 `background_pre_cloud_pe`, and object/star annotations include sampled
 `cloud_transmission` values when clouds are active.
+Each sampled annotation also includes `cloud_sample_row` and
+`cloud_sample_col`. These are zero-based detector-array coordinates where
+integer values denote pixel centers, in the same frame as NumPy indexing of
+the exported transmission plane. For a streak target they identify the
+brightness-weighted centroid of the discrete source path used for sampling.
+
+SatNet object positions use normalized image-edge coordinates. Convert an
+annotation coordinate back to a zero-based detector pixel-center coordinate
+with `detector = normalized * detector_size - 0.5`. Line and line-polar
+`origin` values use the same convention: zero and one are the outer image
+edges, and `0.5` is the geometric image center. Positions use half-pixel terms;
+velocities, padding, crop sizes, and other vectors or extents scale without an
+offset.
 
 Preset layers can be used with only a type and optional coverage:
 

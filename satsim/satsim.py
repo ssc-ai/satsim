@@ -24,6 +24,7 @@ from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch, c
 from satsim.image.psf import gen_gaussian, eod_to_sigma, gen_from_poppy_configuration
 from satsim.image.noise import add_photon_noise, add_read_noise
 from satsim.image.render import render_piecewise, render_full, render_epsf, normalize_star_render_mode
+from satsim.image.coordinates import oversampled_to_detector
 from satsim.image.epsf import (
     EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
     build_epsf_lut,
@@ -384,6 +385,8 @@ def _add_cloud_transmission_to_objects(obs_os_pix, cloud_transmission):
         centroid = _weighted_detector_centroid(rows, cols, weights)
         if centroid is None:
             continue
+        ob['cloud_sample_row'] = centroid[0]
+        ob['cloud_sample_col'] = centroid[1]
         ob['cloud_transmission'] = _sample_bilinear_clamped(
             cloud_transmission,
             centroid[0],
@@ -2475,8 +2478,8 @@ def _gen_objects(ssp, render_mode,
             'rr': orr,
             'cc': occ,
             'pp': opp,
-            'rrr': orr / s_osf,
-            'rcc': occ / s_osf,
+            'rrr': oversampled_to_detector(orr, s_osf),
+            'rcc': oversampled_to_detector(occ, s_osf),
             'mv': avg_mv,
             'pe': avg_pe,
             'id': i + 1,  # 0 is reserved for the background for segmentation

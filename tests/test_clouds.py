@@ -1585,4 +1585,6 @@ def test_runtime_object_annotation_includes_cloud_transmission(tmp_path):
         if ob['class_name'] == 'Satellite'
     ]
     assert len(satellites) == 1
+    assert 'cloud_sample_row' in satellites[0]
+    assert 'cloud_sample_col' in satellites[0]
     np.testing.assert_allclose(satellites[0]['cloud_transmission'], math.exp(-0.4), rtol=1e-5)

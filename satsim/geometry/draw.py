@@ -5,7 +5,14 @@ import logging
 import numpy as np
 from skimage.draw import line, bezier_curve
 
+from satsim.image.coordinates import normalized_to_oversampled
+
 logger = logging.getLogger(__name__)
+
+
+def _rasterize_position(value):
+    """Return the pixel center containing a continuous center coordinate."""
+    return int(np.floor(float(value) + 0.5))
 
 
 def gen_line(height, width, origin, velocity, pe, t_start, t_end):
@@ -22,8 +29,10 @@ def gen_line(height, width, origin, velocity, pe, t_start, t_end):
         height: `int`, image height in number of pixels.
         width: `int`, image width in number of pixels.
         origin: `[float, float]`, normalized starting point on image in
-            [row,col] where `[0,0]` represents the top left corner and `[1,1]`
-            the bottom right corner
+            [row,col]. Values are normalized image-edge coordinates: `[0,0]`
+            is the top-left edge, `[1,1]` is the bottom-right edge, and `0.5`
+            is the geometric center. The corresponding zero-based pixel-center
+            coordinate is ``origin * size - 0.5``.
         velocity: `[float,float]`, velocity in pixel/sec in `[row,col]` order
         pe: `float`, brightness in pe/sec
         t_start: `float`, start time in seconds from epoch (`t=0`)
@@ -36,8 +45,8 @@ def gen_line(height, width, origin, velocity, pe, t_start, t_end):
             pe: `list`, list of counts (e.g. photoelectrons)
             t: `list`, list of start and stop times. length is +1 larger than `rr`, `cc`, and `pe`.
     """
-    r0 = height * origin[0]
-    c0 = width * origin[1]
+    r0 = normalized_to_oversampled(origin[0], height)
+    c0 = normalized_to_oversampled(origin[1], width)
 
     r1 = r0 + velocity[0] * t_start
     c1 = c0 + velocity[1] * t_start
@@ -45,7 +54,12 @@ def gen_line(height, width, origin, velocity, pe, t_start, t_end):
     r2 = r0 + velocity[0] * t_end
     c2 = c0 + velocity[1] * t_end
 
-    rr, cc = line(int(r1), int(c1), int(r2), int(c2))
+    rr, cc = line(
+        _rasterize_position(r1),
+        _rasterize_position(c1),
+        _rasterize_position(r2),
+        _rasterize_position(c2),
+    )
     n = len(rr)
     t = np.linspace(t_start, t_end, n + 1)
 

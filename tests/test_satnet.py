@@ -7,9 +7,31 @@ from datetime import datetime
 
 import numpy as np
 import tifffile
+import tensorflow as tf
 
 from satsim.geometry.draw import gen_line
 from satsim.io.satnet import init_annotation, set_frame_annotation, write_frame
+
+
+def test_annotation_pixels_use_containing_detector_pixel():
+    h = 10
+    w = 10
+    snr = tf.reshape(tf.range(h * w, dtype=tf.float32), [h, w])
+    pix = {
+        'rr': np.array([4.0]),
+        'cc': np.array([6.0]),
+        'rrr': np.array([3.6]),
+        'rcc': np.array([5.6]),
+        'mv': 15,
+        'pe': 100,
+    }
+
+    annotation = init_annotation('./', 0, h, w, 2.0, 3.0)
+    result = set_frame_annotation(annotation, 0, h, w, [pix], snr=snr)
+    ob = result['data']['objects'][0]
+
+    assert ob['pixels'] == [[4, 6]]
+    assert ob['snr'] == [46.0]
 
 
 def test_annotation():
@@ -174,18 +196,18 @@ def test_annotation_ob():
     c = b['data']['objects'][0]
 
     assert(c['class_name'] == 'Satellite')
-    assert(c['y_min'] == -0.4090909090909091)
-    assert(c['x_min'] == -0.4523809523809524)
-    assert(c['y_center'] == 0.04545454545454544)
-    assert(c['x_center'] == 0.023809523809523808)
+    assert(c['y_min'] == -0.5)
+    assert(c['x_min'] == -0.5)
+    assert(c['y_center'] == 0.0)
+    assert(c['x_center'] == 0.0)
     assert(c['y_max'] == 0.5)
     assert(c['x_max'] == 0.5)
 
-    assert(c['y_start'] == -4.5 / h)
-    assert(c['x_start'] == -9.5 / w)
+    assert(c['y_start'] == -0.5)
+    assert(c['x_start'] == -0.5)
 
-    np.testing.assert_almost_equal(c['y_mid'], (0.5 - 4.5 / h) / 2)
-    np.testing.assert_almost_equal(c['x_mid'], (0.5 - 9.5 / w) / 2)
+    assert(c['y_mid'] == 0.0)
+    assert(c['x_mid'] == 0.0)
 
     assert(c['y_end'] == 0.5)
     assert(c['x_end'] == 0.5)
@@ -273,7 +295,9 @@ def test_annotation_star_cloud_transmission_samples_detector_plane():
     b = set_frame_annotation(a, 0, h, w, [], [5, 5], filter_ob=True, star_os_pix=pix)
 
     c = b['data']['objects'][0]
-    expected = (cloud_transmission[5, 9] + cloud_transmission[5, 10]) * 0.5
+    assert c['cloud_sample_row'] == 4.75
+    assert c['cloud_sample_col'] == 9.25
+    expected = 0.109
     np.testing.assert_allclose(c['cloud_transmission'], expected)
 
 

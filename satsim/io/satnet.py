@@ -12,6 +12,7 @@ import tensorflow as tf
 from satsim.io import fits, image
 from satsim.config import save_json
 from satsim.geometry.transform import rotate_and_translate
+from satsim.image.coordinates import oversampled_to_detector
 
 
 def init_annotation(dirname, sequence, height, width, y_ifov, x_ifov):
@@ -89,8 +90,8 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
         osnr = []
         opix = []
         if snr is not None:
-            rrr = o['rrr'].astype(int)
-            rcc = o['rcc'].astype(int)
+            rrr = np.floor(np.asarray(o['rrr']) + 0.5).astype(int)
+            rcc = np.floor(np.asarray(o['rcc']) + 0.5).astype(int)
             upix, uidx = np.unique(np.column_stack((rrr,rcc)), axis=0, return_index=True)
             rrr = rrr[uidx]
             rcc = rcc[uidx]
@@ -112,6 +113,9 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
             annotation['dec'] = _cast_to_float(o['dec'])
         if 'cloud_transmission' in o:
             annotation['cloud_transmission'] = _cast_to_float(o['cloud_transmission'])
+        if 'cloud_sample_row' in o and 'cloud_sample_col' in o:
+            annotation['cloud_sample_row'] = _cast_to_float(o['cloud_sample_row'])
+            annotation['cloud_sample_col'] = _cast_to_float(o['cloud_sample_col'])
         if 'cloud_transmission_min' in o:
             annotation['cloud_transmission_min'] = _cast_to_float(o['cloud_transmission_min'])
         objs.append(annotation)
@@ -352,10 +356,14 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
             if snr_aperture is not None:
                 annotation['snr_aperture'] = _cast_to_float(snr_ap) if snr_ap is not None else None
             if cloud_transmission is not None and cloud_row_osf is not None and cloud_col_osf is not None:
+                cloud_sample_row = oversampled_to_detector(r[1], cloud_row_osf)
+                cloud_sample_col = oversampled_to_detector(c[1], cloud_col_osf)
+                annotation['cloud_sample_row'] = _cast_to_float(cloud_sample_row)
+                annotation['cloud_sample_col'] = _cast_to_float(cloud_sample_col)
                 annotation['cloud_transmission'] = _sample_bilinear_clamped(
                     cloud_transmission,
-                    r[1] / cloud_row_osf,
-                    c[1] / cloud_col_osf,
+                    cloud_sample_row,
+                    cloud_sample_col,
                 )
             objs.append(annotation)
 
@@ -363,7 +371,12 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
 
 
 def _annotate_object(height, width, rr, cc, mv, pe, seg_id=None, filter_ob=True, box_size=None, box_pad=0, class_name="Satellite", class_id=1, clip_box=False, object_name="", object_id=""):
-    """Generates the star annotation data from the SatSim internal star data. Data is typically in oversampled pixel space.
+    """Generate a SatNet annotation from pixel-center coordinates.
+
+    ``rr`` and ``cc`` are zero-based pixel-center positions in an image of
+    ``height`` by ``width``. SatNet stores normalized image-edge coordinates;
+    consumers recover detector coordinates with
+    ``normalized * detector_size - 0.5``.
 
     Args:
         height: `int`, height of image

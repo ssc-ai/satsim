@@ -13,7 +13,7 @@
                     "enum": [ "line-polar" ]
                 },
                 "origin": {
-                    "description": "The origin of the line on the array in [row, col] in normalized coordinates (0-1).",
+                    "description": "The origin of the line in normalized image-edge coordinates [row, col]. Zero and one denote the outer image edges; detector pixel-center coordinates are origin * size - 0.5.",
                     "type": "array"
                 },
                 "velocity": {
