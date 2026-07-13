@@ -52,7 +52,7 @@ def _render_setup(osf, height=48, width=48):
     )
 
 
-def _render_target(mode, osf, row, col, point_rendering='bilinear', phase_oversample=1, size=48):
+def _render_target(mode, osf, row, col, point_rendering='bilinear', phase_oversample=1, size=48, warm_cache=False):
     args = _render_setup(osf, size, size)
     r_os = [detector_to_oversampled(row, osf)]
     c_os = [detector_to_oversampled(col, osf)]
@@ -66,6 +66,12 @@ def _render_target(mode, osf, row, col, point_rendering='bilinear', phase_oversa
         31,
         phase_oversample=phase_oversample,
     )
+    if warm_cache:
+        # A warm LUT cache supplies no PSF array; registration must derive
+        # the support-center correction from the known support shape.
+        psf_kwargs = {'psf_os': None, 'psf_support_shape': args[7].shape}
+    else:
+        psf_kwargs = {'psf_os': args[7]}
     return render_epsf(
         *args[:7],
         epsf_lut,
@@ -73,8 +79,21 @@ def _render_target(mode, osf, row, col, point_rendering='bilinear', phase_oversa
         render_separate=True,
         point_rendering=point_rendering,
         phase_oversample=phase_oversample,
-        psf_os=args[7],
+        **psf_kwargs,
     )[1].numpy()
+
+
+@pytest.mark.parametrize('size', [47, 48])
+@pytest.mark.parametrize('osf', [1, 2])
+def test_warm_epsf_cache_matches_cold_registration(osf, size):
+    """Warm-cache renders (no PSF array) must match cold-cache registration
+    for both odd and even PSF support."""
+    truth = np.array([22.30, 22.70])
+    cold = _render_target('epsf', osf, truth[0], truth[1], size=size)
+    warm = _render_target('epsf', osf, truth[0], truth[1], size=size, warm_cache=True)
+    np.testing.assert_allclose(_centroid(cold), truth, atol=0.03)
+    np.testing.assert_allclose(_centroid(warm), truth, atol=0.03)
+    np.testing.assert_allclose(_centroid(warm), _centroid(cold), atol=1e-6)
 
 
 @pytest.mark.parametrize('osf', [1, 2, 5])

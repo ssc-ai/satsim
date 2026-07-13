@@ -33,15 +33,24 @@ def _apply_psf_support_center_correction(position, offset=-0.5):
     return tf.cast(position, tf.float32) + tf.cast(offset, tf.float32)
 
 
-def _psf_deposit_offset(psf_os, axis, default=-0.5):
-    """Return the center correction for one PSF support axis."""
-    if psf_os is None:
-        return default
-    size = psf_os.shape[axis]
-    if size is not None:
-        return -0.5 if int(size) % 2 == 0 else 0.0
-    dynamic_size = tf.shape(psf_os)[axis]
-    return tf.where(tf.equal(tf.math.floormod(dynamic_size, 2), 0), -0.5, 0.0)
+def _psf_deposit_offset(psf_os, axis, default=-0.5, support_shape=None):
+    """Return the center correction for one PSF support axis.
+
+    The offset is the position of the support's geometric center relative to
+    the convolution anchor: ``-0.5`` for even support, ``0.0`` for odd. The
+    known support shape takes precedence when the PSF array itself is
+    unavailable (for example, a warm ePSF LUT cache), so registration never
+    depends on cache state.
+    """
+    if psf_os is not None:
+        size = psf_os.shape[axis]
+        if size is not None:
+            return -0.5 if int(size) % 2 == 0 else 0.0
+        dynamic_size = tf.shape(psf_os)[axis]
+        return tf.where(tf.equal(tf.math.floormod(dynamic_size, 2), 0), -0.5, 0.0)
+    if support_shape is not None:
+        return -0.5 if int(support_shape[axis]) % 2 == 0 else 0.0
+    return default
 
 
 def normalize_star_render_mode(star_render_mode):
@@ -285,12 +294,13 @@ def render_epsf(
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
         batch_size_cap=None, phase_oversample=1,
         fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=False,
-        epsf_crop=None, epsf_metadata=None):
+        epsf_crop=None, epsf_metadata=None, psf_support_shape=None):
     """Render directly in detector space using an ePSF lookup table.
 
-    Pass the ``psf_os`` used to build ``epsf_lut`` so source registration can
-    account for odd versus even PSF support. If it is omitted, even PSF
-    support is assumed.
+    Pass the ``psf_os`` used to build ``epsf_lut``, or its known
+    ``psf_support_shape`` ``(height, width)`` when the array itself is
+    unavailable (warm LUT cache), so source registration can account for odd
+    versus even PSF support. If both are omitted, even support is assumed.
     """
     point_rendering = str(point_rendering).lower()
     if point_rendering not in ('floor', 'bilinear', 'phase_nearest'):
@@ -334,8 +344,8 @@ def render_epsf(
 
     # ePSF LUTs share the even-support center offset of FFT convolution.
     # Apply the correction once at the native renderer boundary.
-    row_offset = _psf_deposit_offset(psf_os, 0)
-    col_offset = _psf_deposit_offset(psf_os, 1)
+    row_offset = _psf_deposit_offset(psf_os, 0, support_shape=psf_support_shape)
+    col_offset = _psf_deposit_offset(psf_os, 1, support_shape=psf_support_shape)
     r_obs_os = _apply_psf_support_center_correction(r_obs_os, row_offset)
     c_obs_os = _apply_psf_support_center_correction(c_obs_os, col_offset)
 

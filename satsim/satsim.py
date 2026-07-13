@@ -1305,6 +1305,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         phase_oversample=epsf_phase_oversample,
                         fallback_to_fft_for_models=epsf_cfg.get('fallback_to_fft_for_models', False),
                         psf_os=psf_os_curr,
+                        psf_support_shape=(psf_h_os, psf_w_os),
                         epsf_normalize=epsf_cfg.get('normalize', False),
                         epsf_crop=frame_epsf_crop_cfg,
                         epsf_metadata=epsf_metadata,
