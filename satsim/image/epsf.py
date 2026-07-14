@@ -880,7 +880,7 @@ def transform_and_add_trailed_epsf(fpa, r_os, c_os, cnt, t_start, t_end,
                                    batch_size=None, filter_out_of_bounds=True,
                                    point_rendering='bilinear', epsf_tiers=None,
                                    batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-                                   batch_size_cap=None):
+                                   batch_size_cap=None, position_offset_os=0.0):
     """Apply FFT-style shared star motion and deposit one trailed ePSF per star."""
     point_rendering = _validate_point_rendering(point_rendering)
     s_osf = tf.cast(s_osf, tf.int32)
@@ -909,6 +909,10 @@ def transform_and_add_trailed_epsf(fpa, r_os, c_os, cnt, t_start, t_end,
         cnt = tf.cast(cnt, tf.float32)
 
     rr, cc = rotate_and_translate(h_minus_1, w_minus_1, r, c, t_start, rotation, translation)
+    if isinstance(position_offset_os, (tuple, list)):
+        row_offset_os, col_offset_os = position_offset_os
+    else:
+        row_offset_os = col_offset_os = position_offset_os
     if epsf_tiers:
         return add_epsf_counts_tiered(
             fpa,
@@ -918,6 +922,8 @@ def transform_and_add_trailed_epsf(fpa, r_os, c_os, cnt, t_start, t_end,
             epsf_lut,
             s_osf,
             epsf_tiers,
+            r_offset_os=row_offset_os,
+            c_offset_os=col_offset_os,
             batch_size=batch_size,
             point_rendering=point_rendering,
             batch_element_budget=batch_element_budget,
@@ -931,6 +937,8 @@ def transform_and_add_trailed_epsf(fpa, r_os, c_os, cnt, t_start, t_end,
         cnt,
         epsf_lut,
         s_osf,
+        r_offset_os=row_offset_os,
+        c_offset_os=col_offset_os,
         batch_size=batch_size,
         point_rendering=point_rendering,
         batch_element_budget=batch_element_budget,
@@ -943,7 +951,7 @@ def transform_and_add_epsf(
         epsf_lut, s_osf, batch_size=None, filter_out_of_bounds=True,
         point_rendering='bilinear', epsf_tiers=None,
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-        batch_size_cap=None):
+        batch_size_cap=None, position_offset_os=0.0):
     """Apply star motion and deposit transformed samples as ePSF stamps."""
     point_rendering = _validate_point_rendering(point_rendering)
     s_osf = tf.cast(s_osf, tf.int32)
@@ -955,6 +963,10 @@ def transform_and_add_epsf(
     w_minus_1 = w_os - 1.0
 
     t_osf = tf.cast(t_osf, tf.int32)
+    if isinstance(position_offset_os, (tuple, list)):
+        row_offset_os, col_offset_os = position_offset_os
+    else:
+        row_offset_os = col_offset_os = position_offset_os
 
     if filter_out_of_bounds:
         r, c, cnt_total = filter_epsf_sources_in_bounds(
@@ -1000,6 +1012,7 @@ def transform_and_add_epsf(
                 epsf_tiers=None,
                 batch_element_budget=batch_element_budget,
                 batch_size_cap=batch_size_cap,
+                position_offset_os=position_offset_os,
             )
             prev = float(tier['flux_max'])
         return fpa
@@ -1051,6 +1064,8 @@ def transform_and_add_epsf(
             ccnt,
             epsf_lut,
             s_osf,
+            r_offset_os=row_offset_os,
+            c_offset_os=col_offset_os,
             batch_size=deposit_batch_size,
             point_rendering=point_rendering,
             batch_element_budget=batch_element_budget,

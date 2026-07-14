@@ -243,6 +243,11 @@
             "type": "boolean",
             "default": false
         },
+        "save_cloud_transmission": {
+            "description": "Save per-frame cloud transmission maps as uint16 TIFF products when clouds are active. Values are scaled so 65535 represents clear transmission 1.0.",
+            "type": "boolean",
+            "default": false
+        },
         "psf_sample_frequency": {
             "description": "The frequency to regenerate a new PSF. Useful when turbulaet_atmosphere should be resampled. Valid values: once, collect, frame",
             "type": "string",

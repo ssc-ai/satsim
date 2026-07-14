@@ -112,6 +112,9 @@ Each CLI or `gen_multi` run creates a timestamped directory under
   `Annotations/*_object_segmentation.tiff`, and
   `Annotations/*_cloud_segmentation.tiff`: optional segmentation masks when
   `sim.save_segmentation` is true.
+- `Annotations/*_cloud_transmission.tiff`: optional uint16 cloud transmission
+  maps when clouds are active and `sim.save_cloud_transmission` is true,
+  scaled so 65535 represents clear transmission 1.0.
 - `AnalyticalObservations/*.json`: optional analytical EO observations when
   `sim.analytical_obs` is true.
 
@@ -293,9 +296,12 @@ image-plane target:
 - `fits_compression`: `none`, `gzip`, `gzip2`, `rice`, `hcompress`,
   or `plio`.
 - `save_ground_truth`: writes target, star, background, noise, gain, and bias
-  planes.
+  planes. Cloud scenes also include `cloud_transmission` and
+  `background_pre_cloud_pe` planes.
 - `save_segmentation` and `star_annotation_threshold`: write object, star,
   and cloud segmentation masks and optional star annotations.
+- `save_cloud_transmission`: writes a uint16 cloud transmission map without
+  requiring star, object, or cloud segmentation.
 - `psf_sample_frequency`: regenerate a PSF `once`, per `collect`, or per
   `frame`.
 - `enable_deflection`, `enable_light_transit`, and
@@ -756,7 +762,24 @@ sensor noise. The glow uses the same visual magnitude per arcsec^2 convention as
 Clouds can also receive source-driven glow from enabled artificial skyglow,
 moonlight, twilight, and daytime background components. If
 `sim.save_segmentation` is enabled, SatSim writes an additional
-`cloud_segmentation` map.
+`cloud_segmentation` map. If `sim.save_cloud_transmission` is enabled, SatSim
+writes `Annotations/*_cloud_transmission.tiff` with clear pixels scaled to
+65535. Cloud ground truth includes `cloud_transmission` and
+`background_pre_cloud_pe`, and object/star annotations include sampled
+`cloud_transmission` values when clouds are active.
+Each sampled annotation also includes `cloud_sample_row` and
+`cloud_sample_col`. These are zero-based detector-array coordinates where
+integer values denote pixel centers, in the same frame as NumPy indexing of
+the exported transmission plane. For a streak target they identify the
+brightness-weighted centroid of the discrete source path used for sampling.
+
+SatNet object positions use normalized image-edge coordinates. Convert an
+annotation coordinate back to a zero-based detector pixel-center coordinate
+with `detector = normalized * detector_size - 0.5`. Line and line-polar
+`origin` values use the same convention: zero and one are the outer image
+edges, and `0.5` is the geometric image center. Positions use half-pixel terms;
+velocities, padding, crop sizes, and other vectors or extents scale without an
+offset.
 
 Preset layers can be used with only a type and optional coverage:
 

@@ -237,8 +237,8 @@ def test_add_epsf_counts_phase_nearest_centroid_within_quantization_bound():
     phase_lut = build_epsf_lut(psf_os, s_osf, 31, normalize=True, phase_oversample=phase_oversample)
     row_det = 24.37
     col_det = 25.81
-    r_os = row_det * s_osf + 0.5 * (s_osf - 2)
-    c_os = col_det * s_osf + 0.5 * (s_osf - 2)
+    r_os = (row_det + 0.5) * s_osf - 0.5
+    c_os = (col_det + 0.5) * s_osf - 0.5
 
     expected = add_epsf_counts(
         tf.zeros([64, 64], tf.float32),

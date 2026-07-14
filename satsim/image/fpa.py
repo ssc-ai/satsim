@@ -18,6 +18,12 @@ MAX_PIXEL_VALUE = {
 }
 
 
+def _position_offsets(position_offset):
+    if isinstance(position_offset, (tuple, list)):
+        return position_offset[0], position_offset[1]
+    return position_offset, position_offset
+
+
 def downsample(fpa, osf, method='conv2d'):
     """Downsample a 2D image tensor. Typically used to calculate the real pixel
     values in an oversampled image.
@@ -341,7 +347,7 @@ def _add_counts_bilinear(fpa, r, c, cnt, r_offset=0, c_offset=0):
     return tf.compat.v1.tensor_scatter_nd_add(fpa, rc, values)
 
 
-def transform_and_fft(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, interpolation='floor'):
+def transform_and_fft(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, interpolation='floor', position_offset=0.0):
     """Applies discrete rotation and translation transformations to the center
     point and applies the smear to all other points with an FFT. This has the
     effect of  "smearing" or "streaking" the point between times `t_start` and
@@ -401,13 +407,20 @@ def transform_and_fft(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translati
 
     # create delta functions
     (rr, cc) = rotate_and_translate(h_minus_1, w_minus_1, r, c, 0.0, rotation, translation)
-    delta = add_counts(tf.zeros_like(fpa, tf.float32), rr, cc, cnt, interpolation=interpolation)
+    row_offset, col_offset = _position_offsets(position_offset)
+    delta = add_counts(
+        tf.zeros_like(fpa, tf.float32),
+        rr + row_offset,
+        cc + col_offset,
+        cnt,
+        interpolation=interpolation,
+    )
 
     # FFT
     return fftconv2p(delta, blur, pad=1)
 
 
-def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, batch_size=500, filter_out_of_bounds=True, interpolation='floor'):
+def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, batch_size=500, filter_out_of_bounds=True, interpolation='floor', position_offset=0.0):
     """Applies discrete rotation and translation transformations to a set of
     input points. This has the effect of "smearing" or "streaking" the point
     between times `t_start` and `t_end`. The number of transforms calculated is
@@ -445,6 +458,7 @@ def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, tr
     c = tf.cast(c, dtype=tf.float32)
     cnt = tf.cast(cnt, dtype=tf.float32)
     t_osf = tf.cast(t_osf, dtype=tf.int32)
+    row_offset, col_offset = _position_offsets(position_offset)
 
     # divide pe by the number of discrete points to sample, e.g. for t_osf==2 then i==[0,1]
     cnt_os = cnt / tf.cast(t_osf, tf.float32)
@@ -490,7 +504,19 @@ def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, tr
         # perform transformation
         (rr, cc) = rotate_and_translate(h_minus_1, w_minus_1, rr, cc, tt, rotation, translation)
 
-        return [i + 1, add_counts(img, rr, cc, cnt_os, interpolation=interpolation), r_batch, c_batch, cnt_os_batch]
+        return [
+            i + 1,
+            add_counts(
+                img,
+                rr + row_offset,
+                cc + col_offset,
+                cnt_os,
+                interpolation=interpolation,
+            ),
+            r_batch,
+            c_batch,
+            cnt_os_batch,
+        ]
 
     i = tf.constant(0)
     i, image, _, _, _ = tf.while_loop(func_condition, func_eval, (i, fpa, r_batch, c_batch, cnt_os_batch))

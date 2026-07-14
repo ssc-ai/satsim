@@ -1,13 +1,11 @@
 """Tests for `satsim.image.fpa` package."""
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
-import platform
 
 import numpy as np
 import tensorflow as tf
 
 from satsim.dataset.augment import augment_satnet_with_satsim
-from satsim.util.system import is_tensorflow_running_on_cpu
 
 
 def test_dataset_augment():
@@ -88,10 +86,7 @@ def test_dataset_augment():
         img = tf.squeeze(i).numpy()
         bb = b.numpy()
 
-        if is_tensorflow_running_on_cpu() and platform.machine() == 'x86_64':
-            assert(abs(int(np.sum(img)) - 262143840) <= 256)
-        else:
-            assert(abs(int(np.sum(img)) - 262144096) <= 256)
+        assert(np.sum(img, dtype=np.float64) == 262144108)
         np.testing.assert_array_almost_equal(bb[0], [0.48079428, 0.48079428, 0.5218099, 0.51985675, 1.], decimal=5)
 
     data_satsim = augment_satnet_with_satsim(ds, ssp, prob=0.0)
