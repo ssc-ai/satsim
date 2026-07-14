@@ -6,9 +6,12 @@ and star cloud annotations sampled raw ``R / osf`` coordinates instead of
 canonical detector coordinates.
 """
 
+import pickle
+
 import numpy as np
 import pytest
 
+from satsim import gen_images
 from satsim.geometry.draw import gen_line
 from satsim.image.coordinates import (
     delta_detector_to_oversampled,
@@ -180,3 +183,109 @@ def test_target_cloud_sample_exports_weighted_discrete_path_centroid():
     assert ob['cloud_sample_row'] == 6.25
     assert ob['cloud_sample_col'] == 10.5
     assert ob['cloud_transmission'] == _sample_bilinear_clamped(transmission, 6.25, 10.5)
+
+
+def test_catalog_star_and_tracked_target_relative_astrometry(tmp_path):
+    """Regression for GitHub issue: stars were one OSF pixel below targets."""
+    catalog_path = tmp_path / 'probe_star.csv'
+    catalog_path.write_text('1,8.0,91.79056434,-3.41884296\n')
+
+    ssp = {
+        'version': 1,
+        'sim': {
+            'mode': 'fftconv2p',
+            'spacial_osf': 3,
+            'temporal_osf': 1,
+            'padding': 0,
+            'samples': 1,
+            'enable_shot_noise': False,
+            'save_jpeg': False,
+            'save_czml': False,
+        },
+        'fpa': {
+            # A smaller detector with proportionally smaller FOV preserves
+            # the issue's 2.168 arcsec/pixel plate scale and expected pixel
+            # separation while making this full-pipeline regression cheaper.
+            'height': 128,
+            'width': 128,
+            'y_fov': 0.077078,
+            'x_fov': 0.077078,
+            'dark_current': 0.0,
+            'gain': 1.0,
+            'bias': 0.0,
+            'zeropoint': 20.6663,
+            'a2d': {
+                'response': 'linear',
+                'fwc': 1e9,
+                'gain': 1.0,
+                'bias': 100,
+            },
+            'noise': {
+                'read': 0.0,
+                'electronic': 0.0,
+            },
+            'psf': {
+                'mode': 'gaussian',
+                'eod': 0.15,
+            },
+            'time': {
+                'exposure': 0.01,
+                'gap': 0.0,
+            },
+            'num_frames': 1,
+        },
+        'background': {
+            'galactic': 0.0,
+        },
+        'geometry': {
+            'time': [2025, 12, 29, 10, 0, 0.0],
+            'site': {
+                'mode': 'topo',
+                'lat': '20.0 N',
+                'lon': '156.0 W',
+                'alt': 0.0,
+                'gimbal': {
+                    'mode': 'wcs',
+                    'rotation': 0,
+                },
+                'track': {
+                    'mode': 'rate',
+                    'position': [-1311.059106, 42143.611807, 1.961689],
+                    'velocity': [-3.073150753, -0.095603993, 0.007795326],
+                    'epoch': [2025, 12, 29, 10, 0, 0.0],
+                },
+            },
+            'stars': {
+                'mode': 'csv',
+                'path': str(catalog_path),
+                'motion': {
+                    'mode': 'none',
+                },
+            },
+            'obs': {
+                'mode': 'list',
+                'list': [{
+                    'mode': 'twobody',
+                    'position': [-1311.059106, 42143.611807, 1.961689],
+                    'velocity': [-3.073150753, -0.095603993, 0.007795326],
+                    'epoch': [2025, 12, 29, 10, 0, 0.0],
+                    'mv': 8.0,
+                }],
+            },
+        },
+    }
+
+    dirname = gen_images(
+        ssp,
+        eager=True,
+        output_dir=str(tmp_path),
+        output_debug=True,
+        set_name='relative-astrometry',
+    )
+    with open(f'{dirname}/Debug/fpa_conv_targ_0.pickle', 'rb') as f:
+        target = pickle.load(f)
+    with open(f'{dirname}/Debug/fpa_conv_star_0.pickle', 'rb') as f:
+        star = pickle.load(f)
+
+    separation = _centroid(star)[0] - _centroid(target)[0]
+    np.testing.assert_allclose(separation, 13.278, rtol=0, atol=0.01)

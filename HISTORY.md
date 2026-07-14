@@ -6,13 +6,13 @@ History
 
 * Add cloud transmission truth planes, standalone cloud transmission TIFF output, and sampled cloud transmission annotations.
 * Fix coordinate registration between oversampled source positions, rendered flux centroids, SatNet annotations, and cloud-transmission samples using one zero-based pixel-center convention.
+* Fix target trajectories truncating sub-pixel coordinates. Targets now render at their exact positions relative to the star field; previously they were displaced by up to one oversampled pixel.
 
 
 0.25.0
 ---------------------
 
 * **BEHAVIORAL CHANGE:** Add sub-pixel bilinear point rendering for stars and targets, enabled by default. Rendered images differ slightly from v0.24.0; set `sim.point_rendering` to `floor` for legacy rendering.
-* **BEHAVIORAL CHANGE:** Fix target trajectories truncating sub-pixel coordinates. Targets now render at their exact positions relative to the star field; previously they were displaced by up to one oversampled pixel.
 * Add detector-space ePSF lookup-table renderer. Set `sim.mode` to `epsf` and configure `sim.epsf.*`.
 * Add native ePSF trailed star rendering for `star_render_mode: streak` to speed dense rate-track star fields.
 * Add tiered ePSF crop rendering for dim stars, defaulting to auto thresholds.

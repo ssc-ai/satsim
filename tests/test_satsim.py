@@ -198,16 +198,6 @@ def _test_target_centroid(render_size=None):
 
     dirname = gen_images(ssp, eager=True, output_dir='./.images', output_debug=True)
 
-    # origin [0.5, 0.5] is pixel coordinate (0.5 * 401 * 3, 0.5 * 601 * 3) =
-    # (601.5, 901.5) on the 1203x1803 oversampled grid. Sub-pixel deposition
-    # renders a coordinate's centroid at that fractional pixel index, so the
-    # centroid lands half an oversampled pixel past the array midpoint
-    # (1203 - 1) / 2 = 601. Truncating deposition used to hide this offset by
-    # snapping the coordinate down to the containing pixel.
-    s_osf = ssp['sim']['spacial_osf']
-    half_os_pixel = 0.5                    # in oversampled pixels
-    half_os_pixel_det = 0.5 / s_osf        # same offset in detector pixels
-
     if render_size is None:
 
         with open(os.path.join(dirname, 'Debug', 'fpa_os_0.pickle'), 'rb') as f:
@@ -215,7 +205,7 @@ def _test_target_centroid(render_size=None):
 
         # print(scipy.ndimage.center_of_mass(fpa))
 
-        np.testing.assert_equal(scipy.ndimage.center_of_mass(fpa), (np.asarray(fpa.shape) - 1) / 2 + half_os_pixel)
+        np.testing.assert_equal(scipy.ndimage.center_of_mass(fpa), (np.asarray(fpa.shape) - 1) / 2)
 
         with open(os.path.join(dirname, 'Debug', 'fpa_conv_os_0.pickle'), 'rb') as f:
             fpa2 = pickle.load(f)
@@ -223,26 +213,23 @@ def _test_target_centroid(render_size=None):
         # print(scipy.ndimage.center_of_mass(fpa2))
 
         if is_tensorflow_running_on_cpu():
-            np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa2), (np.asarray(fpa2.shape) - 1) / 2 + half_os_pixel, rtol=0.03, atol=2e-5)
+            np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa2), (np.asarray(fpa2.shape) - 1) / 2, rtol=0.03, atol=2e-5)
         else:
-            np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa2), (np.asarray(fpa2.shape) - 1) / 2 + half_os_pixel, 1e-5)
+            np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa2), (np.asarray(fpa2.shape) - 1) / 2, 1e-5)
 
         with open(os.path.join(dirname, 'Debug', 'fpa_conv_crop_0.pickle'), 'rb') as f:
             fpa3 = pickle.load(f)
 
         # print(scipy.ndimage.center_of_mass(fpa3))
 
-        np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa3), (np.asarray(fpa3.shape) - 1) / 2 + half_os_pixel, 1e-5)
+        np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa3), (np.asarray(fpa3.shape) - 1) / 2, 1e-5)
 
     with open(os.path.join(dirname, 'Debug', 'fpa_conv_0.pickle'), 'rb') as f:
         fpa4 = pickle.load(f)
 
     # print(scipy.ndimage.center_of_mass(fpa4))
 
-    # the full frame includes the flat galactic background, whose centroid is
-    # exactly the array midpoint; the target's half-oversampled-pixel offset
-    # pulls the combined centroid at most half_os_pixel_det past the midpoint
-    np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa4), (np.asarray(fpa4.shape) - 1) / 2, rtol=0, atol=half_os_pixel_det)
+    np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa4), (np.asarray(fpa4.shape) - 1) / 2, 1e-5)
 
 
 def test_target_centroid_polar():
@@ -275,17 +262,12 @@ def test_target_centroid_polar():
     with open(os.path.join(dirname, 'Debug', 'fpa_os_0.pickle'), 'rb') as f:
         fpa = pickle.load(f)
 
-    # [946.0, 1201.0] was the streak centroid measured with truncating
-    # deposition; sub-pixel deposition keeps the half-pixel of the origin
-    # coordinate (0.5 * 401 * 3 = 601.5, 0.5 * 601 * 3 = 901.5), shifting the
-    # centroid by +0.5 oversampled pixel on each axis
-    np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa), [946.5, 1201.5], rtol=1e-6, atol=0)
+    np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa), [946.0, 1201.0], rtol=1e-6, atol=0)
 
     with open(os.path.join(dirname, 'Debug', 'fpa_conv_0.pickle'), 'rb') as f:
         fpa4 = pickle.load(f)
 
-    # same +0.5 oversampled pixel offset, in detector pixels (osf = 3)
-    np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa4), [215 + 0.5 / 3, 300 + 0.5 / 3], rtol=1e-3, atol=0)
+    np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa4), [215, 300], rtol=1e-3, atol=0)
 
 
 def test_arcsec():
@@ -323,12 +305,7 @@ def test_arcsec():
     with open(os.path.join(dirname, 'Debug', 'fpa_conv_0.pickle'), 'rb') as f:
         fpa4 = pickle.load(f)
 
-    # [51.5, 50] was the streak centroid measured with truncating deposition;
-    # sub-pixel deposition keeps the half-pixel of the origin coordinate
-    # (0.5 * 101 * 3 = 151.5 oversampled), shifting the centroid by
-    # 0.5 / 3 detector pixel on each axis. atol bounds the small centroid
-    # error from block-sum downsampling of a source not centered in a block.
-    np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa4), np.array([51.5 + 0.5 / 3, 50 + 0.5 / 3]), rtol=1e-5, atol=5e-3)
+    np.testing.assert_allclose(scipy.ndimage.center_of_mass(fpa4), np.array([51.5, 50]), 1e-5)
 
 
 def test_poppy():
@@ -526,13 +503,9 @@ def test_default_point_rendering_matches_bilinear_no_noise_photometry_and_centro
 
     np.testing.assert_array_equal(default_targ, bilinear_targ)
     np.testing.assert_allclose(np.sum(default_targ), 1000.0, atol=1e-3)
-    # origin [0.5, 0.5] is half an oversampled pixel (0.5 / osf detector
-    # pixel) past the array midpoint (N - 1) / 2, and sub-pixel deposition
-    # preserves that offset
     np.testing.assert_allclose(
         scipy.ndimage.center_of_mass(default_targ),
-        [(ssp['fpa']['height'] - 1) / 2.0 + 0.5 / ssp['sim']['spacial_osf'],
-         (ssp['fpa']['width'] - 1) / 2.0 + 0.5 / ssp['sim']['spacial_osf']],
+        [(ssp['fpa']['height'] - 1) / 2.0, (ssp['fpa']['width'] - 1) / 2.0],
         atol=0.02,
     )
 
@@ -690,13 +663,9 @@ def test_epsf_mode_pipeline_smoke_debug_output():
         epsf_targ = pickle.load(f)
 
     np.testing.assert_allclose(np.sum(epsf_targ), 1000.0, atol=1e-3)
-    # origin [0.5, 0.5] is half an oversampled pixel (0.5 / osf detector
-    # pixel) past the array midpoint (N - 1) / 2, and sub-pixel deposition
-    # preserves that offset
     np.testing.assert_allclose(
         scipy.ndimage.center_of_mass(epsf_targ),
-        [(ssp['fpa']['height'] - 1) / 2.0 + 0.5 / ssp['sim']['spacial_osf'],
-         (ssp['fpa']['width'] - 1) / 2.0 + 0.5 / ssp['sim']['spacial_osf']],
+        [(ssp['fpa']['height'] - 1) / 2.0, (ssp['fpa']['width'] - 1) / 2.0],
         atol=0.05,
     )
 

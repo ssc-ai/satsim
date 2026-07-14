@@ -1473,7 +1473,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     # for each observation, create a segmentation mask
                     obs_os_pix_sorted = sorted(obs_os_pix, key=lambda k: k['pe'], reverse=False)
                     for ob in obs_os_pix_sorted:
-                        fpa_segmentation, _, _, _, _ = _render(ob['rr'], ob['cc'], ob['pp'], [], [], [], False)
+                        render_mask = np.isfinite(ob['pp']) & (np.asarray(ob['pp']) != 0.0)
+                        fpa_segmentation, _, _, _, _ = _render(
+                            np.asarray(ob['rr'])[render_mask],
+                            np.asarray(ob['cc'])[render_mask],
+                            np.asarray(ob['pp'])[render_mask],
+                            [], [], [], False,
+                        )
                         if 'crop' in ssp['fpa']:
                             cp = ssp['fpa']['crop']
                             fpa_segmentation = crop(fpa_segmentation, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
@@ -2428,6 +2434,16 @@ def _gen_objects(ssp, render_mode,
 
         logger.debug('Average brightness for target: {:.2f} mv, {:.2f} pix.'.format(avg_mv, len(opp) / s_osf))
 
+        # Trajectory generators retain exact start/mid/end control points with
+        # zero duration and zero flux for annotations. Keep those points in
+        # obs_os_pix below, but do not send them through the renderers. This is
+        # numerically identical and prevents the annotation controls from
+        # adding work for large target catalogs.
+        render_mask = np.isfinite(opp) & (np.asarray(opp) != 0.0)
+        orr_render = np.asarray(orr)[render_mask]
+        occ_render = np.asarray(occ)[render_mask]
+        opp_render = np.asarray(opp)[render_mask]
+
         # TODO generalize `model`
         # sprint based brightness models
         if 'model' in o and not has_brightness_model:
@@ -2435,20 +2451,20 @@ def _gen_objects(ssp, render_mode,
                 if callable(o['model']):
                     fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
                     patch = o['model'](x=None, t=ott[0])
-                    fpa_os_w_targets = add_patch(fpa_os_w_targets, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
+                    fpa_os_w_targets = add_patch(fpa_os_w_targets, orr_render, occ_render, opp_render, patch, h_pad_os_div2, w_pad_os_div2)
                     obs_model.append(fpa_os_w_targets)
                     # TODO support sub-sample patching
                 elif o['model']['mode'] == 'sprite':
                     patch = load_sprite_from_file(filename=o['model']['filename']) if 'mode' in o['model'] else o['model']
                     fpa_os_clear = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
-                    fpa_os_w_targets = add_patch(fpa_os_clear, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
+                    fpa_os_w_targets = add_patch(fpa_os_clear, orr_render, occ_render, opp_render, patch, h_pad_os_div2, w_pad_os_div2)
                     obs_model.append(fpa_os_w_targets)
             else:
                 logger.warning('Sprite models not supported for piecewise rendering.')
         else:
-            orrr = np.concatenate((orrr, orr))
-            occc = np.concatenate((occc, occ))
-            oppp = np.concatenate((oppp, opp))
+            orrr = np.concatenate((orrr, orr_render))
+            occc = np.concatenate((occc, occ_render))
+            oppp = np.concatenate((oppp, opp_render))
 
         if obs_cache[i] is not None:
             ra_mid, dec_mid, _ = get_analytical_los(
