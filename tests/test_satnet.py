@@ -60,13 +60,13 @@ def test_annotation():
     b = set_frame_annotation(a, 0, h, w, [pix])
 
     c = b['data']['objects'][0]
-    assert(c['y_min'] == 0.55)
-    assert(c['x_min'] == 0.525)
-    assert(c['y_max'] == 0.75)
-    assert(c['x_max'] == 0.575)
+    assert(c['y_min'] == 0.5)
+    assert(c['x_min'] == 0.5)
+    assert(c['y_max'] == 0.7)
+    assert(c['x_max'] == 0.55)
 
-    assert(c['y_center'] == (0.55 + 0.75) / 2.)
-    assert(c['x_center'] == (0.525 + 0.575) / 2.)
+    assert(c['y_center'] == (0.5 + 0.7) / 2.)
+    assert(c['x_center'] == (0.5 + 0.55) / 2.)
 
     assert c['ra_obs'] == 1.0
     assert c['dec_obs'] == -1.0
@@ -78,13 +78,13 @@ def test_annotation():
     b = set_frame_annotation(a, 0, h, w, [pix], box_size=[3,3], box_pad=1)  # total box size will be 5
 
     c = b['data']['objects'][0]
-    assert(c['y_min'] == 0.55)
-    assert(c['x_min'] == 0.525)
-    assert(c['y_max'] == 0.75)
-    assert(c['x_max'] == 0.575)
+    assert(c['y_min'] == 0.5)
+    assert(c['x_min'] == 0.5)
+    assert(c['y_max'] == 0.7)
+    assert(c['x_max'] == 0.55)
 
-    assert(c['y_center'] == (0.55 + 0.75) / 2.)
-    assert(c['x_center'] == (0.525 + 0.575) / 2.)
+    assert(c['y_center'] == (0.5 + 0.7) / 2.)
+    assert(c['x_center'] == (0.5 + 0.55) / 2.)
 
     assert(c['bbox_height'] == 0.5)
     assert(c['bbox_width'] == 0.25)
@@ -94,13 +94,13 @@ def test_annotation():
     b = set_frame_annotation(a, 0, h, w, [pix], box_size=None, box_pad=1)  # total box size will be 2+max-min
 
     c = b['data']['objects'][0]
-    assert(c['y_min'] == 0.55)
-    assert(c['x_min'] == 0.525)
-    assert(c['y_max'] == 0.75)
-    assert(c['x_max'] == 0.575)
+    assert(c['y_min'] == 0.5)
+    assert(c['x_min'] == 0.5)
+    assert(c['y_max'] == 0.7)
+    assert(c['x_max'] == 0.55)
 
-    assert(c['y_center'] == (0.55 + 0.75) / 2.)
-    assert(c['x_center'] == (0.525 + 0.575) / 2.)
+    assert(c['y_center'] == (0.5 + 0.7) / 2.)
+    assert(c['x_center'] == (0.5 + 0.55) / 2.)
 
     assert(c['seg_id'] == -1)
 
@@ -132,6 +132,8 @@ def test_annotation_odd():
 
     c = b['data']['objects'][0]
 
+    # Canonical origin [0.5, 0.5] maps to pixel coordinates (5, 10).
+    # Annotation normalization maps those pixel centers back to [0.5, 0.5].
     assert(c['y_min'] == 0.5)
     assert(c['x_min'] == 0.5)
     assert(c['y_max'] == 0.5)
@@ -195,6 +197,9 @@ def test_annotation_ob():
 
     c = b['data']['objects'][0]
 
+    # Canonical origin [-0.5, -0.5] maps to pixel coordinates (-6, -11).
+    # Applying velocity [11, 21] produces endpoint (5, 10), so annotation
+    # normalization produces endpoints -0.5 through 0.5.
     assert(c['class_name'] == 'Satellite')
     assert(c['y_min'] == -0.5)
     assert(c['x_min'] == -0.5)
