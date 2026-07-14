@@ -45,13 +45,7 @@ def gen_line(height, width, origin, velocity, pe, t_start, t_end):
     r2 = r0 + velocity[0] * t_end
     c2 = c0 + velocity[1] * t_end
 
-    rr, cc = line(int(r1), int(c1), int(r2), int(c2))
-    n = len(rr)
-    t = np.linspace(t_start, t_end, n + 1)
-
-    pe = (t_end - t_start) * pe / n
-
-    return (rr, cc, np.asarray([pe for i in range(len(rr))]), t)
+    return gen_line_from_endpoints(r1, c1, r2, c2, pe, t_start, t_end)
 
 
 def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end):
@@ -76,9 +70,15 @@ def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end):
             pe: `list`, list of counts (e.g. photoelectrons)
             t: `list`, list of start and stop times. length is +1 larger than `rr`, `cc`, and `pe`.
     """
-    rr, cc = line(int(r0), int(c0), int(r1), int(c1))
+    r0i, c0i, r1i, c1i = int(r0), int(c0), int(r1), int(c1)
+    rr, cc = line(r0i, c0i, r1i, c1i)
     n = len(rr)
     t = np.linspace(t_start, t_end, n + 1)
+
+    # restore the sub-pixel offsets discarded by the integer rasterization so
+    # deposition preserves the true endpoint coordinates
+    rr = rr + np.linspace(r0 - r0i, r1 - r1i, n)
+    cc = cc + np.linspace(c0 - c0i, c1 - c1i, n)
 
     pe = (t_end - t_start) * pe / n
 
@@ -111,8 +111,8 @@ def gen_curve_from_points(r0, c0, r1, c1, r2, c2, pe, t_start, t_end):
     """
     rb = 2 * r1 - r0 / 2 - r2 / 2
     cb = 2 * c1 - c0 / 2 - c2 / 2
-    r0, c0, rb, cb, r2, c2 = int(r0), int(c0), int(rb), int(cb), int(r2), int(c2)
-    rr, cc = bezier_curve(r0, c0, rb, cb, r2, c2, 1.0, None)
+    r0i, c0i, rbi, cbi, r2i, c2i = int(r0), int(c0), int(rb), int(cb), int(r2), int(c2)
+    rr, cc = bezier_curve(r0i, c0i, rbi, cbi, r2i, c2i, 1.0, None)
     n = len(rr)
     t = np.linspace(t_start, t_end, n + 1)
 
@@ -120,22 +120,27 @@ def gen_curve_from_points(r0, c0, r1, c1, r2, c2, pe, t_start, t_end):
 
     # sort
     n2 = int(n / 2)
-    if r0 == rr[0] and c0 == cc[0] and r2 == rr[-1] and c2 == cc[-1]:
+    if r0i == rr[0] and c0i == cc[0] and r2i == rr[-1] and c2i == cc[-1]:
         pass
-    elif r0 == rr[-1] and c0 == cc[-1] and r2 == rr[0] and c2 == cc[0]:
+    elif r0i == rr[-1] and c0i == cc[-1] and r2i == rr[0] and c2i == cc[0]:
         rr = np.flip(rr)
         cc = np.flip(cc)
-    elif r0 == rr[0] and c0 == cc[0]:
-        n2 = np.where(((r2, c2) == np.stack((rr,cc), axis=-1)).all(axis=-1))[0][0]
+    elif r0i == rr[0] and c0i == cc[0]:
+        n2 = np.where(((r2i, c2i) == np.stack((rr,cc), axis=-1)).all(axis=-1))[0][0]
         rr = np.concatenate((rr[0:n2], np.flip(rr[n2:])))
         cc = np.concatenate((cc[0:n2], np.flip(cc[n2:])))
-    elif r2 == rr[0] and c2 == cc[0]:
+    elif r2i == rr[0] and c2i == cc[0]:
         rr = np.flip(rr)
         cc = np.flip(cc)
-        n2 = np.where(((r0, c0) == np.stack((rr,cc), axis=-1)).all(axis=-1))[0][0]
+        n2 = np.where(((r0i, c0i) == np.stack((rr,cc), axis=-1)).all(axis=-1))[0][0]
         rr[0:n2 + 1] = np.flip(rr[0:n2 + 1])
         cc[0:n2 + 1] = np.flip(cc[0:n2 + 1])
     else:
-        logger.debug('Bezier curve order unknown for: {}, {}, {}, {}, {}, {}'.format(r0, c0, r1, c1, r2, c2))
+        logger.debug('Bezier curve order unknown for: {}, {}, {}, {}, {}, {}'.format(r0i, c0i, r1, c1, r2i, c2i))
+
+    # restore the sub-pixel offsets discarded by the integer rasterization so
+    # deposition preserves the true endpoint coordinates
+    rr = rr + np.linspace(r0 - r0i, r2 - r2i, n)
+    cc = cc + np.linspace(c0 - c0i, c2 - c2i, n)
 
     return (rr, cc, np.asarray([pe for i in range(len(rr))]), t)

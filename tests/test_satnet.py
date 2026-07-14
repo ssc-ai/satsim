@@ -106,13 +106,16 @@ def test_annotation_odd():
 
     c = b['data']['objects'][0]
 
-    assert(c['y_min'] == 0.5)
-    assert(c['x_min'] == 0.5)
-    assert(c['y_max'] == 0.5)
-    assert(c['x_max'] == 0.5)
+    # gen_line origin [0.5, 0.5] is pixel coordinate (0.5 * 11, 0.5 * 21) =
+    # (5.5, 10.5), no longer truncated to (5, 10). Annotations normalize a
+    # pixel coordinate p as (p + 0.5) / dimension.
+    assert(c['y_min'] == (5.5 + 0.5) / h)
+    assert(c['x_min'] == (10.5 + 0.5) / w)
+    assert(c['y_max'] == (5.5 + 0.5) / h)
+    assert(c['x_max'] == (10.5 + 0.5) / w)
 
-    assert(c['y_center'] == 0.5)
-    assert(c['x_center'] == 0.5)
+    assert(c['y_center'] == (5.5 + 0.5) / h)
+    assert(c['x_center'] == (10.5 + 0.5) / w)
 
     assert(c['bbox_height'] == 1)
     assert(c['bbox_width'] == 1)
@@ -169,22 +172,26 @@ def test_annotation_ob():
 
     c = b['data']['objects'][0]
 
+    # gen_line origin [-0.5, -0.5] with velocity [11, 21] over 1 second is a
+    # streak from pixel coordinate (-5.5, -10.5) to (5.5, 10.5); the sub-pixel
+    # endpoint coordinates are no longer truncated. Annotations normalize a
+    # pixel coordinate p as (p + 0.5) / dimension.
     assert(c['class_name'] == 'Satellite')
-    assert(c['y_min'] == -0.4090909090909091)
-    assert(c['x_min'] == -0.4523809523809524)
-    assert(c['y_center'] == 0.04545454545454544)
-    assert(c['x_center'] == 0.023809523809523808)
-    assert(c['y_max'] == 0.5)
-    assert(c['x_max'] == 0.5)
+    assert(c['y_min'] == (-5.5 + 0.5) / h)
+    np.testing.assert_almost_equal(c['x_min'], (-10.5 + 0.5) / w)
+    np.testing.assert_almost_equal(c['y_center'], ((-5.5 + 0.5) / h + (5.5 + 0.5) / h) / 2)
+    np.testing.assert_almost_equal(c['x_center'], ((-10.5 + 0.5) / w + (10.5 + 0.5) / w) / 2)
+    assert(c['y_max'] == (5.5 + 0.5) / h)
+    np.testing.assert_almost_equal(c['x_max'], (10.5 + 0.5) / w)
 
-    assert(c['y_start'] == -4.5 / h)
-    assert(c['x_start'] == -9.5 / w)
+    assert(c['y_start'] == (-5.5 + 0.5) / h)
+    np.testing.assert_almost_equal(c['x_start'], (-10.5 + 0.5) / w)
 
-    np.testing.assert_almost_equal(c['y_mid'], (0.5 - 4.5 / h) / 2)
-    np.testing.assert_almost_equal(c['x_mid'], (0.5 - 9.5 / w) / 2)
+    np.testing.assert_almost_equal(c['y_mid'], ((-5.5 + 0.5) / h + (5.5 + 0.5) / h) / 2)
+    np.testing.assert_almost_equal(c['x_mid'], ((-10.5 + 0.5) / w + (10.5 + 0.5) / w) / 2)
 
-    assert(c['y_end'] == 0.5)
-    assert(c['x_end'] == 0.5)
+    assert(c['y_end'] == (5.5 + 0.5) / h)
+    np.testing.assert_almost_equal(c['x_end'], (10.5 + 0.5) / w)
 
 
 def test_annotation_star():

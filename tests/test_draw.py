@@ -25,16 +25,20 @@ def test_gen_line():
     # middle of pixel [0,0]
     r,c,p,t = gen_line(500, 500, [0.001,0.001], [4.,4.], 100, 0, 1.0)
 
-    np.testing.assert_array_equal(r, [0,1,2,3,4])
-    np.testing.assert_array_equal(c, [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(r), [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(c), [0,1,2,3,4])
     np.testing.assert_array_equal(p, [20,20,20,20,20])
+    np.testing.assert_allclose(r[0], 0.001 * 500)                 # origin
+    np.testing.assert_allclose(r[-1], 0.001 * 500 + 4.0 * 1.0)    # origin + velocity * t_end
 
     # bottom right corner of pixel [0,0]
     r,c,p,t = gen_line(500, 500, [0.00199,0.00199], [4.,4.], 100, 0, 1.0)
 
-    np.testing.assert_array_equal(r, [0,1,2,3,4])
-    np.testing.assert_array_equal(c, [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(r), [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(c), [0,1,2,3,4])
     np.testing.assert_array_equal(p, [20,20,20,20,20])
+    np.testing.assert_allclose(r[0], 0.00199 * 500)               # origin
+    np.testing.assert_allclose(r[-1], 0.00199 * 500 + 4.0 * 1.0)  # origin + velocity * t_end
 
     # top left corner of pixel [1,1]
     r,c,p,t = gen_line(500, 500, [0.002,0.002], [2.,2.], 100, 0, 2.0)
@@ -76,16 +80,20 @@ def test_gen_line_from_endpoints():
     # middle of pixel [0,0]
     r,c,p,t = gen_line_from_endpoints(0.5, 0.5, 4., 4., 100, 0, 1.0)
 
-    np.testing.assert_array_equal(r, [0,1,2,3,4])
-    np.testing.assert_array_equal(c, [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(r), [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(c), [0,1,2,3,4])
     np.testing.assert_array_equal(p, [20,20,20,20,20])
+    np.testing.assert_allclose(r[0], 0.5)
+    np.testing.assert_allclose(r[-1], 4.0)
 
     # bottom right corner of pixel [0,0]
     r,c,p,t = gen_line_from_endpoints(0.99, 0.99, 4., 4., 100, 0, 1.0)
 
-    np.testing.assert_array_equal(r, [0,1,2,3,4])
-    np.testing.assert_array_equal(c, [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(r), [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(c), [0,1,2,3,4])
     np.testing.assert_array_equal(p, [20,20,20,20,20])
+    np.testing.assert_allclose(r[0], 0.99)
+    np.testing.assert_allclose(r[-1], 4.0)
 
     # top left corner of pixel [1,1]
     r,c,p,t = gen_line_from_endpoints(1., 1., 5., 5., 100, 0, 2.0)
@@ -152,3 +160,78 @@ def test_gen_curve_from_points():
 
     r6 = [31, 240, 54, 155, 41, 27]
     r,c,p,t = gen_curve_from_points(r6[0], r6[1], r6[2], r6[3], r6[4], r6[5], 90, 0, 0.5)
+
+
+# A rate-tracked target sits at the frame-center row, height / 2 in
+# oversampled pixels (768.0 for a 512-pixel detector at spacial_osf 3), but
+# floating point error in the WCS round trip can return it epsilon below the
+# exact integer. int() truncation then moved the target a full oversampled
+# pixel while stars kept exact coordinates, displacing every target relative
+# to the star field.
+RATE_TRACK_CENTER_ROW = 768.0 - 1.75e-11
+RATE_TRACK_CENTER_COL = 768.0
+
+
+def test_gen_line_from_endpoints_subpixel():
+
+    # stationary target a hair below an integer coordinate should not be
+    # truncated a full pixel down
+    r,c,p,t = gen_line_from_endpoints(RATE_TRACK_CENTER_ROW, RATE_TRACK_CENTER_COL, RATE_TRACK_CENTER_ROW, RATE_TRACK_CENTER_COL, 100, 0, 0.5)
+
+    np.testing.assert_allclose(r, [RATE_TRACK_CENTER_ROW])
+    np.testing.assert_allclose(c, [RATE_TRACK_CENTER_COL])
+
+    # fractional endpoints are preserved at both ends of the streak
+    r,c,p,t = gen_line_from_endpoints(0.5, 0.25, 4.5, 4.25, 100, 0, 1.0)
+
+    np.testing.assert_allclose(r[0], 0.5)
+    np.testing.assert_allclose(c[0], 0.25)
+    np.testing.assert_allclose(r[-1], 4.5)
+    np.testing.assert_allclose(c[-1], 4.25)
+
+    # legacy integer rasterization is preserved under floor deposition
+    r,c,p,t = gen_line_from_endpoints(0.5, 0.5, 4., 4., 100, 0, 1.0)
+
+    np.testing.assert_array_equal(np.floor(r), [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(c), [0,1,2,3,4])
+    np.testing.assert_array_equal(p, [20,20,20,20,20])
+
+
+def test_gen_curve_from_points_subpixel():
+
+    # stationary target a hair below an integer coordinate should not be
+    # truncated a full pixel down
+    rs = RATE_TRACK_CENTER_ROW
+    cs = RATE_TRACK_CENTER_COL
+    r,c,p,t = gen_curve_from_points(rs, cs, rs, cs, rs, cs, 100, 0, 0.5)
+
+    np.testing.assert_allclose(r, [rs])
+    np.testing.assert_allclose(c, [cs])
+
+    # fractional endpoints are preserved at both ends of the streak
+    r,c,p,t = gen_curve_from_points(250.5, 250.25, 251.5, 251.25, 252.5, 252.25, 90, 0, 0.5)
+
+    np.testing.assert_allclose(r[0], 250.5)
+    np.testing.assert_allclose(c[0], 250.25)
+    np.testing.assert_allclose(r[-1], 252.5)
+    np.testing.assert_allclose(c[-1], 252.25)
+
+    # legacy integer rasterization is preserved under floor deposition
+    r,c,p,t = gen_curve_from_points(250.5, 250.5, 255.5, 255.5, 250.5, 260.5, 90, 0, 0.5)
+
+    np.testing.assert_array_equal(np.floor(r), [250, 251, 252, 253, 254, 255, 255, 255, 255, 254, 253, 252, 251, 250])
+    np.testing.assert_array_equal(np.floor(c), [250, 251, 251, 252, 253, 254, 255, 255, 256, 257, 258, 259, 260, 260])
+
+
+def test_gen_line_subpixel():
+
+    # fractional origin is preserved: origin 0.001 * 500 = 0.5, streak end
+    # 0.5 + 4 pixels/sec * 1 sec = 4.5
+    r,c,p,t = gen_line(500, 500, [0.001,0.001], [4.,4.], 100, 0, 1.0)
+
+    np.testing.assert_allclose(r[0], 0.5)
+    np.testing.assert_allclose(c[0], 0.5)
+    np.testing.assert_allclose(r[-1], 4.5)
+    np.testing.assert_allclose(c[-1], 4.5)
+    np.testing.assert_array_equal(np.floor(r), [0,1,2,3,4])
+    np.testing.assert_array_equal(np.floor(c), [0,1,2,3,4])
