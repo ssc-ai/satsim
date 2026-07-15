@@ -24,6 +24,7 @@ from satsim.image.fpa import analog_to_digital, mv_to_pe, pe_to_mv, add_patch, c
 from satsim.image.psf import gen_gaussian, eod_to_sigma, gen_from_poppy_configuration
 from satsim.image.noise import add_photon_noise, add_read_noise
 from satsim.image.render import render_piecewise, render_full, render_epsf, normalize_star_render_mode
+from satsim.image.coordinates import oversampled_to_detector
 from satsim.image.epsf import (
     EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
     build_epsf_lut,
@@ -339,6 +340,77 @@ def _parse_sensor_params(ssp):
     return num_frames, t_exposure, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width
 
 
+def _sample_bilinear_clamped(values, row, col):
+    values = np.asarray(values, dtype=np.float32)
+    row = float(np.clip(row, 0.0, values.shape[0] - 1))
+    col = float(np.clip(col, 0.0, values.shape[1] - 1))
+    r0 = int(np.floor(row))
+    c0 = int(np.floor(col))
+    r1 = min(r0 + 1, values.shape[0] - 1)
+    c1 = min(c0 + 1, values.shape[1] - 1)
+    dr = row - r0
+    dc = col - c0
+    top = values[r0, c0] * (1.0 - dc) + values[r0, c1] * dc
+    bottom = values[r1, c0] * (1.0 - dc) + values[r1, c1] * dc
+    return float(top * (1.0 - dr) + bottom * dr)
+
+
+def _weighted_detector_centroid(rows, cols, weights):
+    rows = np.asarray(rows, dtype=np.float64)
+    cols = np.asarray(cols, dtype=np.float64)
+    weights = np.asarray(weights, dtype=np.float64)
+    mask = np.isfinite(rows) & np.isfinite(cols)
+    if weights.shape == rows.shape:
+        mask &= np.isfinite(weights) & (weights > 0.0)
+    else:
+        weights = np.ones_like(rows, dtype=np.float64)
+    if not np.any(mask):
+        return None
+    total = float(np.sum(weights[mask]))
+    if total <= 0.0:
+        return float(np.mean(rows[mask])), float(np.mean(cols[mask]))
+    return (
+        float(np.sum(rows[mask] * weights[mask]) / total),
+        float(np.sum(cols[mask] * weights[mask]) / total),
+    )
+
+
+def _add_cloud_transmission_to_objects(obs_os_pix, cloud_transmission):
+    if cloud_transmission is None:
+        return
+    for ob in obs_os_pix:
+        rows = np.asarray(ob.get('rrr', []), dtype=np.float64)
+        cols = np.asarray(ob.get('rcc', []), dtype=np.float64)
+        weights = np.asarray(ob.get('pp', []), dtype=np.float64)
+        centroid = _weighted_detector_centroid(rows, cols, weights)
+        if centroid is None:
+            continue
+        ob['cloud_sample_row'] = centroid[0]
+        ob['cloud_sample_col'] = centroid[1]
+        ob['cloud_transmission'] = _sample_bilinear_clamped(
+            cloud_transmission,
+            centroid[0],
+            centroid[1],
+        )
+        path_mask = np.isfinite(rows) & np.isfinite(cols)
+        if np.count_nonzero(path_mask) > 1:
+            path_rows = rows[path_mask]
+            path_cols = cols[path_mask]
+        else:
+            path_rows = np.array([], dtype=np.float64)
+            path_cols = np.array([], dtype=np.float64)
+        if path_rows.size > 1 and (
+                np.max(path_rows) - np.min(path_rows) > 1e-6 or
+                np.max(path_cols) - np.min(path_cols) > 1e-6):
+            mid = path_rows.size // 2
+            samples = [
+                _sample_bilinear_clamped(cloud_transmission, path_rows[0], path_cols[0]),
+                _sample_bilinear_clamped(cloud_transmission, path_rows[mid], path_cols[mid]),
+                _sample_bilinear_clamped(cloud_transmission, path_rows[-1], path_cols[-1]),
+            ]
+            ob['cloud_transmission_min'] = float(np.min(samples))
+
+
 def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug', with_meta=False, eager=True, num_sets=0):
     """Generator function for a single set of images.
 
@@ -563,6 +635,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
     if 'save_segmentation' not in ssp['sim']:
         ssp['sim']['save_segmentation'] = False
+
+    if 'save_cloud_transmission' not in ssp['sim']:
+        ssp['sim']['save_cloud_transmission'] = False
 
     if 'save_pickle' not in ssp['sim']:
         ssp['sim']['save_pickle'] = False
@@ -1230,6 +1305,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         phase_oversample=epsf_phase_oversample,
                         fallback_to_fft_for_models=epsf_cfg.get('fallback_to_fft_for_models', False),
                         psf_os=psf_os_curr,
+                        psf_support_shape=(psf_h_os, psf_w_os),
                         epsf_normalize=epsf_cfg.get('normalize', False),
                         epsf_crop=frame_epsf_crop_cfg,
                         epsf_metadata=epsf_metadata,
@@ -1280,6 +1356,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     or np.any(cloud_brightness_components_np['cloud_source_brightness_pe'])
                 )
                 astrometrics['clouds'] = frame_cloud_field.metadata
+                if ssp['sim'].get('save_cloud_transmission', False):
+                    astrometrics['clouds']['cloud_transmission'] = {
+                        'scale': 65535,
+                        'dtype': 'uint16',
+                        'clear_value': 65535,
+                    }
 
             # render
             epsf_render_metadata = {}
@@ -1391,7 +1473,13 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     # for each observation, create a segmentation mask
                     obs_os_pix_sorted = sorted(obs_os_pix, key=lambda k: k['pe'], reverse=False)
                     for ob in obs_os_pix_sorted:
-                        fpa_segmentation, _, _, _, _ = _render(ob['rr'], ob['cc'], ob['pp'], [], [], [], False)
+                        render_mask = np.isfinite(ob['pp']) & (np.asarray(ob['pp']) != 0.0)
+                        fpa_segmentation, _, _, _, _ = _render(
+                            np.asarray(ob['rr'])[render_mask],
+                            np.asarray(ob['cc'])[render_mask],
+                            np.asarray(ob['pp'])[render_mask],
+                            [], [], [], False,
+                        )
                         if 'crop' in ssp['fpa']:
                             cp = ssp['fpa']['crop']
                             fpa_segmentation = crop(fpa_segmentation, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
@@ -1409,6 +1497,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             crop_dc_tf = dc_tf
             crop_rn_tf = rn_tf
             crop_background_component_tfs = dict(frame_background_component_tfs)
+            crop_pre_cloud_bg_tf = frame_pre_cloud_bg_tf
+            crop_cloud_transmission_tf = cloud_transmission_tf
             crop_h_fpa_os = h_fpa_os
             crop_w_fpa_os = w_fpa_os
             crop_gain_tf = gain_tf
@@ -1423,6 +1513,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     fpa_conv_star = crop(fpa_conv_star, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     if len(frame_bg_tf.shape) == 2:
                         crop_bg_tf = crop(frame_bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if len(frame_pre_cloud_bg_tf.shape) == 2:
+                        crop_pre_cloud_bg_tf = crop(frame_pre_cloud_bg_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
+                    if cloud_transmission_tf is not None:
+                        crop_cloud_transmission_tf = crop(cloud_transmission_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
                     for key, value in frame_background_component_tfs.items():
                         if len(value.shape) == 2:
                             crop_background_component_tfs[key] = crop(value, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
@@ -1451,8 +1545,16 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     opp['rrr'] = opp['rrr'] - cp['height_offset']
                     opp['rcc'] = opp['rcc'] - cp['width_offset']
 
-            if segmentation is not None:
-                if frame_cloud_field is not None:
+            crop_cloud_transmission_np = None
+            if crop_cloud_transmission_tf is not None:
+                crop_cloud_transmission_np = crop_cloud_transmission_tf.numpy()
+                _add_cloud_transmission_to_objects(obs_os_pix, crop_cloud_transmission_np)
+
+            if frame_cloud_field is not None and (
+                    ssp['sim']['save_segmentation'] or ssp['sim'].get('save_cloud_transmission', False)):
+                if segmentation is None:
+                    segmentation = OrderedDict()
+                if ssp['sim']['save_segmentation']:
                     cloud_mask = frame_cloud_field.mask.astype(np.uint16)
                     if 'crop' in ssp['fpa']:
                         cp = ssp['fpa']['crop']
@@ -1461,7 +1563,17 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                             cp['width_offset']:cp['width_offset'] + cp['width'],
                         ]
                     segmentation['cloud_segmentation'] = cloud_mask
+                if ssp['sim'].get('save_cloud_transmission', False) and crop_cloud_transmission_np is not None:
+                    transmission_scaled = np.round(
+                        np.clip(crop_cloud_transmission_np, 0.0, 1.0) * 65535.0
+                    ).astype(np.uint16)
+                    segmentation['cloud_transmission'] = transmission_scaled
 
+            has_photometry_segmentation = segmentation is not None and (
+                segmentation.get('object_segmentation') is not None or
+                segmentation.get('star_segmentation') is not None
+            )
+            if has_photometry_segmentation:
                 def _to_numpy(value):
                     if hasattr(value, 'numpy'):
                         return value.numpy()
@@ -1535,6 +1647,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     'tran': star_tran_os,
                     'min_mv': ssp['sim']['star_annotation_threshold'] if isinstance(ssp['sim']['star_annotation_threshold'], numbers.Number) else 15
                 }
+                if crop_cloud_transmission_np is not None:
+                    star_os_pix['cloud_transmission'] = crop_cloud_transmission_np
             else:
                 star_os_pix = None
 
@@ -1543,6 +1657,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 ground_truth['target_pe'] = fpa_conv_targ.numpy()
                 ground_truth['star_pe'] = fpa_conv_star.numpy()
                 ground_truth['background_pe'] = crop_bg_tf.numpy()
+                if crop_cloud_transmission_tf is not None:
+                    ground_truth['background_pre_cloud_pe'] = crop_pre_cloud_bg_tf.numpy()
+                    ground_truth['cloud_transmission'] = crop_cloud_transmission_tf.numpy()
                 for key in frame_pre_cloud_component_keys:
                     if frame_background_component_active.get(key, False):
                         ground_truth[key] = crop_background_component_tfs[key].numpy()
@@ -2317,6 +2434,16 @@ def _gen_objects(ssp, render_mode,
 
         logger.debug('Average brightness for target: {:.2f} mv, {:.2f} pix.'.format(avg_mv, len(opp) / s_osf))
 
+        # Trajectory generators retain exact start/mid/end control points with
+        # zero duration and zero flux for annotations. Keep those points in
+        # obs_os_pix below, but do not send them through the renderers. This is
+        # numerically identical and prevents the annotation controls from
+        # adding work for large target catalogs.
+        render_mask = np.isfinite(opp) & (np.asarray(opp) != 0.0)
+        orr_render = np.asarray(orr)[render_mask]
+        occ_render = np.asarray(occ)[render_mask]
+        opp_render = np.asarray(opp)[render_mask]
+
         # TODO generalize `model`
         # sprint based brightness models
         if 'model' in o and not has_brightness_model:
@@ -2324,20 +2451,20 @@ def _gen_objects(ssp, render_mode,
                 if callable(o['model']):
                     fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
                     patch = o['model'](x=None, t=ott[0])
-                    fpa_os_w_targets = add_patch(fpa_os_w_targets, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
+                    fpa_os_w_targets = add_patch(fpa_os_w_targets, orr_render, occ_render, opp_render, patch, h_pad_os_div2, w_pad_os_div2)
                     obs_model.append(fpa_os_w_targets)
                     # TODO support sub-sample patching
                 elif o['model']['mode'] == 'sprite':
                     patch = load_sprite_from_file(filename=o['model']['filename']) if 'mode' in o['model'] else o['model']
                     fpa_os_clear = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
-                    fpa_os_w_targets = add_patch(fpa_os_clear, orr, occ, opp, patch, h_pad_os_div2, w_pad_os_div2)
+                    fpa_os_w_targets = add_patch(fpa_os_clear, orr_render, occ_render, opp_render, patch, h_pad_os_div2, w_pad_os_div2)
                     obs_model.append(fpa_os_w_targets)
             else:
                 logger.warning('Sprite models not supported for piecewise rendering.')
         else:
-            orrr = np.concatenate((orrr, orr))
-            occc = np.concatenate((occc, occ))
-            oppp = np.concatenate((oppp, opp))
+            orrr = np.concatenate((orrr, orr_render))
+            occc = np.concatenate((occc, occ_render))
+            oppp = np.concatenate((oppp, opp_render))
 
         if obs_cache[i] is not None:
             ra_mid, dec_mid, _ = get_analytical_los(
@@ -2368,8 +2495,8 @@ def _gen_objects(ssp, render_mode,
             'rr': orr,
             'cc': occ,
             'pp': opp,
-            'rrr': orr / s_osf,
-            'rcc': occ / s_osf,
+            'rrr': oversampled_to_detector(orr, s_osf),
+            'rcc': oversampled_to_detector(occ, s_osf),
             'mv': avg_mv,
             'pe': avg_pe,
             'id': i + 1,  # 0 is reserved for the background for segmentation

@@ -17,6 +17,14 @@ satsim.image.augment module
    :undoc-members:
    :show-inheritance:
 
+satsim.image.coordinates module
+-------------------------------
+
+.. automodule:: satsim.image.coordinates
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.image.epsf module
 ------------------------
 

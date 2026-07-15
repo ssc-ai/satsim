@@ -1,13 +1,11 @@
 """Tests for `satsim.image.fpa` package."""
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
-import platform
 
 import numpy as np
 import tensorflow as tf
 
 from satsim.dataset.augment import augment_satnet_with_satsim
-from satsim.util.system import is_tensorflow_running_on_cpu
 
 
 def test_dataset_augment():
@@ -88,11 +86,28 @@ def test_dataset_augment():
         img = tf.squeeze(i).numpy()
         bb = b.numpy()
 
-        if is_tensorflow_running_on_cpu() and platform.machine() == 'x86_64':
-            assert(abs(int(np.sum(img)) - 262143840) <= 256)
-        else:
-            assert(abs(int(np.sum(img)) - 262144096) <= 256)
-        np.testing.assert_array_almost_equal(bb[0], [0.48079428, 0.48079428, 0.5218099, 0.51985675, 1.], decimal=5)
+        # The noiseless pre-A/D target contains 184.7226 pe on both CPU and
+        # GPU. After convolution, dividing by the 1.5 pe/DN gain and flooring
+        # each pixel can differ by a couple of DN when backend roundoff moves
+        # values across integer boundaries. Check the injected signal rather
+        # than requiring a bit-identical reduction of the large bias plane.
+        bias_dn = ssp['fpa']['a2d']['bias'] * img.size
+        injected_dn = np.sum(img, dtype=np.float64) - bias_dn
+        np.testing.assert_allclose(injected_dn, 108.0, rtol=0, atol=2.0)
+        box_pad = 10.0 / ssp['fpa']['width']
+        row_motion = 1.0 / ssp['fpa']['height']
+        np.testing.assert_allclose(
+            bb[0],
+            [
+                0.5 - box_pad,
+                0.5 - box_pad,
+                0.5 + row_motion + box_pad,
+                0.5 + box_pad,
+                1.0,
+            ],
+            rtol=0,
+            atol=1e-7,
+        )
 
     data_satsim = augment_satnet_with_satsim(ds, ssp, prob=0.0)
 

@@ -10,6 +10,7 @@ from functools import lru_cache
 import numpy as np
 
 from satsim.image.epsf import build_epsf_lut, phase_nearest_error_bound_px
+from satsim.image.coordinates import detector_to_oversampled
 from satsim.image.psf import gen_gaussian
 from satsim.image.render import render_epsf, render_full
 
@@ -32,8 +33,7 @@ def _aperture_flux(image, row, col, radius):
 
 
 def _detector_to_oversampled(value, osf):
-    # render_* receives coordinates in SatSim's oversampled point convention.
-    return value * osf + 0.5 * (osf - 2)
+    return detector_to_oversampled(value, osf)
 
 
 @lru_cache(maxsize=None)

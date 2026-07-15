@@ -9,6 +9,7 @@ import tensorflow as tf
 from satsim.image.render import render_full, render_piecewise, render_epsf
 from satsim.image.epsf import build_epsf_lut
 from satsim.image.psf import gen_gaussian
+from satsim.image.coordinates import detector_to_oversampled
 
 
 def _centroid(image):
@@ -19,8 +20,7 @@ def _centroid(image):
 
 
 def _detector_to_oversampled(value, osf):
-    # render_full receives coordinates in SatSim's oversampled point convention.
-    return value * osf + 0.5 * (osf - 2)
+    return detector_to_oversampled(value, osf)
 
 
 def _render_setup(osf=3):

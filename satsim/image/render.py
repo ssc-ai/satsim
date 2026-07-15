@@ -22,6 +22,37 @@ from satsim.image.epsf import (
 logger = logging.getLogger(__name__)
 
 
+def _apply_psf_support_center_correction(position, offset=-0.5):
+    """Apply the PSF-support correction to a pixel-center position.
+
+    FFT convolution and ePSF lookup tables built from even-sized PSF support
+    place their center half an oversampled pixel above the supplied coordinate;
+    odd support is already centered. Applying the correction at the deposit
+    boundary makes both cases follow the canonical pixel-center convention.
+    """
+    return tf.cast(position, tf.float32) + tf.cast(offset, tf.float32)
+
+
+def _psf_deposit_offset(psf_os, axis, default=-0.5, support_shape=None):
+    """Return the center correction for one PSF support axis.
+
+    The offset is the position of the support's geometric center relative to
+    the convolution anchor: ``-0.5`` for even support, ``0.0`` for odd. The
+    known support shape takes precedence when the PSF array itself is
+    unavailable (for example, a warm ePSF LUT cache), so registration never
+    depends on cache state.
+    """
+    if psf_os is not None:
+        size = psf_os.shape[axis]
+        if size is not None:
+            return -0.5 if int(size) % 2 == 0 else 0.0
+        dynamic_size = tf.shape(psf_os)[axis]
+        return tf.where(tf.equal(tf.math.floormod(dynamic_size, 2), 0), -0.5, 0.0)
+    if support_shape is not None:
+        return -0.5 if int(support_shape[axis]) % 2 == 0 else 0.0
+    return default
+
+
 def normalize_star_render_mode(star_render_mode):
     """Normalize supported star rendering modes.
 
@@ -178,10 +209,21 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
         raise ValueError("point_rendering must be 'floor' or 'bilinear' for FFT rendering")
     downsample_method = 'block_sum' if point_rendering == 'bilinear' else 'pool'
 
+    # The unblurred block-sum path already follows the canonical convention.
+    # FFT convolution with even PSF support carries the historical
+    # half-subpixel deposit offset; odd support is already centered.
+    star_position_offset = (0.0, 0.0)
+    if psf_os is not None:
+        row_offset = _psf_deposit_offset(psf_os, 0)
+        col_offset = _psf_deposit_offset(psf_os, 1)
+        r_obs_os = _apply_psf_support_center_correction(r_obs_os, row_offset)
+        c_obs_os = _apply_psf_support_center_correction(c_obs_os, col_offset)
+        star_position_offset = (row_offset, col_offset)
+
     if star_render_mode == 'streak':
-        fpa_os_w_stars = transform_and_fft(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering)
+        fpa_os_w_stars = transform_and_fft(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering, position_offset=star_position_offset)
     else:
-        fpa_os_w_stars = transform_and_add_counts(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering)
+        fpa_os_w_stars = transform_and_add_counts(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering, position_offset=star_position_offset)
 
     # render modeled targets
     fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
@@ -252,8 +294,14 @@ def render_epsf(
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
         batch_size_cap=None, phase_oversample=1,
         fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=False,
-        epsf_crop=None, epsf_metadata=None):
-    """Render directly in detector space using an ePSF lookup table."""
+        epsf_crop=None, epsf_metadata=None, psf_support_shape=None):
+    """Render directly in detector space using an ePSF lookup table.
+
+    Pass the ``psf_os`` used to build ``epsf_lut``, or its known
+    ``psf_support_shape`` ``(height, width)`` when the array itself is
+    unavailable (warm LUT cache), so source registration can account for odd
+    versus even PSF support. If both are omitted, even support is assumed.
+    """
     point_rendering = str(point_rendering).lower()
     if point_rendering not in ('floor', 'bilinear', 'phase_nearest'):
         raise ValueError("point_rendering must be 'floor', 'bilinear', or 'phase_nearest'")
@@ -293,6 +341,13 @@ def render_epsf(
             )
 
         raise NotImplementedError('sim.mode="epsf" does not support obs_model targets without fallback_to_fft_for_models')
+
+    # ePSF LUTs share the even-support center offset of FFT convolution.
+    # Apply the correction once at the native renderer boundary.
+    row_offset = _psf_deposit_offset(psf_os, 0, support_shape=psf_support_shape)
+    col_offset = _psf_deposit_offset(psf_os, 1, support_shape=psf_support_shape)
+    r_obs_os = _apply_psf_support_center_correction(r_obs_os, row_offset)
+    c_obs_os = _apply_psf_support_center_correction(c_obs_os, col_offset)
 
     s_osf_i = tf.cast(s_osf, tf.int32)
     h_fpa_os_i = tf.cast(h_fpa_os, tf.int32)
@@ -375,6 +430,7 @@ def render_epsf(
             epsf_tiers=epsf_tiers,
             batch_element_budget=batch_element_budget,
             batch_size_cap=batch_size_cap,
+            position_offset_os=(row_offset, col_offset),
         )
     else:
         epsf_tiers = resolve_epsf_tiers(epsf_lut, epsf_crop)
@@ -411,6 +467,7 @@ def render_epsf(
             epsf_tiers=epsf_tiers,
             batch_element_budget=batch_element_budget,
             batch_size_cap=batch_size_cap,
+            position_offset_os=(row_offset, col_offset),
         )
 
     fpa_targ = tf.zeros([h_pad_det, w_pad_det], tf.float32)

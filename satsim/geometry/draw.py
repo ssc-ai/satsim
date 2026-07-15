@@ -1,18 +1,20 @@
 from __future__ import division, print_function, absolute_import
 
-import logging
-
 import numpy as np
 from skimage.draw import line, bezier_curve
 
-logger = logging.getLogger(__name__)
+from satsim.image.coordinates import normalized_to_oversampled
+
+def _rasterize_position(value):
+    """Return the pixel center containing a continuous center coordinate."""
+    return int(np.floor(float(value) + 0.5))
 
 
 def gen_line(height, width, origin, velocity, pe, t_start, t_end):
     """Generates a line segment in pixel coordinates based on a starting point
-    (`t = 0`), velocity, start time, and end time. Counts, `pe`, is
-    spread evenly across each pixel. Typically used to inject a moving target
-    onto an oversampled image.
+    (`t = 0`), velocity, start time, and end time. Counts, `pe`, are
+    spread evenly across continuous time bins. Typically used to inject a
+    moving target onto an oversampled image.
 
     Examples::
 
@@ -22,8 +24,10 @@ def gen_line(height, width, origin, velocity, pe, t_start, t_end):
         height: `int`, image height in number of pixels.
         width: `int`, image width in number of pixels.
         origin: `[float, float]`, normalized starting point on image in
-            [row,col] where `[0,0]` represents the top left corner and `[1,1]`
-            the bottom right corner
+            [row,col]. Values are normalized image-edge coordinates: `[0,0]`
+            is the top-left edge, `[1,1]` is the bottom-right edge, and `0.5`
+            is the geometric center. The corresponding zero-based pixel-center
+            coordinate is ``origin * size - 0.5``.
         velocity: `[float,float]`, velocity in pixel/sec in `[row,col]` order
         pe: `float`, brightness in pe/sec
         t_start: `float`, start time in seconds from epoch (`t=0`)
@@ -36,8 +40,8 @@ def gen_line(height, width, origin, velocity, pe, t_start, t_end):
             pe: `list`, list of counts (e.g. photoelectrons)
             t: `list`, list of start and stop times. length is +1 larger than `rr`, `cc`, and `pe`.
     """
-    r0 = height * origin[0]
-    c0 = width * origin[1]
+    r0 = normalized_to_oversampled(origin[0], height)
+    c0 = normalized_to_oversampled(origin[1], width)
 
     r1 = r0 + velocity[0] * t_start
     c1 = c0 + velocity[1] * t_start
@@ -45,20 +49,19 @@ def gen_line(height, width, origin, velocity, pe, t_start, t_end):
     r2 = r0 + velocity[0] * t_end
     c2 = c0 + velocity[1] * t_end
 
-    rr, cc = line(int(r1), int(c1), int(r2), int(c2))
-    n = len(rr)
-    t = np.linspace(t_start, t_end, n + 1)
-
-    pe = (t_end - t_start) * pe / n
-
-    return (rr, cc, np.asarray([pe for i in range(len(rr))]), t)
+    return gen_line_from_endpoints(r1, c1, r2, c2, pe, t_start, t_end)
 
 
 def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end):
     """Generates a line segment in pixel coordinates based on a starting point
-    at `t_start` and an ending point at `t_end`. Counts, `pe`, is
-    spread evenly across each pixel. Typically used to inject a moving target
-    onto an oversampled image.
+    at `t_start` and an ending point at `t_end`. Counts, `pe`, are spread
+    evenly across continuous time bins. Typically used to inject a moving
+    target onto an oversampled image.
+
+    Flux-bearing positions are the mean continuous position in each time bin,
+    so their weighted centroid is the exact exposure midpoint. Exact start and
+    end positions are included as zero-duration, zero-flux control samples for
+    trajectory annotations.
 
     Args:
         r0: `float`, starting row.
@@ -76,20 +79,57 @@ def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end):
             pe: `list`, list of counts (e.g. photoelectrons)
             t: `list`, list of start and stop times. length is +1 larger than `rr`, `cc`, and `pe`.
     """
-    rr, cc = line(int(r0), int(c0), int(r1), int(c1))
-    n = len(rr)
-    t = np.linspace(t_start, t_end, n + 1)
+    r0i = _rasterize_position(r0)
+    c0i = _rasterize_position(c0)
+    r1i = _rasterize_position(r1)
+    c1i = _rasterize_position(c1)
+    rr_pixels, _ = line(r0i, c0i, r1i, c1i)
+    n = len(rr_pixels)
 
-    pe = (t_end - t_start) * pe / n
+    if r0 == r1 and c0 == c1:
+        return (
+            np.asarray([r0], dtype=np.float64),
+            np.asarray([c0], dtype=np.float64),
+            np.asarray([(t_end - t_start) * pe]),
+            np.asarray([t_start, t_end]),
+        )
 
-    return (rr, cc, np.asarray([pe for i in range(len(rr))]), t)
+    # Use the rasterized line only to choose a sampling density. Depositing
+    # its integer pixel centers would quantize the trajectory and can move its
+    # centroid by almost a full oversampled pixel. Each returned point is the
+    # mean continuous position over the matching time bin, so equal-flux bins
+    # reproduce the exact exposure centroid even when the complete motion is
+    # subpixel.
+    u = (np.arange(n, dtype=np.float64) + 0.5) / n
+    rr_flux = r0 + (r1 - r0) * u
+    cc_flux = c0 + (c1 - c0) * u
+
+    # Retain exact zero-flux endpoints for trajectory annotations. Duplicate
+    # time boundaries keep callable brightness models from assigning flux to
+    # those control samples.
+    rr = np.concatenate(([r0], rr_flux, [r1]))
+    cc = np.concatenate(([c0], cc_flux, [c1]))
+    counts = np.concatenate((
+        [0.0],
+        np.full(n, (t_end - t_start) * pe / n),
+        [0.0],
+    ))
+    t_flux = np.linspace(t_start, t_end, n + 1)
+    t = np.concatenate(([t_start], t_flux, [t_end]))
+
+    return (rr, cc, counts, t)
 
 
 def gen_curve_from_points(r0, c0, r1, c1, r2, c2, pe, t_start, t_end):
     """Generates a bezier curve in pixel coordinates based on a starting point
     at `t_start`, an ending point at `t_end`, and a mid point at `(t_start + t_end) / 2`.
-    Counts, `pe`, is spread evenly across each pixel. Typically used to inject a moving target
-    onto an oversampled image.
+    Counts, `pe`, are spread evenly across continuous time bins. Typically used
+    to inject a moving target onto an oversampled image.
+
+    Flux-bearing positions are the mean continuous position in each time bin,
+    which preserves the exact quadratic exposure centroid. Exact start, middle,
+    and end positions are included as zero-duration, zero-flux control samples
+    for trajectory annotations.
 
     Args:
         r0: `float`, starting row.
@@ -111,31 +151,58 @@ def gen_curve_from_points(r0, c0, r1, c1, r2, c2, pe, t_start, t_end):
     """
     rb = 2 * r1 - r0 / 2 - r2 / 2
     cb = 2 * c1 - c0 / 2 - c2 / 2
-    r0, c0, rb, cb, r2, c2 = int(r0), int(c0), int(rb), int(cb), int(r2), int(c2)
-    rr, cc = bezier_curve(r0, c0, rb, cb, r2, c2, 1.0, None)
-    n = len(rr)
-    t = np.linspace(t_start, t_end, n + 1)
+    r0i = _rasterize_position(r0)
+    c0i = _rasterize_position(c0)
+    rbi = _rasterize_position(rb)
+    cbi = _rasterize_position(cb)
+    r2i = _rasterize_position(r2)
+    c2i = _rasterize_position(c2)
+    rr_pixels, _ = bezier_curve(r0i, c0i, rbi, cbi, r2i, c2i, 1.0, None)
+    n = len(rr_pixels)
 
-    pe = (t_end - t_start) * pe / n
+    if r0 == r1 == r2 and c0 == c1 == c2:
+        return (
+            np.asarray([r0], dtype=np.float64),
+            np.asarray([c0], dtype=np.float64),
+            np.asarray([(t_end - t_start) * pe]),
+            np.asarray([t_start, t_end]),
+        )
 
-    # sort
-    n2 = int(n / 2)
-    if r0 == rr[0] and c0 == cc[0] and r2 == rr[-1] and c2 == cc[-1]:
-        pass
-    elif r0 == rr[-1] and c0 == cc[-1] and r2 == rr[0] and c2 == cc[0]:
-        rr = np.flip(rr)
-        cc = np.flip(cc)
-    elif r0 == rr[0] and c0 == cc[0]:
-        n2 = np.where(((r2, c2) == np.stack((rr,cc), axis=-1)).all(axis=-1))[0][0]
-        rr = np.concatenate((rr[0:n2], np.flip(rr[n2:])))
-        cc = np.concatenate((cc[0:n2], np.flip(cc[n2:])))
-    elif r2 == rr[0] and c2 == cc[0]:
-        rr = np.flip(rr)
-        cc = np.flip(cc)
-        n2 = np.where(((r0, c0) == np.stack((rr,cc), axis=-1)).all(axis=-1))[0][0]
-        rr[0:n2 + 1] = np.flip(rr[0:n2 + 1])
-        cc[0:n2 + 1] = np.flip(cc[0:n2 + 1])
-    else:
-        logger.debug('Bezier curve order unknown for: {}, {}, {}, {}, {}, {}'.format(r0, c0, r1, c1, r2, c2))
+    # Use an even number of flux bins so the exact mid-exposure control point
+    # can be retained as a zero-duration annotation sample between bins.
+    if n % 2 != 0:
+        n += 1
 
-    return (rr, cc, np.asarray([pe for i in range(len(rr))]), t)
+    # As with lines, rasterization determines only how many samples are
+    # needed. Integrate the original continuous quadratic over each matching
+    # time bin instead of adding fractional offsets back to rasterized pixels:
+    # the latter loses fractional curvature and can move its centroid in the
+    # wrong direction.
+    u0 = np.arange(n, dtype=np.float64) / n
+    u1 = np.arange(1, n + 1, dtype=np.float64) / n
+    mean_u = (u0 + u1) / 2.0
+    mean_u2 = (u0**2 + u0 * u1 + u1**2) / 3.0
+
+    ar = r0 - 2.0 * rb + r2
+    br = 2.0 * (rb - r0)
+    ac = c0 - 2.0 * cb + c2
+    bc = 2.0 * (cb - c0)
+    rr_flux = ar * mean_u2 + br * mean_u + r0
+    cc_flux = ac * mean_u2 + bc * mean_u + c0
+
+    mid = n // 2
+    rr = np.concatenate(([r0], rr_flux[:mid], [r1], rr_flux[mid:], [r2]))
+    cc = np.concatenate(([c0], cc_flux[:mid], [c1], cc_flux[mid:], [c2]))
+    counts_flux = np.full(n, (t_end - t_start) * pe / n)
+    counts = np.concatenate(([0.0], counts_flux[:mid], [0.0], counts_flux[mid:], [0.0]))
+
+    t_flux = np.linspace(t_start, t_end, n + 1)
+    t = np.concatenate((
+        [t_start],
+        t_flux[:mid + 1],
+        [t_flux[mid]],
+        t_flux[mid + 1:],
+        [t_end],
+    ))
+
+    return (rr, cc, counts, t)

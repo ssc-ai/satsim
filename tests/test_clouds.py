@@ -5,6 +5,7 @@ import os
 
 import numpy as np
 import pytest
+import tifffile
 
 pytestmark = pytest.mark.filterwarnings(
     'ignore:jsonschema.RefResolver is deprecated:DeprecationWarning'
@@ -31,6 +32,8 @@ from satsim.clouds.constants import (
 )
 from satsim.clouds.generation import cloud_density_from_noise, noise_grid
 from satsim.image.fpa import mv_to_pe
+from satsim import gen_images
+from satsim.util import MultithreadedTaskQueue
 
 
 def _ssp(clouds=None):
@@ -66,6 +69,12 @@ def _cloud_schema_validator():
             continue
         with open(os.path.join(types_dir, filename), 'r') as f:
             store[base_uri + 'types/' + filename] = json.load(f)
+    generator_dir = os.path.abspath('schema/v1/generators')
+    for filename in os.listdir(generator_dir):
+        if not filename.endswith('.json'):
+            continue
+        with open(os.path.join(generator_dir, filename), 'r') as f:
+            store[base_uri + 'generators/' + filename] = json.load(f)
 
     resolver = jsonschema.RefResolver(
         base_uri=schema['$id'],
@@ -1346,8 +1355,37 @@ def _run_runtime_cloud_frames(ssp):
     from satsim.satsim import image_generator
     from satsim.util import configure_eager
 
-    configure_eager()
+    try:
+        configure_eager()
+    except RuntimeError as exc:
+        if 'Physical devices cannot be modified after being initialized' not in str(exc):
+            raise
     return list(image_generator(ssp, output_dir='./.images', with_meta=True, num_sets=1))
+
+
+def _broadcast_truth_plane(value, shape):
+    value = np.asarray(value, dtype=np.float32)
+    return value if value.shape == shape else np.resize(value, shape)
+
+
+def _assert_cloud_background_invariant(ground_truth):
+    background_pe = np.asarray(ground_truth['background_pe'], dtype=np.float32)
+    background_pre_cloud_pe = _broadcast_truth_plane(
+        ground_truth['background_pre_cloud_pe'],
+        background_pe.shape,
+    )
+    cloud_transmission = np.asarray(ground_truth['cloud_transmission'], dtype=np.float32)
+    cloud_brightness_pe = _broadcast_truth_plane(
+        ground_truth.get('cloud_brightness_pe', 0.0),
+        background_pe.shape,
+    )
+
+    np.testing.assert_allclose(
+        background_pe,
+        background_pre_cloud_pe * cloud_transmission + cloud_brightness_pe,
+        rtol=2e-5,
+        atol=2e-5,
+    )
 
 
 def test_runtime_static_cloud_crop_is_stable_across_frames():
@@ -1379,3 +1417,174 @@ def test_runtime_moving_cloud_crop_changes_background_and_ground_truth():
     np.testing.assert_allclose(frames[1][11]['background_pe'], second_bg)
     assert frames[0][13]['cloud_segmentation'].shape == first_bg.shape
     assert frames[1][13]['cloud_segmentation'].shape == second_bg.shape
+
+
+def test_runtime_cloud_ground_truth_includes_transmission_and_pre_cloud_background():
+    frames = _run_runtime_cloud_frames(_runtime_cloud_ssp([0.0, 0.0]))
+    ground_truth = frames[0][11]
+
+    assert 'cloud_transmission' in ground_truth
+    assert 'background_pre_cloud_pe' in ground_truth
+    assert 'cloud_brightness_pe' in ground_truth
+    transmission = np.asarray(ground_truth['cloud_transmission'])
+    assert transmission.shape == np.asarray(ground_truth['background_pe']).shape
+    assert np.min(transmission) >= 0.0
+    assert np.max(transmission) <= 1.0
+    _assert_cloud_background_invariant(ground_truth)
+
+
+def test_runtime_cloud_background_invariant_without_glow():
+    ssp = _runtime_cloud_ssp([0.0, 0.0])
+    ssp['clouds'][0]['brightness'] = None
+    frames = _run_runtime_cloud_frames(ssp)
+    ground_truth = frames[0][11]
+
+    assert 'cloud_brightness_pe' not in ground_truth
+    _assert_cloud_background_invariant(ground_truth)
+
+
+def test_runtime_clear_sky_omits_cloud_transmission_ground_truth():
+    ssp = _runtime_cloud_ssp([0.0, 0.0])
+    del ssp['clouds']
+    frames = _run_runtime_cloud_frames(ssp)
+    ground_truth = frames[0][11]
+
+    assert 'cloud_transmission' not in ground_truth
+    assert 'background_pre_cloud_pe' not in ground_truth
+
+
+def test_runtime_save_cloud_transmission_writes_standalone_product(tmp_path):
+    ssp = _runtime_cloud_ssp([0.0, 0.0])
+    ssp['fpa']['num_frames'] = 1
+    ssp['sim']['save_ground_truth'] = False
+    ssp['sim']['save_segmentation'] = False
+    ssp['sim']['save_cloud_transmission'] = True
+    ssp['sim']['save_jpeg'] = False
+    ssp['sim']['save_movie'] = False
+    ssp['sim']['save_czml'] = False
+
+    queue = MultithreadedTaskQueue(num_threads=1)
+    dirname = gen_images(
+        copy.deepcopy(ssp),
+        eager=True,
+        output_dir=str(tmp_path),
+        queue=queue,
+        set_name='cloud_truth',
+    )
+    queue.waitUntilEmpty()
+
+    annotation_dir = os.path.join(dirname, 'Annotations')
+    transmission_path = os.path.join(annotation_dir, 'cloud_truth.0000_cloud_transmission.tiff')
+    assert os.path.exists(transmission_path)
+    transmission = tifffile.imread(transmission_path)
+    assert transmission.dtype == np.uint16
+    assert transmission.shape == (ssp['fpa']['height'], ssp['fpa']['width'])
+    assert not os.path.exists(os.path.join(annotation_dir, 'cloud_truth.0000_cloud_segmentation.tiff'))
+    assert not os.path.exists(os.path.join(annotation_dir, 'cloud_truth.0000_star_segmentation.tiff'))
+    assert not os.path.exists(os.path.join(annotation_dir, 'cloud_truth.0000_object_segmentation.tiff'))
+
+    with open(os.path.join(annotation_dir, 'cloud_truth.0000.json'), 'r') as f:
+        annotation = json.load(f)
+    assert annotation['data']['metadata']['clouds']['cloud_transmission'] == {
+        'scale': 65535,
+        'dtype': 'uint16',
+        'clear_value': 65535,
+    }
+
+    frames = _run_runtime_cloud_frames(copy.deepcopy(ssp))
+    expected = frames[0][13]['cloud_transmission']
+    np.testing.assert_array_equal(transmission, expected)
+
+
+def test_runtime_cloud_transmission_products_follow_fpa_crop():
+    ssp = _runtime_cloud_ssp([0.0, 0.0])
+    ssp['fpa']['crop'] = {
+        'height': 10,
+        'width': 12,
+        'height_offset': 4,
+        'width_offset': 5,
+    }
+    ssp['sim']['save_cloud_transmission'] = True
+    frames = _run_runtime_cloud_frames(ssp)
+    ground_truth = frames[0][11]
+    segmentation = frames[0][13]
+
+    assert ground_truth['cloud_transmission'].shape == (10, 12)
+    assert _broadcast_truth_plane(ground_truth['background_pre_cloud_pe'], (10, 12)).shape == (10, 12)
+    assert segmentation['cloud_segmentation'].shape == (10, 12)
+    assert segmentation['cloud_transmission'].shape == (10, 12)
+    _assert_cloud_background_invariant(ground_truth)
+
+
+def test_runtime_save_cloud_transmission_is_noop_when_render_mode_none(tmp_path):
+    ssp = _runtime_cloud_ssp([0.0, 0.0])
+    ssp['fpa']['num_frames'] = 1
+    ssp['sim']['mode'] = 'none'
+    ssp['sim']['save_ground_truth'] = False
+    ssp['sim']['save_segmentation'] = False
+    ssp['sim']['save_cloud_transmission'] = True
+    ssp['sim']['save_jpeg'] = False
+    ssp['sim']['save_movie'] = False
+    ssp['sim']['save_czml'] = False
+
+    queue = MultithreadedTaskQueue(num_threads=1)
+    dirname = gen_images(
+        copy.deepcopy(ssp),
+        eager=True,
+        output_dir=str(tmp_path),
+        queue=queue,
+        set_name='cloud_truth_none',
+    )
+    queue.waitUntilEmpty()
+
+    assert not os.path.exists(os.path.join(dirname, 'Annotations', 'cloud_truth_none.0000_cloud_transmission.tiff'))
+
+
+def test_runtime_object_annotation_includes_cloud_transmission(tmp_path):
+    ssp = _runtime_cloud_ssp([0.0, 0.0])
+    ssp['fpa']['num_frames'] = 1
+    ssp['sim']['spacial_osf'] = 2
+    ssp['sim']['padding'] = 4
+    ssp['sim']['save_ground_truth'] = False
+    ssp['sim']['save_segmentation'] = False
+    ssp['sim']['save_cloud_transmission'] = True
+    ssp['sim']['save_jpeg'] = False
+    ssp['sim']['save_movie'] = False
+    ssp['sim']['save_czml'] = False
+    ssp['geometry']['obs']['list'] = [{
+        'mode': 'line',
+        'origin': [0.5, 0.5],
+        'velocity': [0.0, 0.0],
+        'pe': 1000.0,
+        'pe_truth': 1000.0,
+    }]
+    ssp['clouds'] = [{
+        'type': 'custom',
+        'seed': 123,
+        'coverage': 1.0,
+        'feature_scales_m': [20.0],
+        'tau_min': 0.4,
+        'tau_max': 0.4,
+        'brightness': None,
+    }]
+
+    queue = MultithreadedTaskQueue(num_threads=1)
+    dirname = gen_images(
+        copy.deepcopy(ssp),
+        eager=True,
+        output_dir=str(tmp_path),
+        queue=queue,
+        set_name='cloud_annotation',
+    )
+    queue.waitUntilEmpty()
+
+    with open(os.path.join(dirname, 'Annotations', 'cloud_annotation.0000.json'), 'r') as f:
+        annotation = json.load(f)
+    satellites = [
+        ob for ob in annotation['data']['objects']
+        if ob['class_name'] == 'Satellite'
+    ]
+    assert len(satellites) == 1
+    assert 'cloud_sample_row' in satellites[0]
+    assert 'cloud_sample_col' in satellites[0]
+    np.testing.assert_allclose(satellites[0]['cloud_transmission'], math.exp(-0.4), rtol=1e-5)

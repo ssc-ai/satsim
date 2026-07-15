@@ -1,6 +1,14 @@
 History
 =======
 
+0.25.1
+---------------------
+
+* Add cloud transmission truth planes, standalone cloud transmission TIFF output, and sampled cloud transmission annotations.
+* Fix coordinate registration between oversampled source positions, rendered flux centroids, SatNet annotations, and cloud-transmission samples using one zero-based pixel-center convention.
+* Fix target trajectories truncating sub-pixel coordinates. Targets now render at their exact positions relative to the star field; previously they were displaced by up to one oversampled pixel.
+
+
 0.25.0
 ---------------------
 
