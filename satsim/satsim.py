@@ -340,19 +340,23 @@ def _parse_sensor_params(ssp):
     return num_frames, t_exposure, h_fpa_os, w_fpa_os, s_osf, y_ifov, x_ifov, a2d_dtype, height, width
 
 
-def _sample_bilinear_clamped(values, row, col):
+def _sample_bilinear_clamped_many(values, rows, cols):
     values = np.asarray(values, dtype=np.float32)
-    row = float(np.clip(row, 0.0, values.shape[0] - 1))
-    col = float(np.clip(col, 0.0, values.shape[1] - 1))
-    r0 = int(np.floor(row))
-    c0 = int(np.floor(col))
-    r1 = min(r0 + 1, values.shape[0] - 1)
-    c1 = min(c0 + 1, values.shape[1] - 1)
-    dr = row - r0
-    dc = col - c0
+    rows = np.clip(np.asarray(rows, dtype=np.float64), 0.0, values.shape[0] - 1)
+    cols = np.clip(np.asarray(cols, dtype=np.float64), 0.0, values.shape[1] - 1)
+    r0 = np.floor(rows).astype(np.int64)
+    c0 = np.floor(cols).astype(np.int64)
+    r1 = np.minimum(r0 + 1, values.shape[0] - 1)
+    c1 = np.minimum(c0 + 1, values.shape[1] - 1)
+    dr = rows - r0
+    dc = cols - c0
     top = values[r0, c0] * (1.0 - dc) + values[r0, c1] * dc
     bottom = values[r1, c0] * (1.0 - dc) + values[r1, c1] * dc
-    return float(top * (1.0 - dr) + bottom * dr)
+    return top * (1.0 - dr) + bottom * dr
+
+
+def _sample_bilinear_clamped(values, row, col):
+    return float(_sample_bilinear_clamped_many(values, [row], [col])[0])
 
 
 def _weighted_detector_centroid(rows, cols, weights):
@@ -376,6 +380,14 @@ def _weighted_detector_centroid(rows, cols, weights):
 
 
 def _add_cloud_transmission_to_objects(obs_os_pix, cloud_transmission):
+    """Annotate objects with the cloud attenuation applied by the renderer.
+
+    The renderer scales each nonzero time-bin sample by the transmission at
+    its position before PSF convolution, so ``cloud_transmission`` is the
+    flux-weighted mean of the per-sample transmission along the object's
+    path. ``cloud_sample_row``/``cloud_sample_col`` locate the flux-weighted
+    path centroid.
+    """
     if cloud_transmission is None:
         return
     for ob in obs_os_pix:
@@ -387,11 +399,23 @@ def _add_cloud_transmission_to_objects(obs_os_pix, cloud_transmission):
             continue
         ob['cloud_sample_row'] = centroid[0]
         ob['cloud_sample_col'] = centroid[1]
-        ob['cloud_transmission'] = _sample_bilinear_clamped(
-            cloud_transmission,
-            centroid[0],
-            centroid[1],
-        )
+        finite_mask = np.isfinite(rows) & np.isfinite(cols)
+        if weights.shape == rows.shape:
+            weight_mask = finite_mask & np.isfinite(weights) & (weights > 0.0)
+        else:
+            weight_mask = np.zeros(rows.shape, dtype=bool)
+        if np.any(weight_mask):
+            transmission_samples = _sample_bilinear_clamped_many(
+                cloud_transmission, rows[weight_mask], cols[weight_mask])
+            ob['cloud_transmission'] = float(
+                np.sum(transmission_samples * weights[weight_mask]) /
+                np.sum(weights[weight_mask]))
+        else:
+            ob['cloud_transmission'] = _sample_bilinear_clamped(
+                cloud_transmission,
+                centroid[0],
+                centroid[1],
+            )
         path_mask = np.isfinite(rows) & np.isfinite(cols)
         if np.count_nonzero(path_mask) > 1:
             path_rows = rows[path_mask]
@@ -1363,10 +1387,58 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         'clear_value': 65535,
                     }
 
+            # Cloud extinction acts on the source light itself, so point
+            # sources are attenuated before PSF convolution: each target
+            # time-bin sample and each star is scaled by the transmission at
+            # its position. Multiplying the convolved image instead would let
+            # flux rendered behind a cloud edge leak into neighboring clear
+            # pixels (and vice versa) through the PSF tails.
+            pe_obs_os_render = pe_obs_os
+            pe_stars_os_render = pe_stars_os
+            if cloud_transmission_tf is not None:
+                cloud_transmission_np = np.asarray(frame_cloud_field.transmission, dtype=np.float32)
+                if int(tf.size(pe_obs_os)) > 0:
+                    obs_transmission = _sample_bilinear_clamped_many(
+                        cloud_transmission_np,
+                        oversampled_to_detector(np.asarray(r_obs_os, dtype=np.float64), s_osf),
+                        oversampled_to_detector(np.asarray(c_obs_os, dtype=np.float64), s_osf),
+                    )
+                    pe_obs_os_render = pe_obs_os * tf.cast(obs_transmission, tf.float32)
+                if int(tf.size(pe_stars_os)) > 0:
+                    # sample at the mid-exposure position, matching the star
+                    # annotation sampling in satsim.io.satnet
+                    r_stars_mid, c_stars_mid = rotate_and_translate(
+                        h_fpa_pad_os - 1.0,
+                        w_fpa_pad_os - 1.0,
+                        r_stars_os,
+                        c_stars_os,
+                        (t_start_star + t_end_star) * 0.5,
+                        star_rot_rate,
+                        star_tran_os,
+                    )
+                    star_transmission = _sample_bilinear_clamped_many(
+                        cloud_transmission_np,
+                        oversampled_to_detector(np.asarray(r_stars_mid, dtype=np.float64) - h_pad_os_div2, s_osf),
+                        oversampled_to_detector(np.asarray(c_stars_mid, dtype=np.float64) - w_pad_os_div2, s_osf),
+                    )
+                    pe_stars_os_render = pe_stars_os * tf.cast(star_transmission, tf.float32)
+                if obs_model is not None and len(obs_model) > 0:
+                    # extended-model sources are attenuated pixelwise in the
+                    # pre-convolution oversampled frame
+                    row_idx = np.clip(
+                        (np.arange(h_fpa_pad_os) - h_pad_os_div2) // s_osf,
+                        0, cloud_transmission_np.shape[0] - 1)
+                    col_idx = np.clip(
+                        (np.arange(w_fpa_pad_os) - w_pad_os_div2) // s_osf,
+                        0, cloud_transmission_np.shape[1] - 1)
+                    cloud_transmission_pad_os_tf = tf.constant(
+                        cloud_transmission_np[np.ix_(row_idx, col_idx)], tf.float32)
+                    obs_model = [om * cloud_transmission_pad_os_tf for om in obs_model]
+
             # render
             epsf_render_metadata = {}
             with frame_profiler.time('render'):
-                fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = _render(r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, ssp['sim']['calculate_snr'], epsf_metadata=epsf_render_metadata)
+                fpa_conv_star, fpa_conv_targ, fpa_os_w_targets, fpa_conv_os, fpa_conv_crop = _render(r_obs_os, c_obs_os, pe_obs_os_render, r_stars_os, c_stars_os, pe_stars_os_render, ssp['sim']['calculate_snr'], epsf_metadata=epsf_render_metadata)
 
             if epsf_render_metadata:
                 epsf_render_metadata['noise_fraction'] = frame_epsf_crop_cfg.get('noise_fraction') if frame_epsf_crop_cfg else None
@@ -1377,8 +1449,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
 
             frame_bg_tf = frame_pre_cloud_bg_tf
             if cloud_transmission_tf is not None:
-                fpa_conv_star = fpa_conv_star * cloud_transmission_tf
-                fpa_conv_targ = fpa_conv_targ * cloud_transmission_tf
                 frame_bg_tf = frame_pre_cloud_bg_tf * cloud_transmission_tf + cloud_brightness_pe_tf
                 for key in frame_pre_cloud_component_keys:
                     frame_background_component_tfs[key] = frame_background_component_tfs[key] * cloud_transmission_tf

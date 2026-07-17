@@ -1,6 +1,12 @@
 History
 =======
 
+0.25.2
+---------------------
+
+* Apply cloud transmission to point sources before PSF convolution.
+
+
 0.25.1
 ---------------------
 
