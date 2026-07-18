@@ -1588,3 +1588,231 @@ def test_runtime_object_annotation_includes_cloud_transmission(tmp_path):
     assert 'cloud_sample_row' in satellites[0]
     assert 'cloud_sample_col' in satellites[0]
     np.testing.assert_allclose(satellites[0]['cloud_transmission'], math.exp(-0.4), rtol=1e-5)
+
+
+def _pre_psf_target_ssp(velocity):
+    ssp = _runtime_cloud_ssp([0.0, 0.0])
+    ssp['fpa']['num_frames'] = 1
+    ssp['sim']['spacial_osf'] = 3
+    ssp['sim']['padding'] = 4
+    ssp['sim']['save_segmentation'] = False
+    ssp['geometry']['obs']['list'] = [{
+        'mode': 'line',
+        # placed on a strongly structured region of the seed-123 field so the
+        # pre- versus post-PSF orderings differ measurably
+        'origin': [0.6042, 0.5208],
+        'velocity': list(velocity),
+        'pe': 10000.0,
+    }]
+    return ssp
+
+
+def _cloudy_and_clear_frames(ssp_cloudy):
+    ssp_clear = copy.deepcopy(ssp_cloudy)
+    del ssp_clear['clouds']
+    frames_cloudy = _run_runtime_cloud_frames(ssp_cloudy)
+    frames_clear = _run_runtime_cloud_frames(ssp_clear)
+    return frames_cloudy, frames_clear
+
+
+def test_cloud_attenuates_static_target_before_psf_convolution():
+    # A point source's whole PSF must scale by the transmission at the source
+    # position (the annotated value). A post-convolution multiply would scale
+    # it by the PSF-weighted local transmission instead.
+    frames_cloudy, frames_clear = _cloudy_and_clear_frames(
+        _pre_psf_target_ssp([0.0, 0.0]))
+
+    targ_cloudy = frames_cloudy[0][5].numpy()
+    targ_clear = frames_clear[0][5].numpy()
+    annotated = frames_cloudy[0][3][0]['cloud_transmission']
+    transmission = np.asarray(
+        frames_cloudy[0][11]['cloud_transmission'], dtype=np.float64)
+
+    ratio = float(np.sum(targ_cloudy) / np.sum(targ_clear))
+    np.testing.assert_allclose(ratio, annotated, rtol=1e-4)
+
+    # the check must be discriminating: the PSF-weighted transmission (what
+    # the old post-convolution ordering produced) has to differ measurably
+    post_psf_ratio = float(
+        np.sum(targ_clear * transmission) / np.sum(targ_clear))
+    assert abs(post_psf_ratio - annotated) > 5e-3
+    assert 0.01 < annotated < 0.99
+
+
+def test_cloud_attenuates_moving_target_per_path_sample():
+    # A moving target is attenuated per time-bin sample; the total flux ratio
+    # against the clear twin equals the flux-weighted path transmission that
+    # the annotation now records.
+    # velocity is in detector pixels per second for this config; the whole
+    # 8 px path must stay in-frame so every sample's flux is captured and
+    # the whole-frame flux ratio equals the annotated flux-weighted mean
+    frames_cloudy, frames_clear = _cloudy_and_clear_frames(
+        _pre_psf_target_ssp([0.0, 8.0]))
+
+    ob = frames_cloudy[0][3][0]
+    rcc = np.asarray(ob['rcc'], dtype=np.float64)
+    assert np.max(rcc) - np.min(rcc) > 4.0
+
+    targ_cloudy = frames_cloudy[0][5].numpy()
+    targ_clear = frames_clear[0][5].numpy()
+    ratio = float(np.sum(targ_cloudy) / np.sum(targ_clear))
+    np.testing.assert_allclose(ratio, ob['cloud_transmission'], rtol=1e-3)
+
+    # the path must actually cross transmission structure for the
+    # flux-weighted mean to differ from a single point sample
+    assert ob['cloud_transmission_min'] < ob['cloud_transmission'] - 1e-3
+    assert 0.01 < ob['cloud_transmission'] < 0.99
+
+
+def test_cloud_attenuates_star_at_mid_exposure_position(tmp_path):
+    # A single catalog star is attenuated before rendering by the
+    # transmission sampled at its mid-exposure position (the same position
+    # the star annotations sample), so the cloudy-to-clear flux ratio of the
+    # star plane equals that sample exactly. The tracked target at frame
+    # center must likewise match its annotated transmission.
+    from satsim.geometry.transform import rotate_and_translate
+    from satsim.image.coordinates import oversampled_to_detector
+    from satsim.satsim import _sample_bilinear_clamped
+
+    catalog_path = tmp_path / 'probe_star.csv'
+    catalog_path.write_text('1,8.0,91.79056434,-3.41884296\n')
+
+    ssp = {
+        'version': 1,
+        'sim': {
+            'mode': 'fftconv2p',
+            'spacial_osf': 3,
+            'temporal_osf': 1,
+            'padding': 0,
+            'samples': 1,
+            'enable_shot_noise': False,
+            'save_ground_truth': True,
+            'star_annotation_threshold': 15,
+            'save_jpeg': False,
+            'save_czml': False,
+        },
+        'fpa': {
+            'height': 128,
+            'width': 128,
+            'y_fov': 0.077078,
+            'x_fov': 0.077078,
+            'dark_current': 0.0,
+            'gain': 1.0,
+            'bias': 0.0,
+            'zeropoint': 20.6663,
+            'a2d': {
+                'response': 'linear',
+                'fwc': 1e9,
+                'gain': 1.0,
+                'bias': 100,
+            },
+            'noise': {
+                'read': 0.0,
+                'electronic': 0.0,
+            },
+            'psf': {
+                'mode': 'gaussian',
+                'eod': 0.15,
+            },
+            'time': {
+                'exposure': 0.01,
+                'gap': 0.0,
+            },
+            'num_frames': 1,
+        },
+        'background': {
+            'galactic': 0.0,
+        },
+        'geometry': {
+            'time': [2025, 12, 29, 10, 0, 0.0],
+            'site': {
+                'mode': 'topo',
+                'lat': '20.0 N',
+                'lon': '156.0 W',
+                'alt': 0.0,
+                'gimbal': {
+                    'mode': 'wcs',
+                    'rotation': 0,
+                },
+                'track': {
+                    'mode': 'rate',
+                    'position': [-1311.059106, 42143.611807, 1.961689],
+                    'velocity': [-3.073150753, -0.095603993, 0.007795326],
+                    'epoch': [2025, 12, 29, 10, 0, 0.0],
+                },
+            },
+            'stars': {
+                'mode': 'csv',
+                'path': str(catalog_path),
+                'motion': {
+                    'mode': 'none',
+                },
+            },
+            'obs': {
+                'mode': 'list',
+                'list': [{
+                    'mode': 'twobody',
+                    'position': [-1311.059106, 42143.611807, 1.961689],
+                    'velocity': [-3.073150753, -0.095603993, 0.007795326],
+                    'epoch': [2025, 12, 29, 10, 0, 0.0],
+                    'mv': 8.0,
+                }],
+            },
+        },
+        'clouds': [{
+            'type': 'custom',
+            'seed': 421,
+            'coverage': 0.7,
+            'feature_scales_m': [5.0, 10.0],
+            'density_edge_width': 0.1,
+            'tau_min': 0.05,
+            'tau_max': 2.0,
+            'brightness': None,
+        }],
+    }
+
+    frames_cloudy, frames_clear = _cloudy_and_clear_frames(ssp)
+
+    star_cloudy = frames_cloudy[0][4].numpy()
+    star_clear = frames_clear[0][4].numpy()
+    assert np.sum(star_clear) > 0.0
+
+    star_os_pix = frames_cloudy[0][12]
+    transmission = np.asarray(
+        frames_cloudy[0][11]['cloud_transmission'], dtype=np.float64)
+    osf = 3
+    h_pad = star_os_pix['h_pad']
+    w_pad = star_os_pix['w_pad']
+    h_pad_os_m1 = star_os_pix['h'] + 2 * h_pad - 1.0
+    w_pad_os_m1 = star_os_pix['w'] + 2 * w_pad - 1.0
+    t_mid = 0.5 * (
+        float(np.asarray(star_os_pix['t_start'])) +
+        float(np.asarray(star_os_pix['t_end'])))
+    rr_mid, cc_mid = rotate_and_translate(
+        h_pad_os_m1, w_pad_os_m1,
+        star_os_pix['rr'], star_os_pix['cc'],
+        t_mid, star_os_pix['rot'], star_os_pix['tran'])
+    rr_det = oversampled_to_detector(
+        float(np.asarray(rr_mid)[0]) - h_pad, osf)
+    cc_det = oversampled_to_detector(
+        float(np.asarray(cc_mid)[0]) - w_pad, osf)
+    expected_star_t = _sample_bilinear_clamped(transmission, rr_det, cc_det)
+
+    star_ratio = float(np.sum(star_cloudy) / np.sum(star_clear))
+    np.testing.assert_allclose(star_ratio, expected_star_t, rtol=2e-4)
+    assert 0.01 < expected_star_t < 0.99
+
+    # the transmission must vary within the PSF footprint near the star,
+    # otherwise this test cannot distinguish pre- from post-PSF ordering
+    r0 = int(round(rr_det))
+    c0 = int(round(cc_det))
+    local = transmission[max(r0 - 4, 0):r0 + 5, max(c0 - 4, 0):c0 + 5]
+    assert np.std(local) > 2e-3
+
+    # the tracked target sits at frame center: its whole-PSF ratio must
+    # equal the annotated (applied) transmission
+    targ_cloudy = frames_cloudy[0][5].numpy()
+    targ_clear = frames_clear[0][5].numpy()
+    targ_ratio = float(np.sum(targ_cloudy) / np.sum(targ_clear))
+    np.testing.assert_allclose(
+        targ_ratio, frames_cloudy[0][3][0]['cloud_transmission'], rtol=2e-4)

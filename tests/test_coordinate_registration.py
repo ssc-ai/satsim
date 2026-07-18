@@ -182,7 +182,28 @@ def test_target_cloud_sample_exports_weighted_discrete_path_centroid():
 
     assert ob['cloud_sample_row'] == 6.25
     assert ob['cloud_sample_col'] == 10.5
-    assert ob['cloud_transmission'] == _sample_bilinear_clamped(transmission, 6.25, 10.5)
+    # the annotated transmission is the flux-weighted mean of the per-sample
+    # transmission, matching the attenuation the renderer applies per sample
+    expected = (
+        1.0 * _sample_bilinear_clamped(transmission, 5.0, 9.0) +
+        2.0 * _sample_bilinear_clamped(transmission, 6.0, 10.0) +
+        1.0 * _sample_bilinear_clamped(transmission, 8.0, 13.0)
+    ) / 4.0
+    np.testing.assert_allclose(ob['cloud_transmission'], expected, rtol=1e-6)
+
+
+def test_target_cloud_transmission_excludes_zero_flux_control_samples():
+    transmission = np.tile(
+        np.linspace(0.0, 1.0, 30, dtype=np.float32), (20, 1))
+    ob = {
+        'rrr': np.array([5.0, 5.0, 5.0, 5.0]),
+        'rcc': np.array([0.0, 10.0, 12.0, 29.0]),
+        'pp': np.array([0.0, 1.0, 1.0, 0.0]),
+    }
+    _add_cloud_transmission_to_objects([ob], transmission)
+
+    expected = 0.5 * (transmission[5, 10] + transmission[5, 12])
+    np.testing.assert_allclose(ob['cloud_transmission'], expected, rtol=1e-6)
 
 
 def test_catalog_star_and_tracked_target_relative_astrometry(tmp_path):
