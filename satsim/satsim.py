@@ -2406,7 +2406,7 @@ def _gen_objects(ssp, render_mode,
                     else:
                         obs_cache[i] = [GreatCircle(o['ra'], o['dec'], o['heading'], o['velocity'], ts_epoch, None)]
                 elif o['mode'] == 'ephemeris':
-                    ts_epoch = time.utc_from_list(o['epoch'])
+                    ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
                     obs_cache[i] = [create_ephemeris_object(o['positions'], o['velocities'], o['seconds_from_epoch'], ts_epoch)]
                 elif o['mode'] == 'observation':
                     obs_cache[i] = [create_observation(o['ra'], o['dec'], time.utc_from_list(o['time']), observer, track, o.get('range', None))]

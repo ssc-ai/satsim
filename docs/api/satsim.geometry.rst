@@ -49,6 +49,22 @@ satsim.geometry.ephemeris module
    :undoc-members:
    :show-inheritance:
 
+satsim.geometry.fov module
+--------------------------
+
+.. automodule:: satsim.geometry.fov
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.factory module
+------------------------------
+
+.. automodule:: satsim.geometry.factory
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.geometry.gcvs5 module
 ----------------------------
 

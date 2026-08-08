@@ -3,6 +3,8 @@ from __future__ import division, print_function, absolute_import
 import math
 import numpy as np
 
+from satsim.io.analytical import format_ob_time
+
 from satsim.config import get_spatial_osf
 
 
@@ -12,7 +14,7 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
     Args:
         ssp: `dict`, SatSim configuration parameters.
         obs_os_pix: `list`, list of detected observations in pixel space. Each
-            entry must contain the keys ``ra`` and ``dec`` giving the
+            entry must contain the keys ``ra_obs`` and ``dec_obs`` giving the
             mid-exposure position of the object.
         astrometrics: `dict`, frame astrometric parameters.
         bg_level: `float`, background noise level per pixel.
@@ -44,6 +46,9 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
                               ssp['fpa']['x_fov'] / ssp['fpa']['width'])
 
     s_osf = get_spatial_osf(ssp, 1)
+    obs_frame = ssp['sim'].get('analytical_obs_frame', 'geocentric')
+    site = ssp.get('geometry', {}).get('site', {})
+    sensor_id = site.get('name') if isinstance(site, dict) else None
     eod = 1.0
     if isinstance(ssp['fpa'].get('psf'), dict) and 'eod' in ssp['fpa']['psf']:
         eod = ssp['fpa']['psf']['eod']
@@ -85,15 +90,18 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
         dec_m = dec_obs + np.random.normal(scale=axis_error * y_ifov)
 
         entry = {
-            'obTime': astrometrics['time'].strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+            'obTime': format_ob_time(astrometrics['time']),
             'ra': float(ra_m),
             'declination': float(dec_m),
             'snrEst': float(snr),
             'expDuration': float(ssp['fpa']['time']['exposure']),
             'uct': False,
             'createdBy': 'satsim',
-            'type': 'OPTICAL'
+            'type': 'OPTICAL',
+            'obs_frame': obs_frame,
         }
+        if sensor_id:
+            entry['idSensor'] = sensor_id
         if 'x' in astrometrics:
             entry.update({
                 'senx': float(astrometrics['x']),
@@ -128,15 +136,18 @@ def generate(ssp, obs_os_pix, astrometrics, bg_level, dc_level, rn, en):
         ra_m += np.random.normal(scale=axis_error * x_ifov) / math.cos(math.radians(dec_m))
         dec_m += np.random.normal(scale=axis_error * y_ifov)
         entry = {
-            'obTime': astrometrics['time'].strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+            'obTime': format_ob_time(astrometrics['time']),
             'ra': float(ra_m),
             'declination': float(dec_m),
             'snrEst': 0.0,
             'expDuration': float(ssp['fpa']['time']['exposure']),
             'uct': True,
             'createdBy': 'satsim',
-            'type': 'OPTICAL'
+            'type': 'OPTICAL',
+            'obs_frame': obs_frame,
         }
+        if sensor_id:
+            entry['idSensor'] = sensor_id
         if 'x' in astrometrics:
             entry.update({
                 'senx': float(astrometrics['x']),

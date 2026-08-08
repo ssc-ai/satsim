@@ -317,6 +317,14 @@ def test_poppy():
     ssp = config.load_json('./tests/config_poppy.json')
     ssp, d = config.transform(ssp, max_stages=10, with_debug=True)
 
+    # Scalar ephemeris epochs use the same collection-relative convention as
+    # two-body targets and the shared analytical ranging factory.
+    ephemeris = next(
+        item for item in ssp['geometry']['obs']['list']
+        if item.get('mode') == 'ephemeris'
+    )
+    ephemeris['epoch'] = 0.0
+
     ssp['fpa']['num_frames'] = 1
     ssp['fpa']['time']['exposure'] = 1
 

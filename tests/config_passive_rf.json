@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "sim": { "samples": 1 },
+  "passive_rf": [
+    {
+      "antenna_gain": 30.0,
+      "noise_figure": 2.1,
+      "system_losses": 1.0,
+      "antenna_noise_temperature": 290.0,
+      "field_of_view": {
+        "azimuth": [0.0, 100.0],
+        "elevation": [-90.0, 0.0]
+      },
+      "estimator": {
+        "coherent_time": 0.005,
+        "caf_loss": 3.0,
+        "rms_bandwidth": "rect",
+        "uncertainty": {
+          "tdoa": { "floor": 1.2e-8, "scale": 1.0 },
+          "fdoa": { "floor": 0.003, "scale": 1.0 }
+        }
+      },
+      "time": { "dwell": 1.0 },
+      "num_frames": 2,
+      "seed": 42
+    },
+    {
+      "antenna_gain": 29.5,
+      "noise_figure": 2.0,
+      "system_losses": 1.0,
+      "antenna_noise_temperature": 290.0,
+      "field_of_view": {
+        "azimuth": [0.0, 90.0],
+        "elevation": [-90.0, 0.0]
+      },
+      "estimator": {
+        "coherent_time": 0.005,
+        "caf_loss": 3.0,
+        "rms_bandwidth": "rect",
+        "uncertainty": {
+          "tdoa": { "floor": 1.0e-8, "scale": 1.0 },
+          "fdoa": { "floor": 0.0025, "scale": 1.0 }
+        }
+      },
+      "time": { "dwell": 1.0 },
+      "num_frames": 2,
+      "seed": 42
+    },
+    {
+      "antenna_gain": 30.5,
+      "noise_figure": 2.2,
+      "system_losses": 1.0,
+      "antenna_noise_temperature": 290.0,
+      "field_of_view": {
+        "azimuth": [0.0, 80.0],
+        "elevation": [-90.0, 0.0]
+      },
+      "estimator": {
+        "coherent_time": 0.005,
+        "caf_loss": 3.0,
+        "rms_bandwidth": "rect",
+        "uncertainty": {
+          "tdoa": { "floor": 1.0e-8, "scale": 1.0 },
+          "fdoa": { "floor": 0.0025, "scale": 1.0 }
+        }
+      },
+      "time": { "dwell": 1.0 },
+      "num_frames": 2,
+      "seed": 42
+    }
+  ],
+  "geometry": {
+    "time": [2020, 1, 29, 13, 9, 59.5],
+    "site": [
+      { "name": "RX_A", "lat": 18.858777807, "lon": 99.179988785, "alt": 0.366785 },
+      { "name": "RX_B", "lat": 13.105, "lon": 100.92, "alt": 0.058274 },
+      { "name": "RX_C", "lat": 15.2, "lon": 104.85, "alt": 0.130378 }
+    ],
+    "obs": {
+      "mode": "list",
+      "list": [
+        {
+          "mode": "tle",
+          "name": "ISS (ZARYA)",
+          "id": 25544,
+          "tle": [
+            "1 25544U 98067A   20029.54791435  .00001264  00000-0  29621-4 0  9993",
+            "2 25544  51.6440  30.9682 0005197  77.5934  20.6657 15.49147106211867"
+          ],
+          "frequency": 2200000000.0,
+          "bandwidth": 500000.0,
+          "eirp": 45.0,
+          "band": "S-band"
+        }
+      ]
+    }
+  }
+}

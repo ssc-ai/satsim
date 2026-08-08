@@ -17,6 +17,10 @@
             "description": "Analytical radar parameters.",
             "$ref": "Radar.json"
         },
+        "passive_rf": {
+            "description": "Passive RF analytical receiver parameters.",
+            "$ref": "PassiveRF.json"
+        },
         "background": {
             "description": "The background parameters.",
             "$ref": "Background.json"
@@ -30,9 +34,56 @@
             "$ref": "Geometry.json"
         }
     },
-    "required": ["sim", "background", "geometry"],
+    "required": ["sim"],
     "oneOf": [
-        { "required": ["fpa"] },
-        { "required": ["radar"] }
+        {
+            "required": ["fpa", "background", "geometry"],
+            "properties": {
+                "geometry": {
+                    "required": ["stars"],
+                    "properties": {
+                        "site": { "$ref": "types/Site.json" }
+                    }
+                }
+            },
+            "not": { "anyOf": [
+                { "required": ["radar"] },
+                { "required": ["passive_rf"] }
+            ] }
+        },
+        {
+            "required": ["radar", "geometry"],
+            "properties": {
+                "geometry": {
+                    "required": ["site"],
+                    "properties": {
+                        "site": { "$ref": "types/Site.json" }
+                    }
+                }
+            },
+            "not": { "anyOf": [
+                { "required": ["fpa"] },
+                { "required": ["passive_rf"] }
+            ] }
+        },
+        {
+            "required": ["passive_rf", "geometry"],
+            "properties": {
+                "geometry": {
+                    "required": ["site"],
+                    "properties": {
+                        "site": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": { "$ref": "types/Site.json" }
+                        }
+                    }
+                }
+            },
+            "not": { "anyOf": [
+                { "required": ["fpa"] },
+                { "required": ["radar"] }
+            ] }
+        }
     ]
 }

@@ -46,15 +46,20 @@ Additional processes can improve throughput by increasing GPU utilization, but
 each process needs its own memory allocation. If the allocation is too small or
 the card is overcommitted, TensorFlow will fail with memory-related errors.
 
-### Radar Dispatch
+### Analytical Dispatch
 
-If the root configuration contains a `radar` block, `satsim run`
-automatically dispatches to the analytical radar simulator instead of the EO
-image renderer:
+`satsim run` selects the simulator from exactly one root `fpa`, `radar`, or
+`passive_rf` block. RADAR and passive-RF configurations automatically dispatch
+to their analytical simulators instead of the EO image renderer:
 
 ```bash
 $ satsim --debug INFO run --output_dir output/ input/radar_config.json
+$ satsim --debug INFO run --output_dir output/ input/passive_rf_config.json
 ```
+
+Analytical RADAR and passive-RF runs require `sim.samples: 1`. GPU-specific
+options such as `--device`, `--memory`, `--jobs`, and `--output_intermediate`
+apply only to EO runs.
 
 ## Python Module
 
@@ -115,11 +120,11 @@ Each CLI or `gen_multi` run creates a timestamped directory under
 - `Annotations/*_cloud_transmission.tiff`: optional uint16 cloud transmission
   maps when clouds are active and `sim.save_cloud_transmission` is true,
   scaled so 65535 represents clear transmission 1.0.
-- `AnalyticalObservations/*.json`: optional analytical EO observations when
-  `sim.analytical_obs` is true.
+- `AnalyticalObservations/*.json`: analytical EO observations when
+  `sim.analytical_obs` is true, or per-frame RADAR/passive-RF measurements.
 
-Radar runs write per-frame JSON observations through the analytical observation
-writer.
+All three simulator paths preserve the final transformed `config.json`.
+Transformation debug stages are written as `config_pass_*.json` when available.
 
 ## Configuration Basics
 
@@ -130,6 +135,8 @@ document includes:
 - `sim`: simulation, output, and renderer controls.
 - `fpa`: EO focal-plane sensor controls. Required for EO runs.
 - `radar`: analytical radar sensor controls. Required for radar runs.
+- `passive_rf`: analytical passive-RF receiver controls. Required for
+  passive-RF runs.
 - `background`: sky background controls.
 - `clouds`: optional cloud layer stack.
 - `geometry`: time, observer, stars, targets, and tracking.
@@ -408,9 +415,11 @@ Use `$ref` to copy another value from the same configuration:
 }
 ```
 
-Use `$import` to load reusable partial configurations. Imports are resolved
-relative to the input configuration directory. `key` selects a nested object,
-and `override` merges in local replacements.
+Use `$import` to load reusable partial configurations. For compatibility,
+SatSim first checks the historical working-directory-relative path and falls
+back to the input configuration directory when that path does not exist. `key`
+selects a nested object, and `override` merges local replacements into imported
+objects.
 
 ```json
 {
@@ -930,13 +939,14 @@ annotations and analytical observations.
 ```
 
 Analytical observations use `fpa.detection` for SNR thresholding, pixel error,
-false alarms, and maximum false detections.
+false alarms, and maximum false detections. Records include `obs_frame`, and
+include `idSensor` when `geometry.site.name` is configured.
 
 ## Radar Configuration
 
 Radar configurations use the same `geometry` target modes as EO where range
-can be computed: `tle`, `twobody`/`statevector`, and `ephemeris`. The
-radar path is analytical; it does not render images.
+can be computed: `tle`, `twobody`, and `ephemeris`. The radar path is
+analytical; it does not render images.
 
 ```json
 {
@@ -963,7 +973,8 @@ radar path is analytical; it does not render images.
       "false_alarm_rate": 0.0
     },
     "time": {
-      "dwell": 1.0
+      "dwell": 1.0,
+      "gap": 0.0
     },
     "num_frames": 10
   },
@@ -1007,6 +1018,137 @@ Radar outputs contain azimuth, elevation, range, range rate, Doppler-equivalent
 line-of-sight velocity, uncertainties, SNR, radar cross section, and optional
 sensor/object identifiers. The current radar path applies detection thresholds
 and Gaussian measurement noise; configured false alarms are not emitted yet.
+`time.dwell` is the integration time and `time.gap` is idle time after each
+frame. Frame midpoints are separated by `dwell + gap`; omitted `gap` defaults
+to zero. `sim.samples` must be one in v0.26.0.
+
+## Passive RF Configuration
+
+Passive RF is an analytical receiver-network model for TDOA and FDOA
+measurements. Its configuration follows the same document style as analytical
+RADAR: sensor parameters are in a root `passive_rf` block, receiver locations
+are in `geometry.site`, and satellites are in `geometry.obs.list`. Receiver
+site altitude uses the SatSim convention of kilometers.
+
+```json
+{
+  "version": 1,
+  "sim": { "samples": 1 },
+  "passive_rf": {
+    "antenna_gain": 30.0,
+    "noise_figure": 2.0,
+    "system_losses": 1.0,
+    "antenna_noise_temperature": 290.0,
+    "field_of_view": {
+      "azimuth": [0.0, 360.0],
+      "elevation": [10.0, 90.0]
+    },
+    "estimator": {
+      "coherent_time": 0.005,
+      "caf_loss": 3.0,
+      "rms_bandwidth": "rect",
+      "uncertainty": {
+        "tdoa": { "floor": 1e-7, "scale": 1.0 },
+        "fdoa": { "floor": 0.01, "scale": 1.0 }
+      }
+    },
+    "time": { "dwell": 1.0, "gap": 29.0 },
+    "num_frames": 2,
+    "seed": 42
+  },
+  "geometry": {
+    "time": [2020, 1, 29, 11, 13, 0.0],
+    "site": [
+      { "name": "RX_A", "lat": 5.0, "lon": 98.0, "alt": 0.0 },
+      { "name": "RX_B", "lat": 5.0, "lon": 108.0, "alt": 0.0 },
+      { "name": "RX_C", "lat": 15.0, "lon": 103.0, "alt": 0.0 }
+    ],
+    "obs": {
+      "mode": "list",
+      "list": [{
+        "mode": "tle",
+        "name": "ISS (ZARYA)",
+        "id": 25544,
+        "tle": [
+          "1 25544U 98067A   20029.54791435  .00001264  00000-0  29621-4 0  9993",
+          "2 25544  51.6440  30.9682 0005197  77.5934  20.6657 15.49147106211867"
+        ],
+        "frequency": 2200000000.0,
+        "bandwidth": 500000.0,
+        "eirp": 45.0,
+        "band": "S-band"
+      }]
+    }
+  }
+}
+```
+
+When every receiver is the same sensor type, `passive_rf` is one dictionary
+applied to every site. When receiver parameters differ, `passive_rf` may be an
+array whose entries align by index with the `geometry.site` array. Shared
+estimator, timing, frame-count, and seed controls must remain equal across
+those entries. `field_of_view` is receiver-specific and may differ
+between aligned array entries. Each site requires a unique, non-empty `name`.
+
+Satellite identity, orbit, and RF emission properties stay together in
+`geometry.obs.list`. The direct `frequency`, `bandwidth`, `eirp`, and optional
+`band` fields are analogous to RADAR's direct `rcs` target property. Targets
+use SatSim's normal `tle`, `twobody`, or `ephemeris` modes; there is no
+passive-RF transmitter catalog or separate orbit loader.
+
+`geometry.time` is the collection start. As in EO and analytical RADAR,
+`time.dwell` is the integration time, `time.gap` is idle time after each frame,
+and each measurement occurs at the dwell midpoint. Frame midpoints are
+separated by `dwell + gap`; omitted `gap` defaults to zero. Every passive-RF
+target must provide all three RF properties and is evaluated for every unique
+pair of sites, in site-array order.
+As in RADAR, `field_of_view.azimuth` and `field_of_view.elevation` are
+inclusive `[minimum, maximum]` limits in degrees. A pair is emitted only when
+the target is inside both receivers' configured fields of view; an omitted
+axis is unbounded.
+Missing site names, duplicate site names, invalid target geometry, and
+duplicate target IDs are rejected before output is created.
+
+The example is deliberately one self-contained SatSim document. Standard
+`$import`, `key`, and `override` transforms remain available at any JSON-valued
+node when reusable fragments are useful—for example, to inject
+`geometry.obs.list` from a target catalog. `$import` composes the same native
+document; it does not introduce a second passive RF configuration format.
+
+The geometric truth convention is
+`tdoa = (range_2 - range_1) / c` at one common reception time. Emitted FDOA is
+fixed to `frequency * d(tdoa)/dt`. Receiver ordering therefore controls both
+signs; this convention is not configurable.
+Processing gain uses `min(dwell, coherent_time)`, while the FDOA CRLB uses
+`dwell` as its observation window. The default CAF loss
+is 3 dB. Pair uncertainty floors and scales use the maximum applicable
+sensor-local calibration; these values represent pair-level calibration, so
+RSS combination would count pair error twice.
+
+Native runs derive a stable noise seed from the run seed, target, ordered pair,
+and frame time, so unrelated scene edits do not perturb existing measurements.
+`sim.samples` must be one in v0.26.0.
+
+Outputs use the standard timestamped `AnalyticalObservations` directory and
+contain `PASSIVE_RF` records with receiver IDs, frequency, bandwidth, linear
+processed `snr`, diagnostic `snrRawDb`/`snrProcessedDb`, TDOA/FDOA truth and
+measurements, and uncertainties. The optional target `band` is copied to each
+record when configured. One
+analytical JSON file is written per frame, matching RADAR's output granularity.
+Target propagation, topocentric observers, epochs, geometric LOS, and range
+rate use the same SatSim geometry and time factories as RADAR. Remote TLE
+retrieval is not performed. Embedded target state keeps propagation
+reproducible once the normal SatSim ephemeris assets are provisioned. See
+`examples/passive_rf` for a complete synthetic example.
+
+The receiver `antenna_gain` is treated as a constant peak gain across the
+configured field of view. This first model does not include an antenna pattern,
+terrain masking, atmospheric propagation, or a detection threshold; every
+geometrically visible pair is emitted. Noise is drawn independently for each
+pair, so pairs sharing a receiver do not yet include shared clock/frequency
+errors or cross-pair covariance. The bundled ISS example validates config,
+visibility, timing, measurement generation, and output flow; it is not an
+orbit-determination closure test.
 
 ## TensorFlow Data Augmentation
 
@@ -1034,7 +1176,7 @@ dataset = augment_satnet_with_satsim(
 
 ## Common Notes
 
-- The CLI recognizes `.json` and `.yml` input files.
+- The CLI recognizes `.json`, `.yml`, and `.yaml` input files.
 - Use `spatial_osf` for spatial oversampling. Legacy configurations using
   `spacial_osf` is also accepted.
 - `sim.mode: none` disables image rendering. Use it with
@@ -1044,7 +1186,7 @@ dataset = augment_satnet_with_satsim(
 - `sim.point_rendering` defaults to `bilinear` for sub-pixel point-source
   centroid accuracy. Set it to `floor` only when legacy integer deposition is
   required.
-- `--jobs` multiplies the number of processes per GPU; reduce
+- For EO runs, `--jobs` multiplies the number of processes per GPU; reduce
   `spatial_osf`, `padding`, frame size, or jobs if memory is exhausted.
 - Use the schema in `schema/v1` to audit accepted keys. Newer blocks such as
   clouds intentionally reject unknown fields.

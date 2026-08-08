@@ -1,0 +1,195 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Site.json",
+    "title": "Observing Site",
+    "description": "A SatSim observing site.",
+    "type": "object",
+    "properties": {
+        "name": {
+            "description": "The name or sensor identifier for the site.",
+            "type": "string"
+        },
+        "lat": {
+            "description": "The latitude of the site.",
+            "oneOf": [
+                { "type": "string" },
+                { "$ref": "Float.json" }
+            ]
+        },
+        "lon": {
+            "description": "The longitude of the site.",
+            "oneOf": [
+                { "type": "string" },
+                { "$ref": "Float.json" }
+            ]
+        },
+        "alt": {
+            "description": "The altitude of the site in kilometers.",
+            "$ref": "Float.json"
+        },
+        "tle": {
+            "description": "A space-based observer TLE as two strings.",
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "tle1": {
+            "description": "The first line of a space-based observer TLE.",
+            "type": "string"
+        },
+        "tle2": {
+            "description": "The second line of a space-based observer TLE.",
+            "type": "string"
+        },
+        "gimbal": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "description": "The gimbal mode.",
+                    "type": "string",
+                    "enum": ["wcs"]
+                },
+                "rotation": {
+                    "description": "The field rotation of the gimbal.",
+                    "$ref": "Float.json"
+                }
+            }
+        },
+        "track": {
+            "oneOf": [
+                {
+                    "description": "Track a TLE SGP4 orbit.",
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["rate", "sidereal", "rate-sidereal"]
+                        },
+                        "track_apparent": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "tle": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        },
+                        "tle1": { "type": "string" },
+                        "tle2": { "type": "string" }
+                    },
+                    "required": ["mode"],
+                    "not": {
+                        "required": ["position", "velocity", "epoch"]
+                    }
+                },
+                {
+                    "description": "Track a two-body state vector.",
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["rate", "sidereal"]
+                        },
+                        "track_apparent": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "position": { "type": "array" },
+                        "velocity": { "type": "array" },
+                        "epoch": { "$ref": "TimeDelta.json" }
+                    },
+                    "required": ["mode", "position", "velocity", "epoch"]
+                },
+                {
+                    "description": "Track an explicit RA/Dec series.",
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["radec"]
+                        },
+                        "track_apparent": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "ra": {
+                            "oneOf": [
+                                {
+                                    "type": "array",
+                                    "items": { "$ref": "Float.json" }
+                                },
+                                { "$ref": "Float.json" }
+                            ]
+                        },
+                        "dec": {
+                            "oneOf": [
+                                {
+                                    "type": "array",
+                                    "items": { "$ref": "Float.json" }
+                                },
+                                { "$ref": "Float.json" }
+                            ]
+                        }
+                    },
+                    "required": ["mode", "ra", "dec"]
+                },
+                {
+                    "description": "Use fixed azimuth and elevation.",
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["fixed"]
+                        },
+                        "track_apparent": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "az": {
+                            "oneOf": [
+                                {
+                                    "type": "array",
+                                    "items": { "$ref": "Float.json" }
+                                },
+                                { "$ref": "Float.json" }
+                            ]
+                        },
+                        "el": {
+                            "oneOf": [
+                                {
+                                    "type": "array",
+                                    "items": { "$ref": "Float.json" }
+                                },
+                                { "$ref": "Float.json" }
+                            ]
+                        }
+                    },
+                    "required": ["mode", "az", "el"]
+                }
+            ]
+        },
+        "czml": {
+            "description": "CZML output options.",
+            "type": "object",
+            "properties": {
+                "label_show": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "cone_show": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "cone_color": {
+                    "type": "array",
+                    "default": [255, 255, 0, 64]
+                },
+                "billboard_show": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "billboard_image": { "type": "string" }
+            }
+        }
+    }
+}

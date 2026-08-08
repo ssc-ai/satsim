@@ -20,6 +20,7 @@ Subpackages
    satsim.image
    satsim.io
    satsim.math
+   satsim.passive_rf
    satsim.pipeline
    satsim.radar
    satsim.tfa

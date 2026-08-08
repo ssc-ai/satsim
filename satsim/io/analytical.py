@@ -2,6 +2,18 @@ from __future__ import division, print_function, absolute_import
 
 import json
 import os
+from datetime import timezone
+
+
+def format_ob_time(value):
+    """Format a datetime or Skyfield time as UTC with fixed microseconds."""
+    if hasattr(value, 'utc_datetime'):
+        value = value.utc_datetime()
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
 
 def save(dir_name, frame_num, obs_list):

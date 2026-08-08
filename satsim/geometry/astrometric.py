@@ -5,6 +5,7 @@ from functools import lru_cache
 
 import numpy as np
 from skyfield.api import Star, Angle, iers2010
+from skyfield.framelib import ICRS as SKYFIELD_ICRS
 from skyfield.toposlib import _ltude
 from skyfield.relativity import add_aberration, add_deflection
 from skyfield.earthlib import compute_limb_angle
@@ -247,6 +248,12 @@ def get_los(observer, target, t, deflection=False, aberration=True, stellar_aber
         ra, dec, el, az = _apply_stellar_aberration(observer, ra, dec, az, el, t, deflection)
 
     return ra._degrees, dec._degrees, d.km, az._degrees, el._degrees, icrf_los
+
+
+def range_rate_from_los(icrf_los):
+    """Return the geometric line-of-sight range rate in kilometers per second."""
+    _, _, _, _, _, range_rate = icrf_los.frame_latlon_and_rates(SKYFIELD_ICRS)
+    return float(range_rate.km_per_s)
 
 
 @lru_cache(maxsize=32)
