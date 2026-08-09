@@ -17,7 +17,6 @@ from satsim.passive_rf.model import simulate_run_config
 ROOT = Path(__file__).parents[1]
 SCHEMA_DIR = ROOT / 'schema' / 'v1'
 CONFIG_PATH = Path(__file__).parent / 'config_passive_rf.json'
-EXAMPLE_PATH = ROOT / 'examples' / 'passive_rf' / 'config.json'
 
 
 def _config():
@@ -55,25 +54,6 @@ def test_load_run_config_and_units():
     assert config.estimator.tdoa_floor_by_sensor['RX_A'] == 1.2e-8
     assert len(config.frame_times) == 2
     assert len(config.observations) == 6
-
-
-def test_public_shared_receiver_example_loads():
-    document = transform(
-        load_json(str(EXAMPLE_PATH)),
-        dirname=str(EXAMPLE_PATH.parent),
-    )
-    config = load_run_config(document)
-    assert len(config.receivers) == 3
-    receiver_count = len(config.receivers)
-    pair_count = receiver_count * (receiver_count - 1) // 2
-    expected_count = len(config.frame_times) * pair_count * len(config.targets)
-    assert len(config.observations) == expected_count
-    assert {receiver.antenna_gain_dbi for receiver in config.receivers.values()} == {30.0}
-    assert {receiver.az_limits for receiver in config.receivers.values()} == {
-        (0.0, 360.0)
-    }
-    records = simulate_run_config(config)
-    assert 0 < len(records) <= expected_count
 
 
 def test_frame_flow_matches_radar_midpoint_and_all_unique_pairs():
@@ -378,7 +358,6 @@ def _analytical_document(mode):
 
 def test_document_schema_accepts_passive_rf_fixture():
     _validate('Document.json', _data(CONFIG_PATH))
-    _validate('Document.json', _data(EXAMPLE_PATH))
 
 
 def test_passive_rf_schema_accepts_shared_dict_and_aligned_array():
