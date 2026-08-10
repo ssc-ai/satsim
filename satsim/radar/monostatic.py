@@ -11,9 +11,8 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Any
 
-from skyfield.framelib import ICRS
-
-from satsim.geometry.astrometric import get_los
+from satsim.geometry.astrometric import get_los, range_rate_from_los
+from satsim.geometry.fov import in_fov as _in_fov
 
 
 _C = 299_792_458.0  # m/s
@@ -38,6 +37,7 @@ class RadarParams:
     - el_limits: elevation FOV limits [deg] (min, max)
     - range_limits: detection range bounds [km] (min, max)
     - dwell: dwell time per frame [s]
+    - gap: idle time after each frame [s]
     - num_frames: number of frames to simulate
     - sensor_id: optional sensor identifier string
     """
@@ -55,6 +55,7 @@ class RadarParams:
     el_limits: Optional[Tuple[float, float]] = None
     range_limits: Optional[Tuple[float, float]] = None
     dwell: float = 1.0
+    gap: float = 0.0
     num_frames: int = 1
     sensor_id: Optional[str] = None
 
@@ -125,15 +126,7 @@ def in_fov(az: float, el: float, p: RadarParams) -> bool:
         True if both azimuth and elevation are within limits (or if limits are
         not configured).
     """
-    if p.az_limits is not None:
-        mn, mx = p.az_limits
-        if not (mn <= az <= mx):
-            return False
-    if p.el_limits is not None:
-        mn, mx = p.el_limits
-        if not (mn <= el <= mx):
-            return False
-    return True
+    return _in_fov(az, el, p.az_limits, p.el_limits)
 
 
 def in_range_limits(rng: float, p: RadarParams) -> bool:
@@ -153,7 +146,7 @@ def in_range_limits(rng: float, p: RadarParams) -> bool:
 
 
 def range_rate(observer: Any, target: Any, t) -> float:
-    """Estimate range-rate via finite difference over a short interval.
+    """Return instantaneous geometric line-of-sight range rate.
 
     Args:
         observer: observing site/body (Skyfield object)
@@ -163,9 +156,15 @@ def range_rate(observer: Any, target: Any, t) -> float:
     Returns:
         Range-rate [km/s].
     """
-    _, _, _, _, _, icrf_los = get_los(observer, target, t, deflection=False, aberration=False, stellar_aberration=False)
-    _, _, _, _, _, rr = icrf_los.frame_latlon_and_rates(ICRS)
-    return rr.km_per_s
+    _, _, _, _, _, icrf_los = get_los(
+        observer,
+        target,
+        t,
+        deflection=False,
+        aberration=False,
+        stellar_aberration=False,
+    )
+    return range_rate_from_los(icrf_los)
 
 
 def detect(p: RadarParams, rcs: float, range_value: float) -> Tuple[bool, Optional[float]]:

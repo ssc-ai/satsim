@@ -1,0 +1,23 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/FieldOfView.json",
+    "title": "Analytical Sensor Field of View",
+    "description": "Rectangular azimuth/elevation field-of-view limits in degrees.",
+    "type": "object",
+    "properties": {
+        "azimuth": {
+            "description": "Azimuth limits [minimum, maximum] in degrees.",
+            "type": "array",
+            "items": { "$ref": "Float.json" },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "elevation": {
+            "description": "Elevation limits [minimum, maximum] in degrees.",
+            "type": "array",
+            "items": { "$ref": "Float.json" },
+            "minItems": 2,
+            "maxItems": 2
+        }
+    }
+}

@@ -284,7 +284,7 @@
             "default": false
         },
         "analytical_obs": {
-            "description": "Generate analytical observations instead of images.",
+            "description": "Generate analytical EO observations alongside images, or without images when sim.mode is none.",
             "type": "boolean",
             "default": false
         },

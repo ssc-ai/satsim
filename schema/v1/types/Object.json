@@ -8,7 +8,8 @@
         { "required": ["mv"] },
         { "required": ["pe"] },
         { "required": ["model"] },
-        { "required": ["rcs"] }
+        { "required": ["rcs"] },
+        { "required": ["frequency", "bandwidth", "eirp"] }
     ],
     "properties": {
         "name": {
@@ -18,6 +19,23 @@
         "rcs": {
             "description": "Radar cross-section in square meters.",
             "$ref": "Float.json"
+        },
+        "frequency": {
+            "description": "Passive RF emitted center frequency in Hz.",
+            "$ref": "PositiveFloat.json"
+        },
+        "bandwidth": {
+            "description": "Passive RF emitted signal bandwidth in Hz.",
+            "$ref": "PositiveFloat.json"
+        },
+        "eirp": {
+            "description": "Passive RF equivalent isotropically radiated power in dBW.",
+            "$ref": "Float.json"
+        },
+        "band": {
+            "description": "Optional human-readable RF band name.",
+            "type": "string",
+            "minLength": 1
         },
         "mv": {
             "description": "The brightness of the object in visual magnitude.",

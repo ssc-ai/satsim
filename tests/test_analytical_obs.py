@@ -17,6 +17,7 @@ def test_analytical_observations():
     }
     ssp['fpa']['num_frames'] = 1
     ssp['geometry']['site'] = {
+        "name": "EO_TEST",
         "mode": "topo",
         "lat": "20.746111 N",
         "lon": "156.431667 W",
@@ -60,6 +61,9 @@ def test_analytical_observations():
     assert '+00:00' not in data[0]['obTime']
     assert isinstance(data[0]['senlat'], float)
     assert isinstance(data[0]['senlon'], float)
+    assert all(record['createdBy'] == 'satsim' for record in data)
+    assert all(record['idSensor'] == 'EO_TEST' for record in data)
+    assert all(record['obs_frame'] == 'geocentric' for record in data)
 
 
 def test_analytical_observations_site_tle():

@@ -4,6 +4,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflo
 
 import os
 import copy
+import json
 import numpy as np
 import pytest
 
@@ -246,6 +247,42 @@ def test_import():
     del p['num_frames']
 
     assert(t['fpa'] == p)
+
+
+def test_import_falls_back_to_config_directory(tmp_path, monkeypatch):
+    config_dir = tmp_path / 'config'
+    config_dir.mkdir()
+    fragment = config_dir / 'fragment.json'
+    fragment.write_text(json.dumps({'value': 7}), encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+
+    transformed = config.transform({
+        'version': 1,
+        'sim': {'samples': 1},
+        'vars': {'fragment': {'$import': './fragment.json'}},
+    }, dirname=str(config_dir))
+
+    assert transformed['vars']['fragment'] == {'value': 7}
+
+
+def test_import_preserves_working_directory_precedence(tmp_path, monkeypatch):
+    config_dir = tmp_path / 'config'
+    config_dir.mkdir()
+    (tmp_path / 'fragment.json').write_text(
+        json.dumps({'source': 'cwd'}), encoding='utf-8'
+    )
+    (config_dir / 'fragment.json').write_text(
+        json.dumps({'source': 'config'}), encoding='utf-8'
+    )
+    monkeypatch.chdir(tmp_path)
+
+    transformed = config.transform({
+        'version': 1,
+        'sim': {'samples': 1},
+        'vars': {'fragment': {'$import': './fragment.json'}},
+    }, dirname=str(config_dir))
+
+    assert transformed['vars']['fragment'] == {'source': 'cwd'}
 
 
 def test_function_pipeline():

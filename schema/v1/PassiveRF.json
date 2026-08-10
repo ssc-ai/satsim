@@ -1,0 +1,96 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/PassiveRF.json",
+    "title": "Passive RF",
+    "description": "Passive RF receiver configuration, analogous to the Radar block. An array aligns one-to-one with geometry.site when receiver parameters differ.",
+    "oneOf": [
+        { "$ref": "#/definitions/receiver" },
+        {
+            "type": "array",
+            "minItems": 2,
+            "items": { "$ref": "#/definitions/receiver" }
+        }
+    ],
+    "definitions": {
+        "receiver": {
+            "type": "object",
+            "properties": {
+                "antenna_gain": {
+                    "description": "Receiver antenna gain in dBi.",
+                    "$ref": "types/Float.json"
+                },
+                "noise_figure": {
+                    "description": "Receiver noise figure in dB.",
+                    "$ref": "types/Float.json"
+                },
+                "system_losses": {
+                    "description": "Receiver system losses in dB.",
+                    "$ref": "types/NonnegativeFloat.json"
+                },
+                "antenna_noise_temperature": {
+                    "description": "Receiver antenna noise temperature in Kelvin.",
+                    "$ref": "types/PositiveFloat.json"
+                },
+                "field_of_view": {
+                    "description": "Receiver field-of-view definition, matching analytical RADAR.",
+                    "$ref": "types/FieldOfView.json"
+                },
+                "estimator": {
+                    "type": "object",
+                    "properties": {
+                        "coherent_time": {
+                            "description": "Coherent processing interval in seconds.",
+                            "$ref": "types/PositiveFloat.json"
+                        },
+                        "caf_loss": {
+                            "description": "Cross-ambiguity-function processing loss in dB.",
+                            "$ref": "types/NonnegativeFloat.json"
+                        },
+                        "rms_bandwidth": { "type": "string", "enum": ["rect", "gauss"] },
+                        "uncertainty": { "$ref": "#/definitions/uncertainty" }
+                    },
+                    "additionalProperties": false
+                },
+                "time": {
+                    "type": "object",
+                    "properties": {
+                        "dwell": {
+                            "description": "Integration time per frame in seconds.",
+                            "$ref": "types/PositiveFloat.json"
+                        },
+                        "gap": {
+                            "description": "Idle time after each frame in seconds. Frame midpoint spacing is dwell plus gap.",
+                            "$ref": "types/NonnegativeFloat.json"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "num_frames": { "$ref": "types/PositiveInteger.json" },
+                "seed": { "$ref": "types/Integer.json" }
+            },
+            "additionalProperties": false
+        },
+        "uncertainty": {
+            "type": "object",
+            "properties": {
+                "tdoa": {
+                    "description": "TDOA uncertainty floor in seconds and dimensionless scale.",
+                    "$ref": "#/definitions/error_model"
+                },
+                "fdoa": {
+                    "description": "FDOA uncertainty floor in Hz and dimensionless scale.",
+                    "$ref": "#/definitions/error_model"
+                }
+            },
+            "additionalProperties": false
+        },
+        "error_model": {
+            "type": "object",
+            "properties": {
+                "floor": { "$ref": "types/NonnegativeFloat.json" },
+                "scale": { "$ref": "types/NonnegativeFloat.json" }
+            },
+            "additionalProperties": false
+        }
+    }
+}

@@ -1,6 +1,13 @@
 History
 =======
 
+0.26.0
+---------------------
+
+* Add passive RF analytical TDOA/FDOA simulation using the SatSim analytical layout, multiple named `geometry.site` entries, RADAR-style per-receiver fields of view and timing, direct target RF properties, deterministic receiver-pair noise, uncertainty modeling, schemas, and standard per-frame output.
+* Add optional `time.gap` scheduling to analytical RADAR and passive RF while preserving zero-gap frame timing by default.
+
+
 0.25.2
 ---------------------
 

@@ -45,6 +45,7 @@ var filesToValidate = [
     '../../tests/config_poppy.json',
     '../../tests/config_static_sttr7_sgp4.json',
     '../../tests/config_static.json',
+    '../../tests/data/passive_rf/config.json',
 ];
 
 ajv.compileAsync(schema).then(validate => {

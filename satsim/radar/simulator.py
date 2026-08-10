@@ -4,16 +4,24 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
-import astropy.units as u
 import numpy as np
 
 from satsim import time
-from satsim.config import transform, load_json, save_debug
-from satsim.geometry.sgp4 import create_sgp4
-from satsim.geometry.twobody import create_twobody
-from satsim.geometry.ephemeris import create_ephemeris_object
-from satsim.geometry.astrometric import create_topocentric, get_los
-from satsim.io.analytical import save as save_observations
+from satsim.config import load_json, load_yaml, save_debug, save_json, transform
+from satsim.geometry.astrometric import get_los
+from satsim.geometry.factory import (
+    create_observer_from_config,
+    create_target_from_config,
+    target_id_from_config,
+)
+from satsim.io.analytical import format_ob_time, save as save_observations
+from satsim.util.validation import (
+    finite_number,
+    nonnegative_number,
+    positive_integer,
+    positive_number,
+    unit_interval,
+)
 from .monostatic import (
     RadarParams,
     in_fov,
@@ -26,36 +34,86 @@ from .monostatic import (
 logger = logging.getLogger(__name__)
 
 
-def _format_ob_time(t) -> str:
-    """Format a Skyfield time as an ISO-8601 UTC timestamp with microseconds."""
-    return t.utc_datetime().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+def _limits(name, value, nonnegative=False):
+    """Validate an optional ordered pair of numerical limits."""
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError('{} must contain [minimum, maximum].'.format(name))
+    validator = nonnegative_number if nonnegative else finite_number
+    minimum = validator('{}[0]'.format(name), value[0])
+    maximum = validator('{}[1]'.format(name), value[1])
+    if minimum > maximum:
+        raise ValueError('{} minimum must not exceed maximum.'.format(name))
+    return minimum, maximum
 
 
 def _parse_radar_params(ssp: Dict[str, Any]) -> RadarParams:
     """Map a SatSim document into :class:`~satsim.radar.monostatic.RadarParams`."""
-    rc = ssp['radar']
+    if positive_integer('sim.samples', ssp.get('sim', {}).get('samples', 1)) != 1:
+        raise ValueError('RADAR requires sim.samples == 1 in v0.26.0.')
+    rc = ssp.get('radar')
+    if not isinstance(rc, dict):
+        raise ValueError('Configuration requires a radar object.')
     det = rc.get('detection', {})
     fov = rc.get('field_of_view', {})
+    timing = rc.get('time', {})
+    if not isinstance(det, dict):
+        raise ValueError('radar.detection must be an object.')
+    if not isinstance(fov, dict):
+        raise ValueError('radar.field_of_view must be an object.')
+    if not isinstance(timing, dict):
+        raise ValueError('radar.time must be an object.')
     rlim = rc.get('range_limits')
     # Derive a sensor identifier from config if not provided
     site = ssp.get('geometry', {}).get('site', {})
+    if not isinstance(site, dict):
+        raise ValueError('RADAR requires geometry.site to be an object.')
     site_name = site.get('name') or site.get('track', {}).get('name')
+    min_detectable_power = det.get('min_detectable_power')
+    if min_detectable_power is not None:
+        min_detectable_power = positive_number(
+            'radar.detection.min_detectable_power',
+            min_detectable_power,
+        )
+    snr_threshold = det.get('snr_threshold')
+    if snr_threshold is not None:
+        snr_threshold = nonnegative_number(
+            'radar.detection.snr_threshold',
+            snr_threshold,
+        )
     p = RadarParams(
-        tx_power=float(rc['tx_power']),
-        tx_frequency=float(rc['tx_frequency']),
-        antenna_diameter=float(rc.get('antenna_diameter', 0.0)),
-        efficiency=float(rc.get('efficiency', 1.0)),
-        min_detectable_power=det.get('min_detectable_power', None),
-        snr_threshold=det.get('snr_threshold', None),
-        angle_error=float(det.get('angle_error', 0.0)),
-        range_error=float(det.get('range_error', 0.0)),  # km
-        range_rate_error=float(det.get('range_rate_error', 0.0)),  # km/s
-        false_alarm_rate=float(det.get('false_alarm_rate', 0.0)),
-        az_limits=tuple(fov['azimuth']) if 'azimuth' in fov else None,
-        el_limits=tuple(fov['elevation']) if 'elevation' in fov else None,
-        range_limits=tuple(rlim) if rlim is not None else None,
-        dwell=float(rc.get('time', {}).get('dwell', 1.0)),
-        num_frames=int(rc.get('num_frames', 1)),
+        tx_power=positive_number('radar.tx_power', rc.get('tx_power')),
+        tx_frequency=positive_number('radar.tx_frequency', rc.get('tx_frequency')),
+        antenna_diameter=nonnegative_number(
+            'radar.antenna_diameter', rc.get('antenna_diameter', 0.0)
+        ),
+        efficiency=unit_interval('radar.efficiency', rc.get('efficiency', 1.0)),
+        min_detectable_power=min_detectable_power,
+        snr_threshold=snr_threshold,
+        angle_error=nonnegative_number(
+            'radar.detection.angle_error', det.get('angle_error', 0.0)
+        ),
+        range_error=nonnegative_number(
+            'radar.detection.range_error', det.get('range_error', 0.0)
+        ),
+        range_rate_error=nonnegative_number(
+            'radar.detection.range_rate_error',
+            det.get('range_rate_error', 0.0),
+        ),
+        false_alarm_rate=unit_interval(
+            'radar.detection.false_alarm_rate',
+            det.get('false_alarm_rate', 0.0),
+        ),
+        az_limits=_limits('radar.field_of_view.azimuth', fov.get('azimuth')),
+        el_limits=_limits('radar.field_of_view.elevation', fov.get('elevation')),
+        range_limits=_limits('radar.range_limits', rlim, nonnegative=True),
+        dwell=positive_number('radar.time.dwell', timing.get('dwell', 1.0)),
+        gap=nonnegative_number(
+            'radar.time.gap',
+            timing.get('gap', 0.0),
+        ),
+        num_frames=positive_integer('radar.num_frames', rc.get('num_frames', 1)),
         sensor_id=rc.get('idSensor') or rc.get('sensor_id') or rc.get('id') or rc.get('name') or site_name,
     )
     return p
@@ -63,58 +121,16 @@ def _parse_radar_params(ssp: Dict[str, Any]) -> RadarParams:
 
 def _build_observer(ssp: Dict[str, Any]):
     """Create the observing platform (ground site or space-borne observer)."""
-    site = ssp.get('geometry', {}).get('site', {})
-    if 'tle' in site:
-        return create_sgp4(site['tle'][0], site['tle'][1])
-    if 'tle1' in site:
-        return create_sgp4(site['tle1'], site['tle2'])
-    lat = site.get('lat', 0.0)
-    lon = site.get('lon', 0.0)
-    alt = float(site.get('alt', 0.0))
-    return create_topocentric(lat, lon, alt)
+    return create_observer_from_config(ssp.get('geometry', {}).get('site', {}))
 
 
 def _build_target(entry: Dict[str, Any], default_t: Optional[List[Any]] = None):
-    """Create a target object from a geometry obs entry.
-
-    Supported modes:
-    - ``tle``: SGP4 propagation
-    - ``twobody``: two-body state vector propagation (position [km], velocity [km/s])
-    - ``ephemeris``: interpolated positions/velocities (positions [km], velocities [km/s])
-
-    ``observation`` is angles-only and is not supported for radar ranging.
-    """
-    if default_t is None:
-        default_t = [2020, 1, 1, 0, 0, 0.0]
-
-    mode = entry.get('mode')
-
-    if mode == 'tle' or (mode is None and ('tle' in entry or 'tle1' in entry)):
-        if 'tle' in entry:
-            return create_sgp4(entry['tle'][0], entry['tle'][1])
-        return create_sgp4(entry['tle1'], entry['tle2'])
-
-    # Alias "statevector" for backwards compatibility.
-    if mode in {'twobody', 'statevector'}:
-        epoch = time.utc_from_list_or_scalar(entry.get('epoch'), default_t=default_t)
-        position = np.array(entry['position']) * u.km
-        velocity = np.array(entry['velocity']) * u.km / u.s
-        return create_twobody(position, velocity, epoch)
-
-    if mode == 'ephemeris':
-        epoch = time.utc_from_list_or_scalar(entry.get('epoch'), default_t=default_t)
-        return create_ephemeris_object(
-            entry['positions'],
-            entry['velocities'],
-            entry['seconds_from_epoch'],
-            epoch,
-        )
-
-    # observation angles-only not supported here for radar ranging
-    if mode == 'observation':
-        return None
-
-    return None
+    """Create a ranging-capable target using the shared SatSim factory."""
+    target_config = entry
+    if entry.get('mode') == 'statevector':
+        target_config = dict(entry)
+        target_config['mode'] = 'twobody'
+    return create_target_from_config(target_config, default_time=default_t)
 
 
 def simulate(ssp: Dict[str, Any], output_dir: str = './') -> str:
@@ -132,11 +148,6 @@ def simulate(ssp: Dict[str, Any], output_dir: str = './') -> str:
     Returns:
         The output directory used for this run.
     """
-    # Prepare output directory (match EO timestamped folder naming)
-    from datetime import datetime
-    set_dir = os.path.join(output_dir, datetime.now().isoformat().replace(':', '-'))
-    os.makedirs(set_dir, exist_ok=True)
-
     # Parse radar params
     rp = _parse_radar_params(ssp)
 
@@ -159,9 +170,17 @@ def simulate(ssp: Dict[str, Any], output_dir: str = './') -> str:
             continue
         targets.append((target, o))
 
+    # Match EO timestamped folder naming, after configuration validation.
+    from datetime import datetime
+    set_dir = os.path.join(output_dir, datetime.now().isoformat().replace(':', '-'))
+    os.makedirs(set_dir, exist_ok=False)
+
     # Per-frame loop
     for frame_idx in range(rp.num_frames):
-        t_mid = time.utc_from_list(tt, delta_sec=frame_idx * rp.dwell + 0.5 * rp.dwell)
+        t_mid = time.utc_from_list(
+            tt,
+            delta_sec=frame_idx * (rp.dwell + rp.gap) + 0.5 * rp.dwell,
+        )
 
         frame_measurements: List[Dict[str, Any]] = []
         for target, o in targets:
@@ -185,7 +204,7 @@ def simulate(ssp: Dict[str, Any], output_dir: str = './') -> str:
                 continue
 
             # Detection check
-            rcs = float(o.get('rcs', 1.0))
+            rcs = positive_number('radar target rcs', o.get('rcs', 1.0))
             detected, snr = detect(rp, rcs, rng)
             if not detected:
                 continue
@@ -204,7 +223,7 @@ def simulate(ssp: Dict[str, Any], output_dir: str = './') -> str:
             dop_mps = rr_m * 1000.0
 
             entry = {
-                'obTime': _format_ob_time(t_mid),
+                'obTime': format_ob_time(t_mid),
                 'type': 'RADAR',
                 'azimuth': float(az_m),
                 'elevation': float(el_m),
@@ -219,32 +238,41 @@ def simulate(ssp: Dict[str, Any], output_dir: str = './') -> str:
                 'uct': False,
                 'snr': float(snr) if snr is not None else None,
                 'rcs': float(rcs),
+                'createdBy': 'satsim',
             }
             if 'name' in o and o['name']:
                 entry['idOnOrbit'] = o['name']
-            if 'id' in o and o['id']:
-                entry['satNo'] = o['id']
+            try:
+                target_id = target_id_from_config(o)
+            except ValueError:
+                target_id = None
+            if target_id is not None and target_id != '':
+                entry['satNo'] = target_id
             if rp.sensor_id:
                 entry['idSensor'] = rp.sensor_id
 
             # Append
             frame_measurements.append(entry)
 
-        # Save observations for frame (legacy location)
+        # Save observations in the standard analytical location.
         save_observations(set_dir, frame_idx, frame_measurements)
 
+    save_json(os.path.join(set_dir, 'config.json'), ssp)
     return set_dir
 
 
 def simulate_from_file(config_file: str, output_dir: str = './') -> str:
     """Load, transform ($sample/$import/$ref), and run the radar simulator."""
-    if config_file.endswith('.json'):
+    config_file_lower = config_file.lower()
+    if config_file_lower.endswith('.json'):
         ssp = load_json(config_file)
-    else:
-        from satsim.config import load_yaml
+    elif config_file_lower.endswith(('.yml', '.yaml')):
         ssp = load_yaml(config_file)
+    else:
+        raise ValueError('Config file must be JSON or YAML.')
     # Transform (evaluate $sample/$import/$ref) with input dir context and keep debug stages
-    ssp_t, stages = transform(ssp, os.path.dirname(config_file), with_debug=True)
+    input_dir = os.path.dirname(os.path.abspath(config_file))
+    ssp_t, stages = transform(ssp, input_dir, with_debug=True)
     run_dir = simulate(ssp_t, output_dir)
     # Save config passes to match EO output structure
     save_debug(stages, run_dir)

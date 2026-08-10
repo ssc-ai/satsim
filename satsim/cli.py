@@ -13,6 +13,18 @@ import click
 logger = logging.getLogger(__name__)
 
 
+def _simulation_mode(ssp):
+    """Return the single simulator selected by a root configuration."""
+    if not isinstance(ssp, dict):
+        raise click.ClickException('Configuration root must be an object.')
+    modes = [key for key in ('fpa', 'radar', 'passive_rf') if key in ssp]
+    if len(modes) != 1:
+        raise click.ClickException(
+            'Configuration must contain exactly one of fpa, radar, or passive_rf.'
+        )
+    return modes[0]
+
+
 @click.group(invoke_without_command=True)
 @click.version_option(version=__version__, prog_name='SatSim')
 @click.option('-d', '--debug', default='WARNING', show_default=True, help='Set the logging level. [DEBUG,INFO,WARNING,ERROR,OFF]')
@@ -53,7 +65,7 @@ def version(ctx):
     return 0
 
 
-@main.command(help='Run simulation from configuration file (auto-detects radar vs EO).')
+@main.command(help='Run simulation from configuration file (auto-detects passive RF, RADAR, or EO).')
 @click.option('-d', '--device', default='0', type=str, help='GPU device ids to utilize. example: 0,1,3,4')
 @click.option('-r', '--memory', default=None, type=int, help='GPU maximum memory limit in megabytes per process.')
 @click.option('-j', '--jobs', default=1, type=int, help='Allow N jobs at once per GPU device.')
@@ -81,24 +93,35 @@ def run(ctx, device, memory, jobs, mode, output_dir, config_file, output_interme
     logger.info('SatSim version {}.'.format(__version__))
 
     ssp = {}
-    if config_file.endswith('.yml'):
+    config_file_lower = config_file.lower()
+    if config_file_lower.endswith(('.yml', '.yaml')):
         logger.info('Loading yaml file: {}.'.format(config_file))
         ssp = load_yaml(config_file)
 
-    elif config_file.endswith('.json'):
+    elif config_file_lower.endswith('.json'):
         logger.info('Loading json file: {}.'.format(config_file))
         ssp = load_json(config_file)
 
     else:
-        logger.error('File type unknown. Config file must be .json or .yml type.')
-        sys.exit(1)
+        raise click.ClickException(
+            'File type unknown. Config file must be .json, .yml, or .yaml.'
+        )
 
-    # If config contains a radar block, dispatch to radar simulator
-    if isinstance(ssp, dict) and 'radar' in ssp:
+    simulation_mode = _simulation_mode(ssp)
+
+    # Analytical modes are dispatched before initializing the EO backend.
+    if simulation_mode == 'radar':
         from satsim.radar import simulate_from_file
         logger.info('Detected radar configuration. Dispatching to radar simulator.')
         out_dir = simulate_from_file(config_file, output_dir)
         logger.info('Saved radar observations to: {}'.format(out_dir))
+        return 0
+
+    if simulation_mode == 'passive_rf':
+        from satsim.passive_rf import simulate_from_file
+        logger.info('Detected passive RF configuration. Dispatching to passive RF simulator.')
+        out_dir = simulate_from_file(config_file, output_dir)
+        logger.info('Saved passive RF observations to: {}'.format(out_dir))
         return 0
 
     # Otherwise, run EO/optical pipeline as before

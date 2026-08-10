@@ -1,10 +1,11 @@
 import json
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock
 
-import astropy.units as u
 import numpy as np
+import pytest
 
 import satsim.radar.simulator as simulator
 import satsim.radar.monostatic as sensor
@@ -32,6 +33,7 @@ def _base_ssp():
             'range_limits': [0.0, 5000.0],
             'time': {
                 'dwell': 1.0,
+                'gap': 0.0,
             },
             'num_frames': 1,
         },
@@ -74,112 +76,98 @@ def test_parse_radar_params_mapping():
     assert p.el_limits == tuple(ssp['radar']['field_of_view']['elevation'])
     assert p.range_limits == tuple(ssp['radar']['range_limits'])
     assert p.dwell == ssp['radar']['time']['dwell']
+    assert p.gap == ssp['radar']['time']['gap']
     assert p.num_frames == ssp['radar']['num_frames']
 
 
-def test_build_observer_ground_and_space(monkeypatch):
-    # Ground
+def test_parse_radar_params_rejects_negative_gap():
     ssp = _base_ssp()
-    # Avoid Skyfield ephemeris loads in unit tests.
-    sentinel_topo = object()
-    sentinel_sgp4 = object()
-    monkeypatch.setattr(simulator, 'create_topocentric', lambda lat, lon, alt: sentinel_topo)
-    monkeypatch.setattr(simulator, 'create_sgp4', lambda tle1, tle2: sentinel_sgp4)
-
-    obs = simulator._build_observer(ssp)
-    assert obs is sentinel_topo
-    # Space using TLE keys
-    ssp2 = _base_ssp()
-    ssp2['geometry']['site'] = {
-        'tle1': '1 25544U 98067A   20029.54791435  .00001264  00000-0  29621-4 0  9993',
-        'tle2': '2 25544  51.6440  30.9682 0005197  77.5934  20.6657 15.49147106211867',
-    }
-    obs2 = simulator._build_observer(ssp2)
-    assert obs2 is sentinel_sgp4
+    ssp['radar']['time']['gap'] = -1.0
+    with pytest.raises(ValueError, match='must be nonnegative'):
+        simulator._parse_radar_params(ssp)
 
 
-def test_build_target_modes(monkeypatch):
+@pytest.mark.parametrize('path,value,match', [
+    (('tx_power',), 0.0, 'must be positive'),
+    (('tx_frequency',), -1.0, 'must be positive'),
+    (('antenna_diameter',), -1.0, 'must be nonnegative'),
+    (('efficiency',), 1.1, r'range \[0, 1\]'),
+    (('detection', 'range_error'), -1.0, 'must be nonnegative'),
+    (('detection', 'false_alarm_rate'), 1.1, r'range \[0, 1\]'),
+    (('time', 'dwell'), 0.0, 'must be positive'),
+    (('num_frames',), 0, 'must be positive'),
+])
+def test_parse_radar_params_rejects_invalid_physical_values(path, value, match):
+    ssp = _base_ssp()
+    node = ssp['radar']
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    with pytest.raises(ValueError, match=match):
+        simulator._parse_radar_params(ssp)
+
+
+@pytest.mark.parametrize('field', ['field_of_view', 'range_limits'])
+def test_parse_radar_params_rejects_reversed_limits(field):
+    ssp = _base_ssp()
+    if field == 'field_of_view':
+        ssp['radar'][field]['elevation'] = [90.0, 0.0]
+    else:
+        ssp['radar'][field] = [5000.0, 0.0]
+    with pytest.raises(ValueError, match='minimum must not exceed maximum'):
+        simulator._parse_radar_params(ssp)
+
+
+def test_parse_radar_params_rejects_multiple_samples():
+    ssp = _base_ssp()
+    ssp['sim'] = {'samples': 2}
+    with pytest.raises(ValueError, match='sim.samples == 1'):
+        simulator._parse_radar_params(ssp)
+
+
+def test_build_observer_ground_and_space(monkeypatch):
+    ssp = _base_ssp()
+    sentinel = object()
+    captured = []
+    monkeypatch.setattr(
+        simulator,
+        'create_observer_from_config',
+        lambda site: captured.append(site) or sentinel,
+    )
+    assert simulator._build_observer(ssp) is sentinel
+    assert captured == [ssp['geometry']['site']]
+
+
+def test_build_target_uses_shared_factory(monkeypatch):
     default_t = [2020, 1, 1, 0, 0, 0.0]
-    sentinel_sgp4 = object()
-    sentinel_twobody = object()
-    sentinel_eph = object()
+    entry = {'mode': 'observation'}
+    sentinel = object()
+    captured = []
+    monkeypatch.setattr(
+        simulator,
+        'create_target_from_config',
+        lambda value, default_time=None: captured.append((value, default_time)) or sentinel,
+    )
+    assert simulator._build_target(entry, default_t=default_t) is sentinel
+    assert captured == [(entry, default_t)]
 
-    captured_twobody = {}
-    captured_ephemeris = {}
-
-    def fake_create_sgp4(tle1, tle2):
-        return sentinel_sgp4
-
-    def fake_create_twobody(position, velocity, epoch):
-        captured_twobody['position'] = position
-        captured_twobody['velocity'] = velocity
-        captured_twobody['epoch'] = epoch
-        return sentinel_twobody
-
-    def fake_create_ephemeris_object(positions, velocities, times, epoch):
-        captured_ephemeris['positions'] = positions
-        captured_ephemeris['velocities'] = velocities
-        captured_ephemeris['times'] = times
-        captured_ephemeris['epoch'] = epoch
-        return sentinel_eph
-
-    monkeypatch.setattr(simulator, 'create_sgp4', fake_create_sgp4)
-    monkeypatch.setattr(simulator, 'create_twobody', fake_create_twobody)
-    monkeypatch.setattr(simulator, 'create_ephemeris_object', fake_create_ephemeris_object)
-
-    # TLE
-    tle_entry = {
-        'mode': 'tle',
-        'tle1': '1 25544U 98067A   20029.54791435  .00001264  00000-0  29621-4 0  9993',
-        'tle2': '2 25544  51.6440  30.9682 0005197  77.5934  20.6657 15.49147106211867',
-    }
-    assert simulator._build_target(tle_entry, default_t=default_t) is sentinel_sgp4
-
-    # Statevector
-    sv_entry = {
-        'mode': 'twobody',
-        'position': [7000.0, 0.0, 0.0],
-        'velocity': [0.0, 7.5, 0.0],
-        'epoch': 0.0,
-    }
-    assert simulator._build_target(sv_entry, default_t=default_t) is sentinel_twobody
-    assert captured_twobody['position'].unit == u.km
-    assert captured_twobody['velocity'].unit.is_equivalent(u.km / u.s)
-    np.testing.assert_allclose(captured_twobody['position'].value, sv_entry['position'])
-    np.testing.assert_allclose(captured_twobody['velocity'].to_value(u.km / u.s), sv_entry['velocity'])
-
-    # Back-compat alias
-    sv_entry_alias = dict(sv_entry)
-    sv_entry_alias['mode'] = 'statevector'
-    assert simulator._build_target(sv_entry_alias, default_t=default_t) is sentinel_twobody
-
-    # Ephemeris
-    eph_entry = {
-        'mode': 'ephemeris',
-        'epoch': [2020, 1, 1, 0, 0, 0.0],
-        'seconds_from_epoch': [0.0, 10.0, 20.0],
-        'positions': [[7000.0, 0.0, 0.0], [7001.0, 0.0, 0.0], [7002.0, 0.0, 0.0]],
-        'velocities': [[0.0, 7.5, 0.0], [0.0, 7.5, 0.0], [0.0, 7.5, 0.0]],
-    }
-    assert simulator._build_target(eph_entry, default_t=default_t) is sentinel_eph
-    assert captured_ephemeris['positions'] == eph_entry['positions']
-    assert captured_ephemeris['velocities'] == eph_entry['velocities']
-    assert captured_ephemeris['times'] == eph_entry['seconds_from_epoch']
-
-    # Observation -> unsupported
-    obs_entry = {'mode': 'observation'}
-    assert simulator._build_target(obs_entry, default_t=default_t) is None
-
-    # Default TLE keys without mode
-    def_entry = {
-        'tle1': '1 25544U 98067A   20029.54791435  .00001264  00000-0  29621-4 0  9993',
-        'tle2': '2 25544  51.6440  30.9682 0005197  77.5934  20.6657 15.49147106211867',
-    }
-    assert simulator._build_target(def_entry, default_t=default_t) is sentinel_sgp4
+    alias = {'mode': 'statevector', 'position': [], 'velocity': [], 'epoch': 0.0}
+    assert simulator._build_target(alias, default_t=default_t) is sentinel
+    assert captured[-1] == (dict(alias, mode='twobody'), default_t)
 
 
 def test_simulate_writes_observations(monkeypatch):
     ssp = _base_ssp()
+    target_config = ssp['geometry']['obs']['list']
+    target_config.pop('id')
+    target_config.pop('position')
+    target_config.pop('velocity')
+    target_config.pop('epoch')
+    target_config['mode'] = 'tle'
+    target_config['tle'] = [
+        '1 25544U 98067A   20029.54791435  .00001264  00000-0  29621-4 0  9993',
+        '2 25544  51.6440  30.9682 0005197  77.5934  20.6657 15.49147106211867',
+    ]
 
     # Avoid Skyfield ephemeris loads in unit tests.
     monkeypatch.setattr(simulator, '_build_observer', lambda ssp: object())
@@ -213,6 +201,7 @@ def test_simulate_writes_observations(monkeypatch):
 
     out_dir = tempfile.mkdtemp()
     run_dir = simulator.simulate(ssp, out_dir)
+    assert (Path(run_dir) / 'config.json').is_file()
 
     # Locate frame 0 JSON
     obs_path = os.path.join(run_dir, 'AnalyticalObservations')
@@ -225,6 +214,7 @@ def test_simulate_writes_observations(monkeypatch):
     assert isinstance(data, list) and len(data) == 1
     m = data[0]
     assert m['type'] == 'RADAR'
+    assert m['createdBy'] == 'satsim'
     # Deterministic perturbation due to fake noise (shift == sigma)
     np.testing.assert_allclose(m['azimuth'], 45.05, rtol=0, atol=1e-12)
     np.testing.assert_allclose(m['elevation'], 45.05, rtol=0, atol=1e-12)
@@ -239,13 +229,40 @@ def test_simulate_writes_observations(monkeypatch):
     np.testing.assert_allclose(m['rangeRateUnc'], 0.0, rtol=0, atol=1e-12)
     np.testing.assert_allclose(m['dopplerUnc'], 0.0, rtol=0, atol=1e-12)
     assert m['idOnOrbit'] == 'SAT1'
-    assert m['satNo'] == 12345
+    assert m['satNo'] == 25544
 
     # Validate SNR proxy (Rmax/R)^4
     rp = simulator._parse_radar_params(ssp)
     rmax = sensor.max_detectable_range(rp, sigma=1.0)
     expected_snr = (rmax / 100.0) ** 4
     np.testing.assert_allclose(m['snr'], expected_snr, rtol=1e-12)
+
+
+def test_gap_separates_dwell_from_radar_frame_spacing(monkeypatch, tmp_path):
+    ssp = _base_ssp()
+    ssp['radar']['time']['gap'] = 29.0
+    ssp['radar']['num_frames'] = 2
+
+    monkeypatch.setattr(simulator, '_build_observer', lambda ssp: object())
+    monkeypatch.setattr(
+        simulator,
+        '_build_target',
+        lambda entry, default_t=None: object(),
+    )
+    monkeypatch.setattr(
+        simulator,
+        'get_los',
+        lambda *args, **kwargs: (0.0, 0.0, 100.0, 45.0, 45.0, None),
+    )
+    monkeypatch.setattr(simulator, 'range_rate', lambda *args, **kwargs: 0.0)
+
+    run_dir = simulator.simulate(ssp, str(tmp_path))
+    paths = sorted((Path(run_dir) / 'AnalyticalObservations').glob('*.json'))
+    times = [json.loads(path.read_text())[0]['obTime'] for path in paths]
+    assert times == [
+        '2020-01-01T00:00:00.500000Z',
+        '2020-01-01T00:00:30.500000Z',
+    ]
 
 
 def test_simulate_from_file(monkeypatch, tmp_path):
@@ -276,6 +293,7 @@ def test_simulate_from_file(monkeypatch, tmp_path):
     out_dir = tempfile.mkdtemp()
     result_dir = simulator.simulate_from_file(str(cfg_path), out_dir)
     assert os.path.isdir(result_dir)
+    assert (Path(result_dir) / 'config.json').is_file()
 
 
 def test_simulate_filters_by_fov_and_range(monkeypatch):
