@@ -883,6 +883,14 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             elif 'tle1' in ssp['geometry']['site']:
                 observer = create_sgp4(ssp['geometry']['site']['tle1'], ssp['geometry']['site']['tle2'])
                 site_mode = 'space'
+            elif 'positions' in ssp['geometry']['site']:
+                site_epoch = time.utc_from_list_or_scalar(ssp['geometry']['site']['epoch'], default_t=tt)
+                observer = create_ephemeris_object(ssp['geometry']['site']['positions'], ssp['geometry']['site']['velocities'], ssp['geometry']['site']['seconds_from_epoch'], site_epoch)
+                site_mode = 'space'
+            elif 'position' in ssp['geometry']['site']:
+                site_epoch = time.utc_from_list_or_scalar(ssp['geometry']['site']['epoch'], default_t=tt)
+                observer = create_twobody(np.array(ssp['geometry']['site']['position']) * u.km, np.array(ssp['geometry']['site']['velocity']) * u.km / u.s, site_epoch)
+                site_mode = 'space'
             else:
                 lat = ssp['geometry']['site']['lat']
                 lon = ssp['geometry']['site']['lon']

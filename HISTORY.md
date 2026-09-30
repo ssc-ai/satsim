@@ -1,6 +1,12 @@
 History
 =======
 
+0.26.1
+---------------------
+
+* Accept state-vector and ephemeris sites
+
+
 0.26.0
 ---------------------
 
