@@ -27,13 +27,13 @@ class EphemerisObject(VectorFunction):
 
         # no segment boundaries
         if np.ndim(times[0]) == 0:
-            self.positions = np.array(positions)
-            self.velocities = np.array(velocities)
+            self.positions = np.array(positions, dtype=float)
+            self.velocities = np.array(velocities, dtype=float)
             self.times = np.array(times)
         # with segment boundaries
         elif np.ndim(times[0]) == 1:
-            self.positions = [np.array(p) for p in positions]
-            self.velocities = [np.array(v) for v in velocities]
+            self.positions = [np.array(p, dtype=float) for p in positions]
+            self.velocities = [np.array(v, dtype=float) for v in velocities]
             self.times = [np.array(t) for t in times]
 
         self.order = order

@@ -11,7 +11,9 @@ from skyfield.vectorlib import VectorFunction
 
 from satsim import time
 from satsim.geometry.astrometric import load_earth, eci_to_ecr
+from satsim.geometry.ephemeris import create_ephemeris_object
 from satsim.geometry.sgp4 import create_sgp4
+from satsim.geometry.twobody import create_twobody
 from satsim.vecmath import Quaternion
 
 from czmlpy.core import Document, Packet, Preamble
@@ -87,11 +89,18 @@ def save_czml(ssp, obs_cache, astrometrics, filename):
 
         if 'tle' in site:
             sat = create_sgp4(site['tle'][0], site['tle'][1])
-            extractor.add_space_station(sat, sensor, label_text=name, label_show=label_show,
-                                        cone_show=cone_show, cone_color=cone_color,
-                                        billboard_show=billboard_show, billboard_image=billboard_image)
         elif 'tle1' in site:
             sat = create_sgp4(site['tle1'], site['tle2'])
+        elif 'positions' in site:
+            sat = create_ephemeris_object(site['positions'], site['velocities'], site['seconds_from_epoch'],
+                                          time.utc_from_list_or_scalar(site['epoch'], default_t=tt))
+        elif 'position' in site:
+            sat = create_twobody(np.array(site['position']) * u.km, np.array(site['velocity']) * u.km / u.s,
+                                 time.utc_from_list_or_scalar(site['epoch'], default_t=tt))
+        else:
+            sat = None
+
+        if sat is not None:
             extractor.add_space_station(sat, sensor, label_text=name, label_show=label_show,
                                         cone_show=cone_show, cone_color=cone_color,
                                         billboard_show=billboard_show, billboard_image=billboard_image)

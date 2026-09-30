@@ -640,8 +640,39 @@ and one TLE target:
 
 Track modes include `rate`, `sidereal`, `fixed`, `radec`, and
 `rate-sidereal`. A topocentric observer uses `lat`, `lon`, and `alt`.
-A space-based observer can be specified with site-level `tle` or
-`tle1`/`tle2`.
+A space-based observer for optical simulation is specified with one of
+these site-level orbit forms. When more than one is present, the first in
+this list is used:
+
+- `tle`, or `tle1` and `tle2`: SGP4 propagation from TLE lines.
+- `positions`, `velocities`, `seconds_from_epoch`, and `epoch`: Lagrange
+  interpolation through ephemeris samples. `positions` are in km and
+  `velocities` in km/s, one `[x, y, z]` row per entry of
+  `seconds_from_epoch`. Samples may also be split into segments, where each
+  of the three fields is a list of per-segment arrays. The samples must
+  cover every frame of the collect; times outside the samples are
+  extrapolated.
+- `position`, `velocity`, and `epoch`: two-body propagation from a single
+  `[x, y, z]` state in km and km/s.
+
+Positions and velocities are Earth-centered inertial (GCRS). `epoch` is
+either a UTC list `[year, month, day, hour, minute, seconds]` or a number of
+seconds from `geometry.time`.
+
+```json
+{
+  "geometry": {
+    "time": [2015, 4, 24, 9, 37, 44.128],
+    "site": {
+      "position": [205.293, -6510.959, 2185.905],
+      "velocity": [-1.026577, -2.396199, -7.178917],
+      "epoch": 0.5,
+      "gimbal": { "mode": "wcs", "rotation": 0 },
+      "track": { "mode": "radec", "ra": 0.0, "dec": 0.0 }
+    }
+  }
+}
+```
 
 ### RPO, Collision, and Breakup Generators
 
