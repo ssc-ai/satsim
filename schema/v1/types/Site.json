@@ -42,6 +42,30 @@
             "description": "The second line of a space-based observer TLE.",
             "type": "string"
         },
+        "positions": {
+            "description": "Space-based observer ephemeris positions in kilometers, Earth-centered inertial (GCRS), as [x, y, z] samples or a list of sample segments. Used with velocities, seconds_from_epoch and epoch when no TLE is given.",
+            "type": "array"
+        },
+        "velocities": {
+            "description": "Space-based observer ephemeris velocities in kilometers per second, Earth-centered inertial (GCRS), matching positions.",
+            "type": "array"
+        },
+        "seconds_from_epoch": {
+            "description": "The time of each ephemeris sample in seconds from epoch, matching positions. The samples should cover the collect.",
+            "type": "array"
+        },
+        "position": {
+            "description": "A space-based two-body observer position [x, y, z] in kilometers, Earth-centered inertial (GCRS), at epoch. Used with velocity and epoch when no TLE or ephemeris is given.",
+            "type": "array"
+        },
+        "velocity": {
+            "description": "A space-based two-body observer velocity [x, y, z] in kilometers per second, Earth-centered inertial (GCRS), at epoch.",
+            "type": "array"
+        },
+        "epoch": {
+            "description": "The epoch of the observer ephemeris or two-body state, as a UTC list or seconds from geometry.time.",
+            "$ref": "TimeDelta.json"
+        },
         "gimbal": {
             "type": "object",
             "properties": {
