@@ -139,3 +139,27 @@ def test_gen_poppy_with_atmosphere():
     psf = gen_from_poppy_configuration(h, w, 0.3 / h, 0.3 / w, osf, config)
     assert(psf.shape[0] == h * osf)
     assert(psf.shape[1] == w * osf)
+
+
+def test_gen_poppy_atmosphere_seed_is_reproducible():
+    config = {
+        "mode": "poppy",
+        "optical_system": [
+            {"type": "CircularAperture", "kwargs": {"radius": 0.2}},
+        ],
+        "turbulent_atmosphere": {
+            "Cn2": 1.7e-15,
+            "propagation_distance": 3000,
+            "zones": 2,
+            "seed": 314,
+        },
+        "wavelengths": [600e-9],
+        "weights": [1.0],
+    }
+    first = gen_from_poppy_configuration(31, 31, 0.3 / 31, 0.3 / 31, 2, config)
+    second = gen_from_poppy_configuration(31, 31, 0.3 / 31, 0.3 / 31, 2, config)
+    np.testing.assert_array_equal(first, second)
+
+    config['turbulent_atmosphere']['seed'] = 315
+    other = gen_from_poppy_configuration(31, 31, 0.3 / 31, 0.3 / 31, 2, config)
+    assert not np.array_equal(first, other)

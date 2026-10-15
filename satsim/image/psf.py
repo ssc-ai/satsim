@@ -166,11 +166,13 @@ def gen_from_poppy_configuration(height, width, y_ifov, x_ifov, s_osf, config):
         L = turbulent_atmosphere['propagation_distance'] * u.m
         nz = turbulent_atmosphere['zones']
         dz = L / nz
+        seed = turbulent_atmosphere.get('seed')
         for i in range(nz + 1):
+            phase_screen_kwargs = {'seed': int(seed) + i} if seed is not None else {}
             if i == 0 or i == nz:
-                phase_screen = poppy.KolmogorovWFE(Cn2=Cn2, dz=dz / 2)
+                phase_screen = poppy.KolmogorovWFE(Cn2=Cn2, dz=dz / 2, **phase_screen_kwargs)
             else:
-                phase_screen = poppy.KolmogorovWFE(Cn2=Cn2, dz=dz)
+                phase_screen = poppy.KolmogorovWFE(Cn2=Cn2, dz=dz, **phase_screen_kwargs)
             osys.add_pupil(phase_screen)
 
     if 'size' in config:

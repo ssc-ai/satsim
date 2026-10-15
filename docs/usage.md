@@ -337,7 +337,8 @@ arrays, for example gain, bias, dark current, and background fields.
   on detector.
 - `{"mode": "poppy", ...}`: POPPY physical-optics PSF with an
   `optical_system`, wavelengths, weights, and optional
-  `turbulent_atmosphere`.
+  `turbulent_atmosphere`. Set `turbulent_atmosphere.seed` to make the
+  phase screens reproducible across runs; each zone uses a distinct seed.
 
 `fpa.detection` controls synthetic detection uncertainty for analytical EO
 observations:
