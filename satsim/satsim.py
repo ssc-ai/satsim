@@ -56,7 +56,7 @@ from satsim.geometry.astrometric import (
 )
 from satsim.geometry.greatcircle import GreatCircle
 from skyfield.toposlib import _ltude
-from satsim.geometry.photometric import model_to_mv
+from satsim.geometry.photometric import interpolate_magnitudes, model_to_mv
 from satsim.geometry.shadow import earth_shadow_umbra_mask
 from satsim.geometry.twobody import create_twobody
 from satsim.geometry.observation import create_observation
@@ -2221,8 +2221,24 @@ def _positive_int_setting(sim, name, default):
     return int(value)
 
 
+def _brightness_sampling_settings(sim):
+    sampling = sim.get('brightness_sampling', {})
+    if not isinstance(sampling, dict):
+        raise ValueError('sim.brightness_sampling must be an object.')
+    if set(sampling) - {'mode', 'max_interval_seconds', 'tolerance_mag'}:
+        raise ValueError('Unknown sim.brightness_sampling setting.')
+    result = {'mode': 'exact', 'max_interval_seconds': 1.0, 'tolerance_mag': 1e-4, **sampling}
+    if result['mode'] not in ('exact', 'adaptive'):
+        raise ValueError('sim.brightness_sampling.mode must be exact or adaptive.')
+    for name in ('max_interval_seconds', 'tolerance_mag'):
+        value = result[name]
+        if isinstance(value, bool) or not isinstance(value, numbers.Real) or not np.isfinite(value) or value <= 0:
+            raise ValueError('sim.brightness_sampling.{} must be positive and finite.'.format(name))
+    return result
+
+
 def _apply_photometry(counts, edges, observer, target, model, utc, zeropoint,
-                      chunk_size=256, earth_shadow=False):
+                      chunk_size=256, earth_shadow=False, sampling=None):
     """Evaluate physical brightness and shadow with bounded Skyfield Time vectors.
 
     ``edges`` includes duplicate boundaries for zero-flux annotation controls.
@@ -2230,6 +2246,22 @@ def _apply_photometry(counts, edges, observer, target, model, utc, zeropoint,
     arrays; only physical models and shadow calculations are chunked here.
     """
     result = np.array(counts, dtype=float, copy=True)
+    if (model is not None and sampling is not None and sampling['mode'] == 'adaptive'
+            and model.get('mode') == 'lambertian_sphere'
+            and not any(np.ndim(model.get(key, 0)) > 0 for key in ('distance', 'phase_angle'))):
+        def evaluate(offsets):
+            values = np.empty(len(offsets), dtype=float)
+            for start in range(0, len(offsets), chunk_size):
+                stop = min(start + chunk_size, len(offsets))
+                t = time.utc_from_list(utc, offsets[start:stop])
+                values[start:stop] = model_to_mv(observer, target, model, t)
+            return values
+
+        magnitudes = interpolate_magnitudes(
+            evaluate, _avg_t(edges), sampling['max_interval_seconds'], sampling['tolerance_mag'])
+        result = mv_to_pe(zeropoint, magnitudes) * _delta_t(edges)
+        # Shadow is still applied at every original sample time below.
+        model = None
     if model is None and not earth_shadow:
         return result
     for start in range(0, len(result), chunk_size):
@@ -2273,6 +2305,7 @@ def _gen_objects(ssp, render_mode,
     ts_end = time.utc_from_list(tt, t_end)
     max_track_samples = _positive_int_setting(ssp['sim'], 'max_track_samples', MAX_TRACK_SAMPLES)
     photometry_chunk_size = _positive_int_setting(ssp['sim'], 'photometry_chunk_size', 256)
+    brightness_sampling = _brightness_sampling_settings(ssp['sim'])
 
     enable_deflection = ssp['sim']['enable_deflection']
     enable_light_transit = ssp['sim']['enable_light_transit']
@@ -2535,7 +2568,8 @@ def _gen_objects(ssp, render_mode,
             opp = _apply_photometry(
                 opp, ott, observer, target, o['model'] if has_brightness_model else None,
                 tt, zeropoint, chunk_size=photometry_chunk_size,
-                earth_shadow=target is not None and ssp['sim'].get('enable_earth_shadow', False))
+                earth_shadow=target is not None and ssp['sim'].get('enable_earth_shadow', False),
+                sampling=brightness_sampling)
             if not np.all(np.isfinite(opp)) or np.any(opp < 0):
                 raise ValueError('Target brightness must produce finite, nonnegative photoelectrons.')
 

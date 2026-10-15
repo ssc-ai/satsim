@@ -308,6 +308,16 @@ image-plane target:
   shadow evaluation, default `256`. Chunking bounds intermediate memory while
   retaining the per-sample model and shadow calculations. Callable brightness
   pipelines continue to receive their full time arrays.
+- `brightness_sampling`: physical Lambertian brightness defaults to
+  `{"mode": "exact"}`. Opt in with `{"mode": "adaptive",
+  "max_interval_seconds": 1.0, "tolerance_mag": 0.0001}` to interpolate
+  magnitudes with piecewise quadratics. Each interval is at most the specified
+  duration and is checked at quarter points, then subdivided if the residual
+  exceeds the tolerance. These checks guide accuracy; they do not guarantee
+  an error bound between checks. Exact evaluation is used when interpolation
+  would cost as many samples, refinement stalls, or knots are nonfinite.
+  Explicit distance/phase arrays and callable brightness pipelines retain
+  exact evaluation. Earth shadow is always evaluated at every original sample.
 - `enable_shot_noise` and `num_shot_noise_samples`: control Poisson shot
   noise and optional noise averaging.
 - `fits_compression`: `none`, `gzip`, `gzip2`, `rice`, `hcompress`,

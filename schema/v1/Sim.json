@@ -216,6 +216,30 @@
             "minimum": 1,
             "default": 256
         },
+        "brightness_sampling": {
+            "description": "Physical Lambertian brightness evaluation. Exact is the default. Adaptive uses checked piecewise quadratic magnitude interpolation; Earth shadow remains per sample.",
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["exact", "adaptive"],
+                    "default": "exact"
+                },
+                "max_interval_seconds": {
+                    "description": "Maximum duration of an interpolation segment before accuracy-driven subdivision.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "default": 1.0
+                },
+                "tolerance_mag": {
+                    "description": "Maximum magnitude residual at quarter-point validation samples. This is an adaptive accuracy check, not a guaranteed bound between validation samples.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "default": 0.0001
+                }
+            },
+            "additionalProperties": false
+        },
         "save_jpeg": {
             "description": "Save annotated images as JPEG.",
             "type": "boolean",

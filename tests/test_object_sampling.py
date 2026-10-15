@@ -198,3 +198,22 @@ def test_captured_tle_photometry_failure_isolated_with_real_propagation(monkeypa
     assert [entry['object_name'] for entry in entries] == ['good']
     np.testing.assert_allclose(counts, [10000.])
     assert 'Skipping target bad' in caplog.text
+
+
+def test_object_loop_passes_adaptive_sampling_settings(monkeypatch):
+    seen = []
+    monkeypatch.setattr(sim, 'create_satrec', lambda *a: None)
+    monkeypatch.setattr(sim, 'create_sgp4_from_satrec', lambda *a: object())
+
+    def model(observer, target, config, t):
+        seen.extend(t.tt)
+        return np.full(len(t.tt), 10.)
+
+    monkeypatch.setattr(sim, 'model_to_mv', model)
+    obs = [{'mode': 'tle', 'tle': TLE, 'model': MODEL, 'name': 'sampled'}]
+    tracks = (([0.], [300.], [600.]), ([0.], [0.], [0.]))
+    _, _, counts, entries, _ = run_objects(
+        monkeypatch, obs, {'brightness_sampling': {'mode': 'adaptive'}}, tracks)
+    assert len(seen) == 5
+    assert [entry['object_name'] for entry in entries] == ['sampled']
+    np.testing.assert_allclose(counts.sum(), 10000.)

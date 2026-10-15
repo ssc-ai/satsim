@@ -1,0 +1,92 @@
+SatSim observable performance and correctness report
+2026-10-14 (Pacific/Honolulu)
+
+Issues #43, #47 and #48 are implemented in separate commits after the saved
+PSF seed changes (9fc1390). Exact physical brightness remains the default;
+adaptive brightness is opt-in. Measurements compare the saved baseline with
+the completed implementation using the same synthetic inputs.
+
+For #43, per-target track allocations have an independent, configurable budget
+of 1,000,000 samples. Curves use a conservative control-polygon bound before
+rasterization; this can reject a curve whose eventual sample count is lower
+than the budget. The captured curve is rejected under that default and retains
+363,985 samples with an explicit 2,000,000 budget. Valid tracks exceeding
+60,000 samples remain supported. Brightness and Earth shadow each receive at
+most 256 times per call by default. Failed propagation, photometry or analytical
+LOS evaluation skips the object before its pixels/annotations are included,
+and clears its cache entry so exporters do not reuse the rejected orbit.
+Requested apparent LOS failures now propagate instead of silently substituting
+geometric coordinates. These are per-target controls, not a global process
+memory guarantee across arbitrarily many objects.
+
+For #47, the same order + 2 interpolation window is retained. Direct Lagrange
+basis weights are shared across coordinates instead of building separate
+power-form polynomials. Scalar/vector inputs, exact nodes, extrapolation,
+segment boundaries, short inputs and large time offsets are covered.
+
+Interpolation over 2035 three-axis queries:
+  Before: 1.844121 s
+  After:  0.062239 s
+  Speedup: 29.63x
+  Maximum position difference: 1.337e-10 km
+
+For #48, adaptive sampling uses piecewise quadratic magnitudes with a maximum
+1 s segment and a 0.0001 mag quarter-point residual threshold by default.
+Failing intervals subdivide. Nonfinite knots, stalled refinement or exhausted
+sampling budgets fall back to exact evaluation. Explicit range/phase arrays
+and callable brightness pipelines retain exact evaluation. Earth shadow is
+always evaluated at every original sample time, separately from interpolation.
+Quarter-point residuals guide accuracy; they are not a rigorous error bound
+between checks.
+
+Brightness for a 1 s exposure, median of 3 calls:
+Samples  Variant                         Time ms  Peak RSS MiB    Speedup   Max relative flux error
+     55  Before                         9.721         717.2       1.00x        0.000e+00
+     55  After exact (default)          9.822         717.2       0.99x        0.000e+00
+     55  After adaptive (opt-in)        5.605         717.2       1.73x        2.462e-12
+   8192  Before                       904.400         916.1       1.00x        0.000e+00
+   8192  After exact (default)       1128.386         719.8       0.80x        0.000e+00
+   8192  After adaptive (opt-in)        6.197         717.7     145.95x        3.666e-12
+
+Peak RSS is the whole fresh worker process, including Python/TensorFlow startup,
+not just Skyfield's temporary arrays. Default exact chunking reduces the large
+vector memory peak at some runtime cost. Adaptive mode accelerates smooth,
+densely sampled streaks; sparse or poorly approximated cases can stay exact.
+
+Across the eight recorded eccentric/close-LEO accuracy benchmarks at 1, 10, 60
+and 120 s (1,025 samples each), the maximum magnitude error was 1.134e-07 mag
+and the maximum relative integrated-flux error was 6.107e-11. Additional
+correctness tests cover GEO targets and a space-based observer at all four
+exposure durations, a shadow transition inside an interpolation interval,
+zero-duration annotation controls, refinement, exact fallbacks and bounded
+Time vectors.
+
+Validation: the full suite passed 813 tests in 442.24 s, with four existing
+Astropy ASDF deprecation warnings. One subsequently added object-loop adaptive
+integration test also passed, for 814 distinct passing tests. All 73 new
+issue-specific tests pass. Simulation schema acceptance/rejection checks and
+git diff --check pass. The numerical helpers, new tests and benchmark pass
+flake8; satsim.py retains three pre-existing F841 unused-local findings.
+
+The original Gaussian normalization test failed in isolated baseline PSF runs
+(sum 1.0000458 versus 1.0 at five decimals), but passed in the full suite.
+Its Gaussian implementation was not changed. The supplied atmospheric seed
+regression passed and is preserved in commit 9fc1390.
+
+Environment: Python 3.10.12, NumPy 1.26.4, SciPy 1.14.0,
+Skyfield 1.53, OPENBLAS_NUM_THREADS=1.
+Final timing runs executed without the test suite running. These are isolated
+model/interpolation benchmarks; they do not establish an end-to-end speedup
+for the reporter's unavailable 115-object collect. The reported 15.2 GiB
+failure was not reproduced; the captured TLE/projection, allocation rejection,
+bounded-call behavior and failure isolation are covered by regressions.
+
+Reproduce numerical and timing measurements from the repository root:
+  TF_CPP_MIN_LOG_LEVEL=3 OPENBLAS_NUM_THREADS=1 PYTHONPATH=. python3 \
+    benchmarks/observable_performance.py --baseline-ref 9fc1390 \
+    --output /tmp/observable-performance.json
+
+Machine-readable measurements: benchmarks/observable_performance_results.json
+Issue sources: https://github.com/ssc-ai/satsim/issues/43
+               https://github.com/ssc-ai/satsim/issues/47
+               https://github.com/ssc-ai/satsim/issues/48
