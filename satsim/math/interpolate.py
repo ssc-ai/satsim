@@ -1,6 +1,5 @@
 import math
 import numpy as np
-from scipy.interpolate import lagrange as scipy_lagrange
 
 
 def _lagrange(x, y, new_x, order=5, normalize_x=True):
@@ -27,23 +26,30 @@ def _lagrange(x, y, new_x, order=5, normalize_x=True):
 
         x_crop = x[n_min:n_max]
 
+    nodes = np.asarray(x_crop, dtype=float)
     if normalize_x:
-        x_offset = x[n_min]
-        x_crop = np.array(x_crop) - x_offset
+        x_offset = nodes[0]
+        nodes = nodes - x_offset
         new_x = new_x - x_offset
 
-    if np.ndim(y) == 1:
-        y_crop = y[n_min:n_max]
-        f = scipy_lagrange(x_crop, y_crop)
-        res = f(new_x)
-    else:
-        y_crop = y[n_min:n_max, :]
-        res = np.zeros_like(y[0])
-        for i in range(len(res)):
-            f = scipy_lagrange(x_crop, y_crop[:,i])
-            res[i] = f(new_x)
+    y_crop = np.asarray(y[n_min:n_max], dtype=float)
+    gaps = new_x - nodes
+    hit = np.flatnonzero(gaps == 0)
+    if hit.size:
+        # Return an independent value: callers can convert units in place.
+        return y_crop[hit[0]].copy()
 
-    return res
+    spans = nodes[:, None] - nodes[None, :]
+    np.fill_diagonal(spans, 1.0)
+    if np.any(spans == 0):
+        raise ValueError('Lagrange interpolation requires distinct sample times.')
+    # Evaluate each basis directly, sharing it across all output coordinates.
+    # Products of ratios avoid constructing power-form polynomial objects and
+    # avoid overflowing a common product of every time difference.
+    basis = gaps[None, :] / spans
+    np.fill_diagonal(basis, 1.0)
+    weights = np.prod(basis, axis=1)
+    return np.tensordot(weights, y_crop, axes=(0, 0))
 
 
 def _segment_boundary_lagrange(x, y, new_x, order=5):
