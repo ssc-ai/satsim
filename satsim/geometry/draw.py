@@ -1,16 +1,34 @@
 from __future__ import division, print_function, absolute_import
 
 import numpy as np
-from skimage.draw import line, bezier_curve
+from skimage.draw import bezier_curve
 
 from satsim.image.coordinates import normalized_to_oversampled
+
+MAX_TRACK_SAMPLES = 1_000_000
+
+
+class TrackSamplingError(ValueError):
+    """A trajectory cannot be sampled within the configured resource budget."""
+
+
+def _check_track_budget(points, estimated_samples, max_samples):
+    if not np.all(np.isfinite(points)):
+        raise TrackSamplingError('Track control points must be finite.')
+    if isinstance(max_samples, bool) or not isinstance(max_samples, (int, np.integer)) or max_samples < 1:
+        raise ValueError('max_samples must be a positive integer.')
+    if estimated_samples > max_samples:
+        raise TrackSamplingError(
+            'Track sampling requires up to {} samples; max_track_samples is {}.'.format(
+                estimated_samples, max_samples))
+
 
 def _rasterize_position(value):
     """Return the pixel center containing a continuous center coordinate."""
     return int(np.floor(float(value) + 0.5))
 
 
-def gen_line(height, width, origin, velocity, pe, t_start, t_end):
+def gen_line(height, width, origin, velocity, pe, t_start, t_end, max_samples=MAX_TRACK_SAMPLES):
     """Generates a line segment in pixel coordinates based on a starting point
     (`t = 0`), velocity, start time, and end time. Counts, `pe`, are
     spread evenly across continuous time bins. Typically used to inject a
@@ -49,10 +67,10 @@ def gen_line(height, width, origin, velocity, pe, t_start, t_end):
     r2 = r0 + velocity[0] * t_end
     c2 = c0 + velocity[1] * t_end
 
-    return gen_line_from_endpoints(r1, c1, r2, c2, pe, t_start, t_end)
+    return gen_line_from_endpoints(r1, c1, r2, c2, pe, t_start, t_end, max_samples=max_samples)
 
 
-def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end):
+def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end, max_samples=MAX_TRACK_SAMPLES):
     """Generates a line segment in pixel coordinates based on a starting point
     at `t_start` and an ending point at `t_end`. Counts, `pe`, are spread
     evenly across continuous time bins. Typically used to inject a moving
@@ -79,12 +97,13 @@ def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end):
             pe: `list`, list of counts (e.g. photoelectrons)
             t: `list`, list of start and stop times. length is +1 larger than `rr`, `cc`, and `pe`.
     """
+    _check_track_budget([r0, c0, r1, c1], 1, max_samples)
     r0i = _rasterize_position(r0)
     c0i = _rasterize_position(c0)
     r1i = _rasterize_position(r1)
     c1i = _rasterize_position(c1)
-    rr_pixels, _ = line(r0i, c0i, r1i, c1i)
-    n = len(rr_pixels)
+    # Bresenham's sample count is known without allocating its pixel arrays.
+    n = max(abs(r1i - r0i), abs(c1i - c0i)) + 1
 
     if r0 == r1 and c0 == c1:
         return (
@@ -93,6 +112,8 @@ def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end):
             np.asarray([(t_end - t_start) * pe]),
             np.asarray([t_start, t_end]),
         )
+
+    _check_track_budget([r0, c0, r1, c1], n + 2, max_samples)
 
     # Use the rasterized line only to choose a sampling density. Depositing
     # its integer pixel centers would quantize the trajectory and can move its
@@ -120,7 +141,7 @@ def gen_line_from_endpoints(r0, c0, r1, c1, pe, t_start, t_end):
     return (rr, cc, counts, t)
 
 
-def gen_curve_from_points(r0, c0, r1, c1, r2, c2, pe, t_start, t_end):
+def gen_curve_from_points(r0, c0, r1, c1, r2, c2, pe, t_start, t_end, max_samples=MAX_TRACK_SAMPLES):
     """Generates a bezier curve in pixel coordinates based on a starting point
     at `t_start`, an ending point at `t_end`, and a mid point at `(t_start + t_end) / 2`.
     Counts, `pe`, are spread evenly across continuous time bins. Typically used
@@ -149,17 +170,7 @@ def gen_curve_from_points(r0, c0, r1, c1, r2, c2, pe, t_start, t_end):
             pe: `list`, list of counts (e.g. photoelectrons)
             t: `list`, list of start and stop times. length is +1 larger than `rr`, `cc`, and `pe`.
     """
-    rb = 2 * r1 - r0 / 2 - r2 / 2
-    cb = 2 * c1 - c0 / 2 - c2 / 2
-    r0i = _rasterize_position(r0)
-    c0i = _rasterize_position(c0)
-    rbi = _rasterize_position(rb)
-    cbi = _rasterize_position(cb)
-    r2i = _rasterize_position(r2)
-    c2i = _rasterize_position(c2)
-    rr_pixels, _ = bezier_curve(r0i, c0i, rbi, cbi, r2i, c2i, 1.0, None)
-    n = len(rr_pixels)
-
+    _check_track_budget([r0, c0, r1, c1, r2, c2], 1, max_samples)
     if r0 == r1 == r2 and c0 == c1 == c2:
         return (
             np.asarray([r0], dtype=np.float64),
@@ -168,10 +179,28 @@ def gen_curve_from_points(r0, c0, r1, c1, r2, c2, pe, t_start, t_end):
             np.asarray([t_start, t_end]),
         )
 
+    rb = 2 * r1 - r0 / 2 - r2 / 2
+    cb = 2 * c1 - c0 / 2 - c2 / 2
+    _check_track_budget([rb, cb], 1, max_samples)
+    r0i = _rasterize_position(r0)
+    c0i = _rasterize_position(c0)
+    rbi = _rasterize_position(rb)
+    cbi = _rasterize_position(cb)
+    r2i = _rasterize_position(r2)
+    c2i = _rasterize_position(c2)
+    # Bound rasterization before skimage allocates anything. The control
+    # polygon bounds coordinate variation; allow two raster steps per unit
+    # and rounding/split overhead. This is deliberately conservative.
+    bound = 2 * (abs(rbi - r0i) + abs(r2i - rbi) + abs(cbi - c0i) + abs(c2i - cbi)) + 16
+    _check_track_budget([rb, cb], bound, max_samples)
+    rr_pixels, _ = bezier_curve(r0i, c0i, rbi, cbi, r2i, c2i, 1.0, None)
+    n = len(rr_pixels)
+
     # Use an even number of flux bins so the exact mid-exposure control point
     # can be retained as a zero-duration annotation sample between bins.
     if n % 2 != 0:
         n += 1
+    _check_track_budget([r0, c0, r1, c1, r2, c2], n + 3, max_samples)
 
     # As with lines, rasterization determines only how many samples are
     # needed. Integrate the original continuous quadratic over each matching

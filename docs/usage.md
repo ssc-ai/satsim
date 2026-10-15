@@ -298,6 +298,16 @@ image-plane target:
   field.
 - `num_target_samples`: `2` draws straight target tracks; `3` draws a
   quadratic curve through start, midpoint, and end positions.
+- `max_track_samples`: per-target allocation budget, default `1000000`,
+  independent of frame size. Curves use a conservative control-polygon bound
+  before rasterization, so some curves can be rejected below this sample count.
+  Increase the budget for exceptionally long valid tracks. Targets that exceed
+  it or fail propagation, brightness, or analytical LOS evaluation are skipped
+  with a warning; their pixels and annotations are omitted together.
+- `photometry_chunk_size`: maximum times per physical brightness and Earth
+  shadow evaluation, default `256`. Chunking bounds intermediate memory while
+  retaining the per-sample model and shadow calculations. Callable brightness
+  pipelines continue to receive their full time arrays.
 - `enable_shot_noise` and `num_shot_noise_samples`: control Poisson shot
   noise and optional noise averaging.
 - `fits_compression`: `none`, `gzip`, `gzip2`, `rice`, `hcompress`,

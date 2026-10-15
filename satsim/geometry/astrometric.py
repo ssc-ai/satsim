@@ -229,11 +229,9 @@ def get_los(observer, target, t, deflection=False, aberration=True, stellar_aber
     """
 
     if deflection or aberration:
-        try:
-            icrf_los = apparent(observer.at(t).observe(target), deflection, aberration)
-        except Exception as exc:
-            logger.warning('Apparent LOS failed; falling back to geometric LOS: %s', exc)
-            icrf_los = (target - observer).at(t)
+        # A failed apparent observation is an invalid target at this time.
+        # Substituting geometric coordinates hides light-time/ephemeris errors.
+        icrf_los = apparent(observer.at(t).observe(target), deflection, aberration)
     else:
         icrf_los = (target - observer).at(t)
 

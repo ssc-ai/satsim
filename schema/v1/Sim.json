@@ -204,6 +204,18 @@
             "type": "boolean",
             "default": true
         },
+        "max_track_samples": {
+            "description": "Per-target trajectory allocation budget, independent of frame size. Curves use a conservative bound before rasterization. Targets exceeding the budget are skipped with a warning.",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1000000
+        },
+        "photometry_chunk_size": {
+            "description": "Maximum sample times per physical brightness or Earth-shadow evaluation. Smaller chunks reduce peak memory without approximating the model.",
+            "type": "integer",
+            "minimum": 1,
+            "default": 256
+        },
         "save_jpeg": {
             "description": "Save annotated images as JPEG.",
             "type": "boolean",
