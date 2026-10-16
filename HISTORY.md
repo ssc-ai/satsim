@@ -1,6 +1,16 @@
 History
 =======
 
+0.26.2
+---------------------
+
+* Add reproducible POPPY atmospheric phase screens through `fpa.psf.turbulent_atmosphere.seed`, using distinct seeds for each zone.
+* Bound target trajectory allocations with `sim.max_track_samples` (default 1,000,000) and chunk physical brightness and Earth-shadow evaluations with `sim.photometry_chunk_size` (default 256). Curve allocation checks use a conservative bound before rasterization. (#43)
+* **BEHAVIORAL CHANGE:** Reject failed apparent target line-of-sight calculations instead of substituting geometric coordinates. Skip targets that fail propagation, brightness, shadow, or analytical line-of-sight evaluation without ending the collect, and omit their pixels, annotations, and cached orbits. (#43)
+* Accelerate ephemeris interpolation by sharing Lagrange basis weights across coordinates while retaining the existing interpolation windows and segment boundaries. (#47)
+* Add opt-in adaptive quadratic brightness sampling through `sim.brightness_sampling`, with interval limits, quarter-point accuracy checks, and exact fallbacks. Exact per-sample brightness remains the default, and Earth shadow remains evaluated at every original sample. (#48)
+
+
 0.26.1
 ---------------------
 

@@ -226,3 +226,58 @@ def test_lagrange_segment_boundaries():
     # test invalid
     invalid = lagrange(np.zeros((3,3,3)), yy, nxx, 5)
     assert(invalid is None)
+
+
+def test_lagrange_uses_same_windows_as_power_form():
+    """Keep window placement and extrapolation semantics for irregular data."""
+    import math
+    from scipy.interpolate import lagrange as scipy_lagrange
+
+    x = np.array([0., 0.4, 1.5, 2., 3.1, 5., 7., 8.2, 10.])
+    y = np.random.default_rng(17).normal(size=(len(x), 3))
+    queries = [-1., 0., 0.3, 2., 3.7, 8.2, 10., 11.]
+    for order in (1, 3, 5):
+        expected = []
+        for q in queries:
+            half = (order + 2) / 2
+            n = np.searchsorted(x, q, side='right')
+            lo, hi = n - math.ceil(half), n + math.floor(half)
+            if lo < 0:
+                hi, lo = hi - lo, 0
+            if hi > len(x):
+                lo, hi = lo - (hi - len(x)), len(x)
+            nodes = x[lo:hi] - x[lo]
+            expected.append([scipy_lagrange(nodes, y[lo:hi, j])(q - x[lo]) for j in range(3)])
+        np.testing.assert_allclose(lagrange(x, y, queries, order), expected, rtol=1e-9, atol=1e-9)
+
+
+def test_lagrange_large_time_offsets_and_arbitrary_coordinate_shape():
+    x = 1e9 + np.array([0., .5, 1.5, 2.5, 4.])
+    q = 1e9 + np.array([-.5, 0., 1., 2., 4., 5.])
+    # Five nodes (order=3) must retain the degree-four polynomial.
+    p = np.poly1d([.2, -.1, .3, 2., 1.])
+    coefficients = np.arange(1., 7.).reshape(2, 3)
+    y = p(x - 1e9)[:, None, None] * coefficients
+    actual = lagrange(x, y, q, order=3)
+    np.testing.assert_allclose(actual, p(q - 1e9)[:, None, None] * coefficients, rtol=1e-12)
+    assert actual.shape == (len(q), 2, 3)
+
+
+def test_lagrange_exact_nodes_return_independent_float_values():
+    x = [0, 1, 2]
+    y = np.array([[1, 2], [3, 4], [5, 6]])
+    actual = lagrange(x, y, 1, order=3)
+    np.testing.assert_array_equal(actual, y[1])
+    assert actual.dtype.kind == 'f'
+    actual /= 2
+    np.testing.assert_array_equal(y[1], [3, 4])
+    # A one-point ephemeris stays constant, including outside the sample range.
+    np.testing.assert_array_equal(lagrange([1.], [[2., 3.]], [-5., 1., 7.]), [[2., 3.]] * 3)
+    # Integer inputs must not truncate interpolated vectors.
+    np.testing.assert_array_equal(lagrange(x, y, .5, order=3), [2., 3.])
+
+
+def test_lagrange_rejects_duplicate_nodes():
+    import pytest
+    with pytest.raises(ValueError, match='distinct'):
+        lagrange([0., 1., 1., 2.], [0., 1., 2., 3.], .5)

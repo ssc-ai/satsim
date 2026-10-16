@@ -298,6 +298,26 @@ image-plane target:
   field.
 - `num_target_samples`: `2` draws straight target tracks; `3` draws a
   quadratic curve through start, midpoint, and end positions.
+- `max_track_samples`: per-target allocation budget, default `1000000`,
+  independent of frame size. Curves use a conservative control-polygon bound
+  before rasterization, so some curves can be rejected below this sample count.
+  Increase the budget for exceptionally long valid tracks. Targets that exceed
+  it or fail propagation, brightness, or analytical LOS evaluation are skipped
+  with a warning; their pixels and annotations are omitted together.
+- `photometry_chunk_size`: maximum times per physical brightness and Earth
+  shadow evaluation, default `256`. Chunking bounds intermediate memory while
+  retaining the per-sample model and shadow calculations. Callable brightness
+  pipelines continue to receive their full time arrays.
+- `brightness_sampling`: physical Lambertian brightness defaults to
+  `{"mode": "exact"}`. Opt in with `{"mode": "adaptive",
+  "max_interval_seconds": 1.0, "tolerance_mag": 0.0001}` to interpolate
+  magnitudes with piecewise quadratics. Each interval is at most the specified
+  duration and is checked at quarter points, then subdivided if the residual
+  exceeds the tolerance. These checks guide accuracy; they do not guarantee
+  an error bound between checks. Exact evaluation is used when interpolation
+  would cost as many samples, refinement stalls, or knots are nonfinite.
+  Explicit distance/phase arrays and callable brightness pipelines retain
+  exact evaluation. Earth shadow is always evaluated at every original sample.
 - `enable_shot_noise` and `num_shot_noise_samples`: control Poisson shot
   noise and optional noise averaging.
 - `fits_compression`: `none`, `gzip`, `gzip2`, `rice`, `hcompress`,
@@ -337,7 +357,8 @@ arrays, for example gain, bias, dark current, and background fields.
   on detector.
 - `{"mode": "poppy", ...}`: POPPY physical-optics PSF with an
   `optical_system`, wavelengths, weights, and optional
-  `turbulent_atmosphere`.
+  `turbulent_atmosphere`. Set `turbulent_atmosphere.seed` to make the
+  phase screens reproducible across runs; each zone uses a distinct seed.
 
 `fpa.detection` controls synthetic detection uncertainty for analytical EO
 observations:

@@ -31,7 +31,7 @@ from satsim.image.epsf import (
     phase_nearest_error_bound_px,
     resolve_phase_oversample,
 )
-from satsim.geometry.draw import gen_line, gen_line_from_endpoints, gen_curve_from_points
+from satsim.geometry.draw import MAX_TRACK_SAMPLES, gen_line, gen_line_from_endpoints, gen_curve_from_points
 from satsim.geometry.random import gen_random_points
 from satsim.geometry.sstr7 import query_by_los
 from satsim.geometry import gcvs5
@@ -56,7 +56,7 @@ from satsim.geometry.astrometric import (
 )
 from satsim.geometry.greatcircle import GreatCircle
 from skyfield.toposlib import _ltude
-from satsim.geometry.photometric import model_to_mv
+from satsim.geometry.photometric import interpolate_magnitudes, model_to_mv
 from satsim.geometry.shadow import earth_shadow_umbra_mask
 from satsim.geometry.twobody import create_twobody
 from satsim.geometry.observation import create_observation
@@ -2214,6 +2214,73 @@ def _batch_sgp4_fov_filter(obs, obs_cache, active_flags, updated_flags, has_even
         return None, 0
 
 
+def _positive_int_setting(sim, name, default):
+    value = sim.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+        raise ValueError('sim.{} must be a positive integer.'.format(name))
+    return int(value)
+
+
+def _brightness_sampling_settings(sim):
+    sampling = sim.get('brightness_sampling', {})
+    if not isinstance(sampling, dict):
+        raise ValueError('sim.brightness_sampling must be an object.')
+    if set(sampling) - {'mode', 'max_interval_seconds', 'tolerance_mag'}:
+        raise ValueError('Unknown sim.brightness_sampling setting.')
+    result = {'mode': 'exact', 'max_interval_seconds': 1.0, 'tolerance_mag': 1e-4, **sampling}
+    if result['mode'] not in ('exact', 'adaptive'):
+        raise ValueError('sim.brightness_sampling.mode must be exact or adaptive.')
+    for name in ('max_interval_seconds', 'tolerance_mag'):
+        value = result[name]
+        if isinstance(value, bool) or not isinstance(value, numbers.Real) or not np.isfinite(value) or value <= 0:
+            raise ValueError('sim.brightness_sampling.{} must be positive and finite.'.format(name))
+    return result
+
+
+def _apply_photometry(counts, edges, observer, target, model, utc, zeropoint,
+                      chunk_size=256, earth_shadow=False, sampling=None):
+    """Evaluate physical brightness and shadow with bounded Skyfield Time vectors.
+
+    ``edges`` includes duplicate boundaries for zero-flux annotation controls.
+    Callable brightness pipelines are evaluated by the caller on their full
+    arrays; only physical models and shadow calculations are chunked here.
+    """
+    result = np.array(counts, dtype=float, copy=True)
+    if (model is not None and sampling is not None and sampling['mode'] == 'adaptive'
+            and model.get('mode') == 'lambertian_sphere'
+            and not any(np.ndim(model.get(key, 0)) > 0 for key in ('distance', 'phase_angle'))):
+        def evaluate(offsets):
+            values = np.empty(len(offsets), dtype=float)
+            for start in range(0, len(offsets), chunk_size):
+                stop = min(start + chunk_size, len(offsets))
+                t = time.utc_from_list(utc, offsets[start:stop])
+                values[start:stop] = model_to_mv(observer, target, model, t)
+            return values
+
+        magnitudes = interpolate_magnitudes(
+            evaluate, _avg_t(edges), sampling['max_interval_seconds'], sampling['tolerance_mag'])
+        result = mv_to_pe(zeropoint, magnitudes) * _delta_t(edges)
+        # Shadow is still applied at every original sample time below.
+        model = None
+    if model is None and not earth_shadow:
+        return result
+    for start in range(0, len(result), chunk_size):
+        stop = min(start + chunk_size, len(result))
+        boundaries = edges[start:stop + 1]
+        t = time.utc_from_list(utc, _avg_t(boundaries))
+        if model is not None:
+            chunk_model = dict(model)
+            # Explicit range/phase series must follow the same sample slices.
+            for key in ('distance', 'phase_angle'):
+                if key in model and np.ndim(model[key]) > 0:
+                    chunk_model[key] = np.broadcast_to(model[key], (len(result),))[start:stop]
+            result[start:stop] = mv_to_pe(
+                zeropoint, model_to_mv(observer, target, chunk_model, t)) * _delta_t(boundaries)
+        if earth_shadow:
+            result[start:stop] *= earth_shadow_umbra_mask(target, t)
+    return result
+
+
 def _gen_objects(ssp, render_mode,
                  obs, obs_cache, batch_cache,
                  tc_start, tc_end, t_start, t_end, tt,
@@ -2236,6 +2303,9 @@ def _gen_objects(ssp, render_mode,
     ts_start = time.utc_from_list(tt, t_start)
     ts_mid = time.utc_from_list(tt, t_start + 0.5 * (t_end - t_start))
     ts_end = time.utc_from_list(tt, t_end)
+    max_track_samples = _positive_int_setting(ssp['sim'], 'max_track_samples', MAX_TRACK_SAMPLES)
+    photometry_chunk_size = _positive_int_setting(ssp['sim'], 'photometry_chunk_size', 256)
+    brightness_sampling = _brightness_sampling_settings(ssp['sim'])
 
     enable_deflection = ssp['sim']['enable_deflection']
     enable_light_transit = ssp['sim']['enable_light_transit']
@@ -2375,68 +2445,68 @@ def _gen_objects(ssp, render_mode,
         updated = updated_flags[i]
         target = None
 
-        if 'mv' in o:
-            ope = mv_to_pe(zeropoint, o['mv']) if not callable(o['mv']) else 0.0
-            pe_func = (lambda x, t: x) if not callable(o['mv']) else (lambda x, t: mv_to_pe(zeropoint, o['mv'](x, t)) * _delta_t(t))
-        elif 'pe' in o:
-            ope = o['pe'] if not callable(o['pe']) else 0.0
-            pe_func = (lambda x, t: x) if not callable(o['pe']) else (lambda x, t: o['pe'](x, t) * _delta_t(t))
-        else:
-            ope = 0.0
-            pe_func = (lambda x, t: x)
+        try:
+            if 'mv' in o:
+                ope = mv_to_pe(zeropoint, o['mv']) if not callable(o['mv']) else 0.0
+                pe_func = (lambda x, t: x) if not callable(o['mv']) else (lambda x, t: mv_to_pe(zeropoint, o['mv'](x, t)) * _delta_t(t))
+            elif 'pe' in o:
+                ope = o['pe'] if not callable(o['pe']) else 0.0
+                pe_func = (lambda x, t: x) if not callable(o['pe']) else (lambda x, t: o['pe'](x, t) * _delta_t(t))
+            else:
+                ope = 0.0
+                pe_func = (lambda x, t: x)
 
-        if o['mode'] == 'line':
-            ovrc = [o['velocity'][0] / y_to_pix * s_osf, o['velocity'][1] / x_to_pix * s_osf]
-            epoch = o['epoch'] if 'epoch' in o else 0
-            (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch)
-        elif o['mode'] == 'line-polar':
-            o_vel_angle = o['velocity'][0] * math.pi / 180
-            ovrc = [o['velocity'][1] * math.sin(o_vel_angle), o['velocity'][1] * math.cos(o_vel_angle)]
-            ovrc = [ovrc[0] / y_to_pix * s_osf, ovrc[1] / x_to_pix * s_osf]
-            epoch = o['epoch'] if 'epoch' in o else 0
-            (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch)
-        elif o['mode'] == 'tle' or o['mode'] == 'twobody' or o['mode'] == 'gc' or o['mode'] == 'ephemeris' or o['mode'] == 'observation':
-            if obs_cache[i] is None or updated:
-                if o['mode'] == 'tle':
-                    if 'tle' in o:
-                        tle1, tle2 = o['tle'][0], o['tle'][1]
+            if o['mode'] == 'line':
+                ovrc = [o['velocity'][0] / y_to_pix * s_osf, o['velocity'][1] / x_to_pix * s_osf]
+                epoch = o['epoch'] if 'epoch' in o else 0
+                (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch, max_samples=max_track_samples)
+            elif o['mode'] == 'line-polar':
+                o_vel_angle = o['velocity'][0] * math.pi / 180
+                ovrc = [o['velocity'][1] * math.sin(o_vel_angle), o['velocity'][1] * math.cos(o_vel_angle)]
+                ovrc = [ovrc[0] / y_to_pix * s_osf, ovrc[1] / x_to_pix * s_osf]
+                epoch = o['epoch'] if 'epoch' in o else 0
+                (orr, occ, opp, ott) = gen_line(h_fpa_os, w_fpa_os, o['origin'], ovrc, ope, t_start + epoch, t_end + epoch, max_samples=max_track_samples)
+            elif o['mode'] == 'tle' or o['mode'] == 'twobody' or o['mode'] == 'gc' or o['mode'] == 'ephemeris' or o['mode'] == 'observation':
+                if obs_cache[i] is None or updated:
+                    if o['mode'] == 'tle':
+                        if 'tle' in o:
+                            tle1, tle2 = o['tle'][0], o['tle'][1]
+                        else:
+                            tle1, tle2 = o['tle1'], o['tle2']
+                        satrec = create_satrec(tle1, tle2)
+                        obs_cache[i] = [create_sgp4_from_satrec(satrec, o.get('name')), satrec]
+                        if 'id' not in o:
+                            o['id'] = tle1[2:7]
+
+                    elif o['mode'] == 'gc':
+                        ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
+                        if 'az' in o:
+                            obs_cache[i] = [GreatCircle(o['az'], o['el'], o['heading'], o['velocity'], ts_epoch, observer)]
+                        else:
+                            obs_cache[i] = [GreatCircle(o['ra'], o['dec'], o['heading'], o['velocity'], ts_epoch, None)]
+                    elif o['mode'] == 'ephemeris':
+                        ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
+                        obs_cache[i] = [create_ephemeris_object(o['positions'], o['velocities'], o['seconds_from_epoch'], ts_epoch)]
+                    elif o['mode'] == 'observation':
+                        obs_cache[i] = [create_observation(o['ra'], o['dec'], time.utc_from_list(o['time']), observer, track, o.get('range', None))]
                     else:
-                        tle1, tle2 = o['tle1'], o['tle2']
-                    satrec = create_satrec(tle1, tle2)
-                    obs_cache[i] = [create_sgp4_from_satrec(satrec, o.get('name')), satrec]
-                    if 'id' not in o:
-                        o['id'] = tle1[2:7]
+                        ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
+                        obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
 
-                elif o['mode'] == 'gc':
-                    ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
-                    if 'az' in o:
-                        obs_cache[i] = [GreatCircle(o['az'], o['el'], o['heading'], o['velocity'], ts_epoch, observer)]
-                    else:
-                        obs_cache[i] = [GreatCircle(o['ra'], o['dec'], o['heading'], o['velocity'], ts_epoch, None)]
-                elif o['mode'] == 'ephemeris':
-                    ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
-                    obs_cache[i] = [create_ephemeris_object(o['positions'], o['velocities'], o['seconds_from_epoch'], ts_epoch)]
-                elif o['mode'] == 'observation':
-                    obs_cache[i] = [create_observation(o['ra'], o['dec'], time.utc_from_list(o['time']), observer, track, o.get('range', None))]
-                else:
-                    ts_epoch = time.utc_from_list_or_scalar(o['epoch'], default_t=tt)
-                    obs_cache[i] = [create_twobody(np.array(o['position']) * u.km, np.array(o['velocity']) * u.km / u.s, ts_epoch)]
+                o_offset = [0.0, 0.0]
+                if 'offset' in o:
+                    o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
 
-            o_offset = [0.0, 0.0]
-            if 'offset' in o:
-                o_offset = [o['offset'][0] * h_fpa_os, o['offset'][1] * w_fpa_os]
+                target = obs_cache[i][0]
+                if enable_fov_filter and not (visible_tle_set is not None and o['mode'] == 'tle'):
+                    # Determine the center line-of-sight of the sensor at mid-exposure
+                    # Skip propagation if target is outside the padded field of view
+                    # Use cosine comparison for efficiency (cos decreases as angle increases)
+                    with obj_profiler.time('fov', accumulate=True):
+                        cos_ang = optimized_angle_from_los_cosine(observer, target, ra_c, dec_c, ts_mid)
+                    if cos_ang < fov_half_diag_pad_cos:
+                        continue
 
-            target = obs_cache[i][0]
-            if enable_fov_filter and not (visible_tle_set is not None and o['mode'] == 'tle'):
-                # Determine the center line-of-sight of the sensor at mid-exposure
-                # Skip propagation if target is outside the padded field of view
-                # Use cosine comparison for efficiency (cos decreases as angle increases)
-                with obj_profiler.time('fov', accumulate=True):
-                    cos_ang = optimized_angle_from_los_cosine(observer, target, ra_c, dec_c, ts_mid)
-                if cos_ang < fov_half_diag_pad_cos:
-                    continue
-
-            try:
                 with obj_profiler.time('gen_track', accumulate=True):
                     [rr0, rr1, rr2], [cc0, cc1, cc2], _, _, _ = gen_track(
                         h_fpa_os,
@@ -2465,130 +2535,134 @@ def _gen_objects(ssp, render_mode,
                         stellar_aberration=False,  # disable stellar aberration for target
                     )
                 num_tracks += 1
-            except Exception:
-                logger.exception("Error propagating target. {}".format(o))
-                continue
 
-            if len(rr0) > 0 and not math.isnan(rr0[0]) and not math.isnan(cc0[0]) and not math.isnan(rr2[0]) and not math.isnan(cc2[0]):
+                if len(rr0) > 0 and not math.isnan(rr0[0]) and not math.isnan(cc0[0]) and not math.isnan(rr2[0]) and not math.isnan(cc2[0]):
 
-                if rr0[0] < -h_pad_os and rr2[0] < -h_pad_os:
-                    continue
-                elif rr0[0] > h_fpa_pad_os and rr2[0] > h_fpa_pad_os:
-                    continue
-                elif cc0[0] < -w_pad_os and cc2[0] < -w_pad_os:
-                    continue
-                elif cc0[0] > w_fpa_pad_os and cc2[0] > w_fpa_pad_os:
-                    continue
+                    if rr0[0] < -h_pad_os and rr2[0] < -h_pad_os:
+                        continue
+                    elif rr0[0] > h_fpa_pad_os and rr2[0] > h_fpa_pad_os:
+                        continue
+                    elif cc0[0] < -w_pad_os and cc2[0] < -w_pad_os:
+                        continue
+                    elif cc0[0] > w_fpa_pad_os and cc2[0] > w_fpa_pad_os:
+                        continue
 
-                if ssp['sim']['num_target_samples'] == 2:
-                    (orr, occ, opp, ott) = gen_line_from_endpoints(rr0[0], cc0[0], rr2[0], cc2[0], ope, t_start, t_end)
+                    if ssp['sim']['num_target_samples'] == 2:
+                        (orr, occ, opp, ott) = gen_line_from_endpoints(rr0[0], cc0[0], rr2[0], cc2[0], ope, t_start, t_end, max_samples=max_track_samples)
+                    else:
+                        (orr, occ, opp, ott) = gen_curve_from_points(rr0[0], cc0[0], rr1[0], cc1[0], rr2[0], cc2[0], ope, t_start, t_end, max_samples=max_track_samples)
                 else:
-                    (orr, occ, opp, ott) = gen_curve_from_points(rr0[0], cc0[0], rr1[0], cc1[0], rr2[0], cc2[0], ope, t_start, t_end)
-            else:
+                    continue
+            elif o['mode'] == 'none':
                 continue
-        elif o['mode'] == 'none':
-            continue
-
-        object_name = o.get('name', '')
-        object_id = o.get('id', '')
-
-        # non-sprite based brightness models
-        has_brightness_model = 'model' in o and not callable(o['model']) and 'mode' in o['model'] and o['model']['mode'] != 'sprite'
-        if has_brightness_model:
-            pe_func = (lambda x, t: mv_to_pe(zeropoint, model_to_mv(observer, target, o['model'], time.utc_from_list(tt, _avg_t(t)))) * _delta_t(t))
-
-        opp = pe_func(opp, ott)
-
-        # Apply Earth umbra shadow mask if enabled for the simulation
-        if target is not None and ssp.get('sim', {}).get('enable_earth_shadow', False):
-            t_mid = time.utc_from_list(tt, _avg_t(ott))
-            mask = earth_shadow_umbra_mask(target, t_mid)
-            # Ensure mask aligns with opp samples
-            if mask.shape[0] == opp.shape[0]:
-                opp = opp * mask
-
-        avg_pe = np.sum(opp) / (t_end - t_start)
-        avg_mv = pe_to_mv(zeropoint, avg_pe)
-
-        logger.debug('Average brightness for target: {:.2f} mv, {:.2f} pix.'.format(avg_mv, len(opp) / s_osf))
-
-        # Trajectory generators retain exact start/mid/end control points with
-        # zero duration and zero flux for annotations. Keep those points in
-        # obs_os_pix below, but do not send them through the renderers. This is
-        # numerically identical and prevents the annotation controls from
-        # adding work for large target catalogs.
-        render_mask = np.isfinite(opp) & (np.asarray(opp) != 0.0)
-        orr_render = np.asarray(orr)[render_mask]
-        occ_render = np.asarray(occ)[render_mask]
-        opp_render = np.asarray(opp)[render_mask]
-
-        # TODO generalize `model`
-        # sprint based brightness models
-        if 'model' in o and not has_brightness_model:
-            if render_mode != 'piecewise':
-                if callable(o['model']):
-                    fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
-                    patch = o['model'](x=None, t=ott[0])
-                    fpa_os_w_targets = add_patch(fpa_os_w_targets, orr_render, occ_render, opp_render, patch, h_pad_os_div2, w_pad_os_div2)
-                    obs_model.append(fpa_os_w_targets)
-                    # TODO support sub-sample patching
-                elif o['model']['mode'] == 'sprite':
-                    patch = load_sprite_from_file(filename=o['model']['filename']) if 'mode' in o['model'] else o['model']
-                    fpa_os_clear = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
-                    fpa_os_w_targets = add_patch(fpa_os_clear, orr_render, occ_render, opp_render, patch, h_pad_os_div2, w_pad_os_div2)
-                    obs_model.append(fpa_os_w_targets)
             else:
-                logger.warning('Sprite models not supported for piecewise rendering.')
-        else:
-            orrr = np.concatenate((orrr, orr_render))
-            occc = np.concatenate((occc, occ_render))
-            oppp = np.concatenate((oppp, opp_render))
+                raise ValueError('Unsupported target mode: {}'.format(o['mode']))
 
-        if obs_cache[i] is not None:
-            ra_mid, dec_mid, _ = get_analytical_los(
-                observer,
-                target,
-                ts_mid,
-                frame=ssp['sim']['analytical_obs_frame']
-            )
-            ra_true, dec_true, _, _, _, _ = get_los(
-                observer,
-                target,
-                ts_mid,
-                deflection=False,
-                aberration=False,
-                stellar_aberration=False,
-            )
-            ra_mid = float(ra_mid)
-            dec_mid = float(dec_mid)
-            ra_true = float(ra_true)
-            dec_true = float(dec_true)
-        else:
-            ra_mid = None
-            dec_mid = None
-            ra_true = None
-            dec_true = None
+            object_name = o.get('name', '')
+            object_id = o.get('id', '')
 
-        entry = {
-            'rr': orr,
-            'cc': occ,
-            'pp': opp,
-            'rrr': oversampled_to_detector(orr, s_osf),
-            'rcc': oversampled_to_detector(occ, s_osf),
-            'mv': avg_mv,
-            'pe': avg_pe,
-            'id': i + 1,  # 0 is reserved for the background for segmentation
-            'object_name': object_name,
-            'object_id': object_id,
-        }
-        if ra_mid is not None and dec_mid is not None:
-            entry['ra_obs'] = ra_mid
-            entry['dec_obs'] = dec_mid
-            entry['obs_frame'] = ssp['sim']['analytical_obs_frame']
-            entry['ra'] = ra_true
-            entry['dec'] = dec_true
+            # non-sprite based brightness models
+            has_brightness_model = 'model' in o and not callable(o['model']) and 'mode' in o['model'] and o['model']['mode'] != 'sprite'
+            if not has_brightness_model:
+                opp = pe_func(opp, ott)
+            opp = _apply_photometry(
+                opp, ott, observer, target, o['model'] if has_brightness_model else None,
+                tt, zeropoint, chunk_size=photometry_chunk_size,
+                earth_shadow=target is not None and ssp['sim'].get('enable_earth_shadow', False),
+                sampling=brightness_sampling)
+            if not np.all(np.isfinite(opp)) or np.any(opp < 0):
+                raise ValueError('Target brightness must produce finite, nonnegative photoelectrons.')
 
-        obs_os_pix.append(entry)
+            avg_pe = np.sum(opp) / (t_end - t_start)
+            avg_mv = pe_to_mv(zeropoint, avg_pe)
+
+            logger.debug('Average brightness for target: {:.2f} mv, {:.2f} pix.'.format(avg_mv, len(opp) / s_osf))
+
+            if obs_cache[i] is not None:
+                ra_mid, dec_mid, _ = get_analytical_los(
+                    observer,
+                    target,
+                    ts_mid,
+                    frame=ssp['sim']['analytical_obs_frame']
+                )
+                ra_true, dec_true, _, _, _, _ = get_los(
+                    observer,
+                    target,
+                    ts_mid,
+                    deflection=False,
+                    aberration=False,
+                    stellar_aberration=False,
+                )
+                ra_mid = float(ra_mid)
+                dec_mid = float(dec_mid)
+                ra_true = float(ra_true)
+                dec_true = float(dec_true)
+                if not np.all(np.isfinite([ra_mid, dec_mid, ra_true, dec_true])):
+                    raise ValueError('Target line of sight must be finite.')
+            else:
+                ra_mid = None
+                dec_mid = None
+                ra_true = None
+                dec_true = None
+            # Trajectory generators retain exact start/mid/end control points with
+            # zero duration and zero flux for annotations. Keep those points in
+            # obs_os_pix below, but do not send them through the renderers. This is
+            # numerically identical and prevents the annotation controls from
+            # adding work for large target catalogs.
+            render_mask = np.isfinite(opp) & (np.asarray(opp) != 0.0)
+            orr_render = np.asarray(orr)[render_mask]
+            occ_render = np.asarray(occ)[render_mask]
+            opp_render = np.asarray(opp)[render_mask]
+
+            # TODO generalize `model`
+            # sprint based brightness models
+            if 'model' in o and not has_brightness_model:
+                if render_mode != 'piecewise':
+                    if callable(o['model']):
+                        fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
+                        patch = o['model'](x=None, t=ott[0])
+                        fpa_os_w_targets = add_patch(fpa_os_w_targets, orr_render, occ_render, opp_render, patch, h_pad_os_div2, w_pad_os_div2)
+                        obs_model.append(fpa_os_w_targets)
+                        # TODO support sub-sample patching
+                    elif o['model']['mode'] == 'sprite':
+                        patch = load_sprite_from_file(filename=o['model']['filename']) if 'mode' in o['model'] else o['model']
+                        fpa_os_clear = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
+                        fpa_os_w_targets = add_patch(fpa_os_clear, orr_render, occ_render, opp_render, patch, h_pad_os_div2, w_pad_os_div2)
+                        obs_model.append(fpa_os_w_targets)
+                else:
+                    logger.warning('Sprite models not supported for piecewise rendering.')
+            else:
+                orrr = np.concatenate((orrr, orr_render))
+                occc = np.concatenate((occc, occ_render))
+                oppp = np.concatenate((oppp, opp_render))
+
+            entry = {
+                'rr': orr,
+                'cc': occ,
+                'pp': opp,
+                'rrr': oversampled_to_detector(orr, s_osf),
+                'rcc': oversampled_to_detector(occ, s_osf),
+                'mv': avg_mv,
+                'pe': avg_pe,
+                'id': i + 1,  # 0 is reserved for the background for segmentation
+                'object_name': object_name,
+                'object_id': object_id,
+            }
+            if ra_mid is not None and dec_mid is not None:
+                entry['ra_obs'] = ra_mid
+                entry['dec_obs'] = dec_mid
+                entry['obs_frame'] = ssp['sim']['analytical_obs_frame']
+                entry['ra'] = ra_true
+                entry['dec'] = dec_true
+
+            obs_os_pix.append(entry)
+        except Exception as exc:
+            # Exporters also consume this cache after the frame loop. Do not
+            # leave a rejected orbit there to fail the collect during export.
+            obs_cache[i] = None
+            logger.warning('Skipping target %s (%s): %s', o.get('name', i), o.get('mode'), exc,
+                           exc_info=True)
+            continue
 
     obj_profiler.stop('loop', loop_start)
     obj_profiler.stop('total', total_start)

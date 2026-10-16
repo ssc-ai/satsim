@@ -66,6 +66,10 @@
                         "zones": {
                             "description": "Number of wavefront zones.",
                             "type": "integer"
+                        },
+                        "seed": {
+                            "description": "Optional reproducible seed for the atmosphere phase screens.",
+                            "type": "integer"
                         }
                     }
                 },
