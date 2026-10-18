@@ -1,6 +1,12 @@
 History
 =======
 
+0.27.0 (unreleased)
+---------------------
+
+* Add scene-independent pixel polynomial distortion (orders 2–7), with integer pixel centers, sampled star/target motion, consistent annotations and validated exposure-start TPV output.
+* Store distortion and affine corrections directly in JSON; calibration FITS/SIP inputs and `linear_wcs` are replaced by upstream polynomial fitting in satsim-calibrate.
+
 0.26.2
 ---------------------
 

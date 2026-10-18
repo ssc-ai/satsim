@@ -31,6 +31,7 @@ from satsim.image.epsf import (
     phase_nearest_error_bound_px,
     resolve_phase_oversample,
 )
+from satsim.geometry.distortion import DetectorDistortion, DistortionError, sample_distorted_track, distorted_star_motion
 from satsim.geometry.draw import MAX_TRACK_SAMPLES, gen_line, gen_line_from_endpoints, gen_curve_from_points
 from satsim.geometry.random import gen_random_points
 from satsim.geometry.sstr7 import query_by_los
@@ -483,6 +484,14 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
     ssp = _transform(ssp, output_dir, False, True)
 
     astrometrics = {}
+    distortion = DetectorDistortion.from_config(ssp)
+    if distortion is not None:
+        # A fresh start-of-frame reference gives exported WCS an exact epoch.
+        ssp['sim']['star_catalog_query_mode'] = 'frame'
+        ssp['sim']['apply_star_wrap_around'] = False
+        for ob in ssp.get('geometry', {}).get('obs', {}).get('list', []):
+            if isinstance(ob.get('model'), dict) and ob['model'].get('mode') == 'sprite':
+                raise DistortionError('Polynomial distortion supports point sources and streaks; sprite models are unsupported.')
 
     h = ssp['fpa']['height']
     w = ssp['fpa']['width']
@@ -541,10 +550,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         h_sub, w_sub = render_size_pair
         render_mode = 'piecewise'
 
-    h_sub_os = h_sub * s_osf
-    w_sub_os = w_sub * s_osf
-    h_sub_pad_os = h_sub_os + h_pad_os
-    w_sub_pad_os = w_sub_os + w_pad_os
     if psf_h_sub is None:
         psf_h_sub = h_sub
         psf_w_sub = w_sub
@@ -720,6 +725,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         star_pad = ssp['geometry']['stars']['pad']
     else:
         star_pad = 1.2
+    if distortion is not None:
+        star_pad = max(star_pad, distortion.query_padding(ssp['sim']['padding']) / min(h, w) + 1)
     star_bounds = [[-star_pad * h_fpa_pad_os, (star_pad + 1) * h_fpa_pad_os], [-star_pad * w_fpa_pad_os, (star_pad + 1) * w_fpa_pad_os], [0, 0]]
 
     obs = ssp['geometry']['obs']['list']
@@ -962,7 +969,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         else:
             observer = None
             track = None
-            star_rot = None
+            star_rot = ssp['geometry']['stars'].get('rotation', 0.)
             track_mode = None
             track_az = None
             track_el = None
@@ -997,6 +1004,11 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             pe_stars_os = []
         m_stars_os_base = None
         variable_stars = None
+        star_catalog = None
+        synthetic_star_catalog = None
+        if star_mode == 'bins' and distortion is not None and distortion.image_plane == 'ideal':
+            synthetic_star_catalog = tuple(np.asarray(a).copy() for a in (
+                r_stars_os, c_stars_os, pe_stars_os, m_stars_os, ra_stars, dec_stars))
 
         # gen psf
         if ssp['sim']['psf_sample_frequency'] == 'collect':
@@ -1025,7 +1037,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             if key.endswith('_pe')
         }
         background_component_active = background_components['active']
-        bg_tf = background_component_tfs['background_pre_cloud_pe']
         dc_tf = tf.cast(dc, tf.float32)
         bias_tf = tf.cast(bias, tf.float32)
         _rn = tf.cast(rn, tf.float32)
@@ -1155,7 +1166,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                                                                                     h_fpa_pad_os, w_fpa_pad_os,
                                                                                     y_fov, x_fov,
                                                                                     y_to_pix, x_to_pix,
-                                                                                    star_rot, astrometrics['track_mode'], track_apparent)
+                                                                                    star_rot, astrometrics['track_mode'], track_apparent, distortion=distortion)
             logger.debug('Number of objects {}.'.format(len(obs_os_pix)))
 
             if track_mode is not None:
@@ -1240,12 +1251,19 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             if (star_mode == 'sstr7' or star_mode == 'csv') and (ssp['sim']['star_catalog_query_mode'] == 'frame' or frame_num == 0):
                 with frame_profiler.time('star_query'):
                     if star_mode == 'sstr7':
+                        query_duration = (t_exposure if ssp['sim']['star_catalog_query_mode'] == 'frame'
+                                          else (num_frames - 1) * t_frame + t_exposure)
                         # note star_ra and star_dec are apparent positions which includes stellar aberration
-                        r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
+                        r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, pad_mult=star_pad, filter_ob=distortion is None, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'], sky_bounds=distortion.catalog_bounds(star_ra, star_dec, y_ifov, x_ifov, ssp['sim']['padding'], np.linalg.norm(star_tran_os) * query_duration / s_osf) if distortion is not None else None)
                     elif star_mode == 'csv':
                         r_stars_os, c_stars_os, m_stars_os, ra_stars, dec_stars = csvsc_query_by_los(h_fpa_pad_os, w_fpa_pad_os, y_fov_pad, x_fov_pad, star_ra, star_dec, rot=star_rot, rootPath=star_path, flipud=ssp['fpa']['flip_up_down'], fliplr=ssp['fpa']['flip_left_right'])
 
                     m_stars_os_base = np.asarray(m_stars_os, dtype=float)
+                    if distortion is not None:
+                        # Candidate selection and rendering use frame copies;
+                        # stars outside this exposure may enter a later one.
+                        star_catalog = tuple(np.asarray(a).copy() for a in (
+                            r_stars_os, c_stars_os, m_stars_os_base, ra_stars, dec_stars))
                     if gcvs5_enabled and star_mode == 'sstr7':
                         gcvs5_state = gcvs5.prepare_gcvs5_state(
                             ra_stars,
@@ -1258,6 +1276,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     t_end_star = t_exposure
                     if ssp['sim']['star_catalog_query_mode'] == 'frame':
                         ssp['sim']['apply_star_wrap_around'] = False
+
+            if star_catalog is not None:
+                r_stars_os, c_stars_os, m_stars_os_base, ra_stars, dec_stars = star_catalog
+            if synthetic_star_catalog is not None:
+                r_stars_os, c_stars_os, pe_stars_os, m_stars_os, ra_stars, dec_stars = synthetic_star_catalog
+                variable_stars = None
 
             # wrap stars around
             if ssp['sim']['apply_star_wrap_around']:
@@ -1293,6 +1317,50 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     m_stars_os = m_stars_os_base
 
                 pe_stars_os = mv_to_pe(zeropoint, m_stars_os) * t_exposure
+
+            star_position_transform = None
+            star_annotation_positions = None
+            if distortion is not None:
+                celestial_stars = star_mode in ('sstr7', 'csv')
+                if celestial_stars or distortion.image_plane == 'ideal':
+                    mask = distortion.star_candidates(
+                        r_stars_os, c_stars_os, s_osf, h_pad_os_div2,
+                        t_start_star, t_end_star, star_tran_os, star_rot_rate, celestial_stars)
+                    r_stars_os, c_stars_os, pe_stars_os = [np.asarray(a)[mask] for a in (r_stars_os, c_stars_os, pe_stars_os)]
+                    m_stars_os, ra_stars, dec_stars = [
+                        np.asarray(a)[mask] for a in (m_stars_os, ra_stars, dec_stars)]
+                    if variable_stars is not None:
+                        variable_stars = np.asarray(variable_stars)[mask]
+                if celestial_stars or distortion.image_plane == 'ideal':
+                    t_osf, star_annotation_positions = distorted_star_motion(
+                        distortion, r_stars_os, c_stars_os, s_osf, h_pad_os_div2,
+                        float(t_start_star), float(t_end_star), star_rot_rate, star_tran_os,
+                        int(t_osf), celestial_stars,
+                        _positive_int_setting(ssp['sim'], 'max_track_samples', MAX_TRACK_SAMPLES))
+                    star_position_transform = distortion.transform(s_osf, h_pad_os_div2, celestial_stars)
+                wcs = distortion.sky_wcs(
+                    float(star_ra) if celestial_stars or track_mode is not None else 0.,
+                    float(star_dec) if celestial_stars or track_mode is not None else 0.,
+                    y_ifov, x_ifov, star_rot, ssp['fpa'].get('crop'),
+                    motion_time=float(t_start_star) if celestial_stars else 0.,
+                    rotation=star_rot_rate, translation=np.asarray(star_tran_os) / s_osf,
+                    osf=s_osf)
+                # No-site catalogs are projected directly; the aberration
+                # setting only changes catalog coordinates with a site.
+                wcs.wcs.radesys = ('GAPPT' if track_mode is not None
+                                   and ssp['sim']['enable_stellar_aberration'] else 'ICRS')
+                header = dict(wcs.to_header(relax=True))
+                header['WCSERR'] = distortion.metadata['wcs_export']['maximum_checked_error_px']
+                header['WCSMJD'] = float(ts_start.tt - 2400000.5)
+                header['WCSREF'] = 'Exposure start; WCSMJD uses TT'
+                header['DATE-OBS'] = ts_start.utc_datetime().replace(tzinfo=None).isoformat()
+                header['TIME-OBS'] = str(ts_start.utc_datetime().time())
+                from astropy.time import Time as AstropyTime
+                header['MJD-OBS'] = float(AstropyTime(ts_start.utc_datetime()).mjd)
+                astrometrics['wcs_header'] = header
+                astrometrics['distortion'] = dict(
+                    distortion.metadata, temporal_samples=int(t_osf),
+                    wcs_convention=distortion.metadata['wcs_export']['convention'])
 
             t_start_star = tf.cast(t_start_star, tf.float32)
             t_end_star = tf.cast(t_end_star, tf.float32)
@@ -1341,11 +1409,12 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         epsf_normalize=epsf_cfg.get('normalize', False),
                         epsf_crop=frame_epsf_crop_cfg,
                         epsf_metadata=epsf_metadata,
+                        star_position_transform=star_position_transform,
                     )
                 if render_mode == 'piecewise':
                     return render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, star_render_mode=ssp['sim']['star_render_mode'], point_rendering=point_rendering)
                 else:
-                    return render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'], point_rendering=point_rendering)
+                    return render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os_curr, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=render_separate, obs_model=obs_model, star_render_mode=ssp['sim']['star_render_mode'], point_rendering=point_rendering, star_position_transform=star_position_transform)
 
             frame_cloud_field = None
             cloud_transmission_tf = None
@@ -1424,6 +1493,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                         star_rot_rate,
                         star_tran_os,
                     )
+                    if star_position_transform is not None:
+                        r_stars_mid, c_stars_mid = star_position_transform(r_stars_mid, c_stars_mid)
                     star_transmission = _sample_bilinear_clamped_many(
                         cloud_transmission_np,
                         oversampled_to_detector(np.asarray(r_stars_mid, dtype=np.float64) - h_pad_os_div2, s_osf),
@@ -1610,6 +1681,10 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     if len(bias_tf.shape) == 2:
                         crop_bias_tf = crop(bias_tf, cp['height_offset'], cp['width_offset'], cp['height'], cp['width'])
 
+                if star_annotation_positions is not None:
+                    star_annotation_positions[0] -= cp['height_offset'] * s_osf
+                    star_annotation_positions[1] -= cp['width_offset'] * s_osf
+
                 # update star positions
                 r_stars_os = r_stars_os - cp['height_offset'] * s_osf
                 c_stars_os = c_stars_os - cp['width_offset'] * s_osf
@@ -1725,6 +1800,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     'tran': star_tran_os,
                     'min_mv': ssp['sim']['star_annotation_threshold'] if isinstance(ssp['sim']['star_annotation_threshold'], numbers.Number) else 15
                 }
+                if star_annotation_positions is not None:
+                    star_os_pix['annotation_positions'] = star_annotation_positions
                 if crop_cloud_transmission_np is not None:
                     star_os_pix['cloud_transmission'] = crop_cloud_transmission_np
             else:
@@ -2292,7 +2369,7 @@ def _gen_objects(ssp, render_mode,
                  h_fpa_pad_os, w_fpa_pad_os,
                  y_fov, x_fov,
                  y_to_pix, x_to_pix,
-                 star_rot, track_mode, track_apparent=True):
+                 star_rot, track_mode, track_apparent=True, distortion=None):
     """Generate object pixels. TODO move to submodule
     """
     obs_model = []
@@ -2310,7 +2387,7 @@ def _gen_objects(ssp, render_mode,
     enable_deflection = ssp['sim']['enable_deflection']
     enable_light_transit = ssp['sim']['enable_light_transit']
     enable_stellar_aberration = ssp['sim']['enable_stellar_aberration']
-    enable_fov_filter = ssp['sim'].get('enable_fov_filter', False)
+    enable_fov_filter = ssp['sim'].get('enable_fov_filter', False) and distortion is None
     fov_filter_radius = ssp['sim'].get('fov_filter_radius')
 
     track_deflection = enable_deflection if track_apparent is True else False
@@ -2538,13 +2615,13 @@ def _gen_objects(ssp, render_mode,
 
                 if len(rr0) > 0 and not math.isnan(rr0[0]) and not math.isnan(cc0[0]) and not math.isnan(rr2[0]) and not math.isnan(cc2[0]):
 
-                    if rr0[0] < -h_pad_os and rr2[0] < -h_pad_os:
+                    if distortion is None and (rr0[0] < -h_pad_os and rr2[0] < -h_pad_os):
                         continue
-                    elif rr0[0] > h_fpa_pad_os and rr2[0] > h_fpa_pad_os:
+                    elif distortion is None and (rr0[0] > h_fpa_pad_os and rr2[0] > h_fpa_pad_os):
                         continue
-                    elif cc0[0] < -w_pad_os and cc2[0] < -w_pad_os:
+                    elif distortion is None and (cc0[0] < -w_pad_os and cc2[0] < -w_pad_os):
                         continue
-                    elif cc0[0] > w_fpa_pad_os and cc2[0] > w_fpa_pad_os:
+                    elif distortion is None and (cc0[0] > w_fpa_pad_os and cc2[0] > w_fpa_pad_os):
                         continue
 
                     if ssp['sim']['num_target_samples'] == 2:
@@ -2557,6 +2634,17 @@ def _gen_objects(ssp, render_mode,
                 continue
             else:
                 raise ValueError('Unsupported target mode: {}'.format(o['mode']))
+
+            celestial_target = o['mode'] in ('tle', 'twobody', 'gc', 'ephemeris', 'observation')
+            if distortion is not None and (celestial_target or distortion.image_plane == 'ideal'):
+                controls = [0, len(orr) // 2, -1] if ssp['sim']['num_target_samples'] != 2 and celestial_target else [0, -1]
+
+                def mapping(rr, cc):
+                    return distortion.map_oversampled(rr, cc, s_osf, celestial=celestial_target)
+
+                orr, occ, opp, ott = sample_distorted_track(
+                    np.asarray(orr)[controls], np.asarray(occ)[controls], ope, ott[0], ott[-1],
+                    mapping, max_samples=max_track_samples)
 
             object_name = o.get('name', '')
             object_id = o.get('id', '')

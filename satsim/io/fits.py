@@ -67,6 +67,8 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
 
     if astrometrics is not None and 'time' in astrometrics:
         dt_start = astrometrics['time']
+    if astrometrics is not None and 'wcs_header' in astrometrics:
+        dt_start = datetime.fromisoformat(astrometrics['wcs_header']['DATE-OBS'])
 
     def get_or_default(key, default=''):
         if astrometrics is None or key not in astrometrics:
@@ -188,6 +190,14 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
         hdu.scale('int32')
     elif dtype == 'float32':
         pass
+
+    if astrometrics is not None and 'wcs_header' in astrometrics:
+        # Replace the independently synthesized legacy TAN header with the
+        # validated sky-coordinate approximation of the detector mapping.
+        for key in list(hdr):
+            if key.startswith(('CTYPE', 'CRPIX', 'CRVAL', 'CDELT', 'CROTA', 'CD1_', 'CD2_', 'PC1_', 'PC2_')):
+                del hdr[key]
+        hdr.update(astrometrics['wcs_header'])
 
     hdu.writeto(filename, overwrite=overwrite)
 

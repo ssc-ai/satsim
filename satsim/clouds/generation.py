@@ -4,7 +4,6 @@ import numpy as np
 from opensimplex import OpenSimplex
 
 from satsim.clouds.config import cloud_geometry_from_config, cloud_layers_from_config
-from satsim.clouds.constants import DEFAULT_CLOUD_RANGE_M
 from satsim.clouds.field import (
     cloud_layer_from_density,
     combine_cloud_layers,

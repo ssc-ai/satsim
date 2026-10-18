@@ -121,6 +121,17 @@
         "num_frames": {
             "description": "The number of frames of the focal plane array.",
             "$ref": "types/Integer.json"
+        },
+        "distortion": {
+            "description": "Optional direct ideal-to-detector pixel polynomial. Integer pixel centers; constant/linear terms can encode offset and skew. No FITS/WCS calibration inputs.",
+            "anyOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "$ref": "types/Distortion.json"
+                }
+            ]
         }
     }
 }

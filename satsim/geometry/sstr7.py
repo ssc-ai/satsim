@@ -166,7 +166,7 @@ def load_stars_for_zone(id, pos, length, bound, rootPath):  # ra_min, ra_max):
 
 
 def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_SSTR7_PATH, pad_mult=0,
-                 origin='center', filter_ob=True, flipud=False, fliplr=False):
+                 origin='center', filter_ob=True, flipud=False, fliplr=False, sky_bounds=None):
     """Query the catalog based on focal plane parameters and ra and dec line
     of sight vector. Line of sight vector is defined as the top left corner
     of the focal plane array.
@@ -176,6 +176,8 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_S
         width: `int`, width in number of pixels
         y_fov: `float`, y fov in degrees
         x_fov: `float`, x fov in degrees
+        sky_bounds: optional ``(minimum, maximum)`` RA/Dec bounds in degrees;
+            replaces the rectangular query footprint, e.g. for polynomial distortion.
         ra: `float`, right ascension of top left corner of array, [0,0]
         dec: `float`, declination of top left corner of array, [0,0]
         rot: `float`, focal plane rotation
@@ -197,6 +199,8 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_S
     """
 
     cmin, cmax, w = get_min_max_ra_dec(height, width, y_fov / height, x_fov / width, ra, dec, rot, pad_mult, origin)
+    if sky_bounds is not None:
+        cmin, cmax = sky_bounds
 
     cmin = np.radians(cmin)
     cmax = np.radians(cmax)

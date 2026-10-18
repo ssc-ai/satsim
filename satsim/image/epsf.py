@@ -951,7 +951,7 @@ def transform_and_add_epsf(
         epsf_lut, s_osf, batch_size=None, filter_out_of_bounds=True,
         point_rendering='bilinear', epsf_tiers=None,
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-        batch_size_cap=None, position_offset_os=0.0):
+        batch_size_cap=None, position_offset_os=0.0, position_transform=None):
     """Apply star motion and deposit transformed samples as ePSF stamps."""
     point_rendering = _validate_point_rendering(point_rendering)
     s_osf = tf.cast(s_osf, tf.int32)
@@ -968,7 +968,7 @@ def transform_and_add_epsf(
     else:
         row_offset_os = col_offset_os = position_offset_os
 
-    if filter_out_of_bounds:
+    if filter_out_of_bounds and position_transform is None:
         r, c, cnt_total = filter_epsf_sources_in_bounds(
             fpa,
             r_os,
@@ -1013,6 +1013,7 @@ def transform_and_add_epsf(
                 batch_element_budget=batch_element_budget,
                 batch_size_cap=batch_size_cap,
                 position_offset_os=position_offset_os,
+                position_transform=position_transform,
             )
             prev = float(tier['flux_max'])
         return fpa
@@ -1029,6 +1030,8 @@ def transform_and_add_epsf(
         temporal_osf=t_osf,
         source_count=n,
     )
+    if position_transform is not None:
+        source_batch_size = tf.minimum(source_batch_size, tf.maximum(1, 65536 // t_osf))
     deposit_batch_size = effective_epsf_batch_size(
         kernel_size,
         point_rendering=point_rendering,
@@ -1057,6 +1060,8 @@ def transform_and_add_epsf(
         ccnt = tf.tile(cnt_batch, [t_osf])
 
         rr, cc = rotate_and_translate(h_minus_1, w_minus_1, rr, cc, tt, rotation, translation)
+        if position_transform is not None:
+            rr, cc = position_transform(rr, cc)
         image = add_epsf_counts(
             image,
             rr,
