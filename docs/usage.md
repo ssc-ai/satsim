@@ -292,6 +292,12 @@ image-plane target:
   path. Cropped tiers are applied to stars only; targets keep the full kernel.
   Per-frame tier thresholds, source counts, wing/loss candidate bounds, and
   the binding criterion are recorded in frame metadata under `epsf.crop`.
+  When CPU-only ePSF renders run in parallel or in a CPU-limited container,
+  set `TF_NUM_INTRAOP_THREADS=1` and get parallelism from separate render
+  processes. The CPU stamp scatter gives each thread a range of output pixels
+  and every thread reads all of the updates, so extra intra-op threads add CPU
+  time without making the scatter faster. TensorFlow sizes its default thread
+  pool to the host's cores, not to a container's CPU limit.
 - `star_catalog_query_mode`: `frame` refreshes catalog stars every frame;
   `at_start` queries once.
 - `apply_star_wrap_around`: repeats stars as they drift through the padded
