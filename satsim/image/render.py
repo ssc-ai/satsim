@@ -161,7 +161,7 @@ def render_piecewise(h, w, h_sub, w_sub, h_pad_os, w_pad_os, s_osf, psf_os, r_ob
     return fpa_conv_star, fpa_conv_targ, None, None, None
 
 
-def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=True, obs_model=None, star_render_mode='transform', point_rendering='bilinear'):
+def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w_pad_os_div2, s_osf, psf_os, r_obs_os, c_obs_os, pe_obs_os, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, render_separate=True, obs_model=None, star_render_mode='transform', point_rendering='bilinear', star_position_transform=None):
     """ Render an image.
 
     Args:
@@ -203,6 +203,8 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
     """
     # render stars
     star_render_mode = normalize_star_render_mode(star_render_mode)
+    if star_position_transform is not None:
+        star_render_mode = 'transform'
     fpa_os_w_stars = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
     point_rendering = str(point_rendering).lower()
     if point_rendering not in ('floor', 'bilinear'):
@@ -223,7 +225,7 @@ def render_full(h_fpa_os, w_fpa_os, h_fpa_pad_os, w_fpa_pad_os, h_pad_os_div2, w
     if star_render_mode == 'streak':
         fpa_os_w_stars = transform_and_fft(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering, position_offset=star_position_offset)
     else:
-        fpa_os_w_stars = transform_and_add_counts(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering, position_offset=star_position_offset)
+        fpa_os_w_stars = transform_and_add_counts(fpa_os_w_stars, r_stars_os, c_stars_os, pe_stars_os, t_start_star, t_end_star, t_osf, star_rot_rate, star_tran_os, interpolation=point_rendering, position_offset=star_position_offset, position_transform=star_position_transform)
 
     # render modeled targets
     fpa_os_w_targets = tf.zeros([h_fpa_pad_os, w_fpa_pad_os], tf.float32)
@@ -294,7 +296,7 @@ def render_epsf(
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
         batch_size_cap=None, phase_oversample=1,
         fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=False,
-        epsf_crop=None, epsf_metadata=None, psf_support_shape=None):
+        epsf_crop=None, epsf_metadata=None, psf_support_shape=None, star_position_transform=None):
     """Render directly in detector space using an ePSF lookup table.
 
     Pass the ``psf_os`` used to build ``epsf_lut``, or its known
@@ -309,6 +311,8 @@ def render_epsf(
         batch_size_cap = batch_size
 
     star_render_mode = normalize_star_render_mode(star_render_mode)
+    if star_position_transform is not None:
+        star_render_mode = 'transform'
     unsupported_model = obs_model is not None and len(obs_model) > 0
     if unsupported_model:
         if fallback_to_fft_for_models:
@@ -338,6 +342,7 @@ def render_epsf(
                 obs_model=obs_model,
                 star_render_mode=star_render_mode,
                 point_rendering=point_rendering,
+                star_position_transform=star_position_transform,
             )
 
         raise NotImplementedError('sim.mode="epsf" does not support obs_model targets without fallback_to_fft_for_models')
@@ -398,7 +403,7 @@ def render_epsf(
             epsf_crop,
             trail_det=trailed_info.get('trail_det', 0),
         )
-        if epsf_metadata is not None and epsf_tiers is not None:
+        if epsf_metadata is not None and epsf_tiers is not None and star_position_transform is None:
             _, _, visible_pe_stars_os = filter_epsf_sources_in_bounds(
                 fpa_star,
                 r_stars_os,
@@ -434,7 +439,7 @@ def render_epsf(
         )
     else:
         epsf_tiers = resolve_epsf_tiers(epsf_lut, epsf_crop)
-        if epsf_metadata is not None and epsf_tiers is not None:
+        if epsf_metadata is not None and epsf_tiers is not None and star_position_transform is None:
             _, _, visible_pe_stars_os = filter_epsf_sources_in_bounds(
                 fpa_star,
                 r_stars_os,
@@ -468,6 +473,7 @@ def render_epsf(
             batch_element_budget=batch_element_budget,
             batch_size_cap=batch_size_cap,
             position_offset_os=(row_offset, col_offset),
+            position_transform=star_position_transform,
         )
 
     fpa_targ = tf.zeros([h_pad_det, w_pad_det], tf.float32)

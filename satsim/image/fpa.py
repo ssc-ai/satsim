@@ -420,7 +420,7 @@ def transform_and_fft(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translati
     return fftconv2p(delta, blur, pad=1)
 
 
-def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, batch_size=500, filter_out_of_bounds=True, interpolation='floor', position_offset=0.0):
+def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, translation, batch_size=500, filter_out_of_bounds=True, interpolation='floor', position_offset=0.0, position_transform=None):
     """Applies discrete rotation and translation transformations to a set of
     input points. This has the effect of "smearing" or "streaking" the point
     between times `t_start` and `t_end`. The number of transforms calculated is
@@ -463,7 +463,7 @@ def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, tr
     # divide pe by the number of discrete points to sample, e.g. for t_osf==2 then i==[0,1]
     cnt_os = cnt / tf.cast(t_osf, tf.float32)
 
-    if filter_out_of_bounds:
+    if filter_out_of_bounds and position_transform is None:
         (rr0_tmp, cc0_tmp) = rotate_and_translate(h_minus_1, w_minus_1, r, c, t_start, rotation, translation)
         (rr1_tmp, cc1_tmp) = rotate_and_translate(h_minus_1, w_minus_1, r, c, t_end, rotation, translation)
         rr_lt_0 = tf.math.logical_and(rr0_tmp < 0, rr1_tmp < 0)
@@ -480,6 +480,9 @@ def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, tr
         c_filter = c
         cnt_os_filter = cnt_os
 
+    if position_transform is not None:
+        # Bound the coordinates passed to the CPU WCS inverse per batch.
+        batch_size = tf.minimum(batch_size, tf.maximum(1, 65536 // t_osf))
     batch_size = tf.math.minimum(batch_size, tf.size(r_filter))
 
     if batch_size == 0:
@@ -491,18 +494,30 @@ def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, tr
     cnt_os_batch = _to_batch_1d(cnt_os_filter, batch_size)
 
     def func_condition(i, img, r_batch, c_batch, cnt_os_batch):
-        return tf.less(i, r_batch.shape[0])
+        return tf.less(i, tf.shape(r_batch)[0])
 
     def func_eval(i, img, r_batch, c_batch, cnt_os_batch):
 
         # vectorize
-        tt = tf.repeat(tf.linspace(t_start, t_end, t_osf), batch_size)
+        if position_transform is None:
+            time_grid = tf.linspace(t_start, t_end, t_osf)
+        else:
+            time_grid = t_start + (tf.cast(tf.range(t_osf), tf.float32) + .5) * ((t_end - t_start) / tf.cast(t_osf, tf.float32))
+        tt = tf.repeat(time_grid, batch_size)
         rr = tf.tile(r_batch[i, :], [t_osf])
         cc = tf.tile(c_batch[i, :], [t_osf])
         cnt_os = tf.tile(cnt_os_batch[i, :], [t_osf])
 
+        if position_transform is not None:
+            # Padding added by _to_batch_1d has no flux and no physical
+            # position. Mapping it can fail outside the supported domain.
+            active = cnt_os != 0
+            rr, cc, tt, cnt_os = [tf.boolean_mask(a, active) for a in (rr, cc, tt, cnt_os)]
+
         # perform transformation
         (rr, cc) = rotate_and_translate(h_minus_1, w_minus_1, rr, cc, tt, rotation, translation)
+        if position_transform is not None:
+            rr, cc = position_transform(rr, cc)
 
         return [
             i + 1,
@@ -526,11 +541,11 @@ def transform_and_add_counts(fpa, r, c, cnt, t_start, t_end, t_osf, rotation, tr
 
 def _to_batch_1d(x, batch_size):
 
-    remainder = batch_size - tf.math.floormod(x.shape[0], batch_size)
+    remainder = batch_size - tf.math.floormod(tf.size(x), batch_size)
 
     x = tf.pad(x, [[0, remainder],])
 
-    num_batches = tf.cast(x.shape[0] / batch_size, tf.int32)
+    num_batches = tf.size(x) // batch_size
 
     x = tf.reshape(x, [num_batches, batch_size])
 

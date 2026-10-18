@@ -374,6 +374,65 @@ observations:
 }
 ```
 
+### Pixel-space optical distortion
+
+`fpa.distortion` maps ideal pixel positions directly to detector positions.
+It is independent of pointing, time and calibration file formats:
+
+```json
+"distortion": {
+  "model": "polynomial",
+  "order": 3,
+  "reference_pixel": [1023.5, 1023.5],
+  "normalization_pixels": [1024.0, 1024.0],
+  "dx": {"2_0": 1.2, "1_1": -0.3, "3_0": 0.05},
+  "dy": {"0_2": -0.8, "1_1": 0.2, "0_3": -0.04},
+  "valid_domain": {"x": [-32.5, 2079.5], "y": [-32.5, 2079.5]}
+}
+```
+
+These illustrative coefficients describe a 2048 × 2048 detector with an ideal
+coordinate domain extending 32 pixels beyond its edges. With
+`u = (x-reference_x)/normalization_x` and
+`v = (y-reference_y)/normalization_y`, the result is
+`x_distorted = x + dx(u,v)`, `y_distorted = y + dy(u,v)`.
+The key `"i_j"` multiplies `u^i v^j`; its value is a displacement in native pixels.
+Missing terms are zero. Constant and linear terms can encode offsets and skew
+in the same block. Set `order: 2` and omit cubic terms for a quadratic model;
+orders 2 through 7 are supported.
+
+Coordinates are zero-based **integer pixel centers**, `(x,y) = (column,row)`,
+before output reflections or cropping. The first center is `(0,0)` and its
+edges are at `±0.5`. `reference_pixel` only defines the polynomial expansion
+origin; it does not independently shift the scene. The native-to-oversampled
+conversion is `(x+0.5)*osf-0.5`. Coefficients never change with oversampling.
+
+`valid_domain` bounds the ideal coordinates on which the model is supported.
+Include the necessary PSF padding and motion; evaluated positions outside it
+raise an error instead of extrapolating. Sampled folds and singularities are
+rejected. Omit the block or use `null` for legacy undistorted behavior.
+
+Celestial stars and targets always use the polynomial. Image-plane stars and
+line targets default to already-distorted coordinates; add `"image_plane":
+"ideal"` to map those too. Motion is transformed at each time sample. Full-frame
+FFT, native ePSF, output flips and cropping are supported. Piecewise FFT and
+sprite models are not supported with distortion. This feature changes source
+positions, not the PSF shape or radiance model.
+
+The simulator accepts neither calibration FITS paths, SIP keyword dictionaries,
+nor `linear_wcs`. Use `satsim-calibrate` to fit a pixel polynomial from a solved
+image and record the approximation error. Simulation geometry controls the
+scene's RA/Dec and roll independently.
+
+FITS **output** retains exposure-start sky coordinates. A separate inverse fit
+exports TPV and checks both serialized directions to 0.001 native pixel; an
+unqualified export raises `DistortionError`. Import-fit and export-fit errors
+are separate budgets. Headers record the checked output error in `WCSERR`;
+metadata records its polynomial order. Downstream readers must support TPV.
+An integrated streak centroid need not match an exposure-start WCS position.
+
+See [the coordinate contract and validation notes](wcs_distortion.md) for details.
+
 ## Dynamic Configuration
 
 SatSim transforms configurations before rendering. Each transformed stage is
@@ -1242,3 +1301,9 @@ dataset = augment_satnet_with_satsim(
   `spatial_osf`, `padding`, frame size, or jobs if memory is exhausted.
 - Use the schema in `schema/v1` to audit accepted keys. Newer blocks such as
   clouds intentionally reject unknown fields.
+
+### Affine optical geometry
+
+Offsets and skew belong in the constant and linear terms of `fpa.distortion`.
+There is no separate `linear_wcs` configuration. See
+[the pixel coordinate contract](wcs_distortion.md).

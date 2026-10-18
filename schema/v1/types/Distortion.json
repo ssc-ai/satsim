@@ -1,0 +1,239 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ssc-ai.github.io/satsim/schema/v1/types/Distortion.json",
+    "title": "Direct pixel polynomial distortion",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "model",
+        "order",
+        "reference_pixel",
+        "normalization_pixels",
+        "dx",
+        "dy",
+        "valid_domain"
+    ],
+    "properties": {
+        "model": {
+            "const": "polynomial"
+        },
+        "order": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 7
+        },
+        "reference_pixel": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+                "type": "number"
+            },
+            "description": "Normalization reference in zero-based native (x,y) pixel-center coordinates."
+        },
+        "normalization_pixels": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+                "type": "number",
+                "exclusiveMinimum": 0
+            }
+        },
+        "dx": {
+            "type": "object",
+            "patternProperties": {
+                "^[0-7]_[0-7]$": {
+                    "type": "number"
+                }
+            },
+            "additionalProperties": false,
+            "description": "Pixel-valued x displacement coefficients: i_j multiplies u^i v^j."
+        },
+        "dy": {
+            "type": "object",
+            "patternProperties": {
+                "^[0-7]_[0-7]$": {
+                    "type": "number"
+                }
+            },
+            "additionalProperties": false,
+            "description": "Pixel-valued y displacement coefficients: i_j multiplies u^i v^j."
+        },
+        "valid_domain": {
+            "type": "object",
+            "required": [
+                "x",
+                "y"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "x": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "y": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                        "type": "number"
+                    }
+                }
+            },
+            "description": "Closed bounds on undistorted native coordinates; include required padding/motion."
+        },
+        "image_plane": {
+            "type": "string",
+            "enum": [
+                "detector",
+                "ideal"
+            ],
+            "default": "detector"
+        }
+    },
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "order": {
+                        "const": 2
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "dx": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|1_0|1_1|2_0)$"
+                        }
+                    },
+                    "dy": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|1_0|1_1|2_0)$"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "order": {
+                        "const": 3
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "dx": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|1_0|1_1|1_2|2_0|2_1|3_0)$"
+                        }
+                    },
+                    "dy": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|1_0|1_1|1_2|2_0|2_1|3_0)$"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "order": {
+                        "const": 4
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "dx": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|0_4|1_0|1_1|1_2|1_3|2_0|2_1|2_2|3_0|3_1|4_0)$"
+                        }
+                    },
+                    "dy": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|0_4|1_0|1_1|1_2|1_3|2_0|2_1|2_2|3_0|3_1|4_0)$"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "order": {
+                        "const": 5
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "dx": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|0_4|0_5|1_0|1_1|1_2|1_3|1_4|2_0|2_1|2_2|2_3|3_0|3_1|3_2|4_0|4_1|5_0)$"
+                        }
+                    },
+                    "dy": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|0_4|0_5|1_0|1_1|1_2|1_3|1_4|2_0|2_1|2_2|2_3|3_0|3_1|3_2|4_0|4_1|5_0)$"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "order": {
+                        "const": 6
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "dx": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|0_4|0_5|0_6|1_0|1_1|1_2|1_3|1_4|1_5|2_0|2_1|2_2|2_3|2_4|3_0|3_1|3_2|3_3|4_0|4_1|4_2|5_0|5_1|6_0)$"
+                        }
+                    },
+                    "dy": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|0_4|0_5|0_6|1_0|1_1|1_2|1_3|1_4|1_5|2_0|2_1|2_2|2_3|2_4|3_0|3_1|3_2|3_3|4_0|4_1|4_2|5_0|5_1|6_0)$"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "order": {
+                        "const": 7
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "dx": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|0_4|0_5|0_6|0_7|1_0|1_1|1_2|1_3|1_4|1_5|1_6|2_0|2_1|2_2|2_3|2_4|2_5|3_0|3_1|3_2|3_3|3_4|4_0|4_1|4_2|4_3|5_0|5_1|5_2|6_0|6_1|7_0)$"
+                        }
+                    },
+                    "dy": {
+                        "propertyNames": {
+                            "pattern": "^(0_0|0_1|0_2|0_3|0_4|0_5|0_6|0_7|1_0|1_1|1_2|1_3|1_4|1_5|1_6|2_0|2_1|2_2|2_3|2_4|2_5|3_0|3_1|3_2|3_3|3_4|4_0|4_1|4_2|4_3|5_0|5_1|5_2|6_0|6_1|7_0)$"
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

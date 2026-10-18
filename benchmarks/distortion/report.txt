@@ -1,0 +1,30 @@
+Direct pixel-polynomial distortion — current qualification
+
+Runtime: ideal native (x,y) -> (x+dx(u,v), y+dy(u,v)); integer pixel centers.
+Orders 2–7, including affine terms. Calibration parsing stays in satsim-calibrate.
+FITS output uses a separately qualified inverse TPV approximation (0.001 px).
+
+CPU mapping: 1,000,000 positions; 5 warmed repeats.
+  Order 2: median 0.060905 s; peak traced 17.38 MB; formula max error 2.27e-13 px
+  Order 3: median 0.066940 s; peak traced 17.51 MB; formula max error 2.27e-13 px
+Includes domain/Jacobian checks; excludes rendering, startup and FITS export.
+No speedup claim is made against the retired SIP collect benchmark.
+
+Full engine suite: 994 passed, 0 failures, 0 errors.
+Full calibration suite: 174 passed.
+Additional maintained-report tests: 15 passed.
+Engine flake8, calibration undefined-name/syntax checks, diff checks and wheel build passed.
+Fresh calibration: eight sensors, 33 successful stages, all output validations passed.
+All 2,527 archived-file checksums passed independent readback verification.
+Original FITS pixels preserved; fixed seed 1701, ePSF, fresh cubic Nova solves,
+local refinement, neighbor magnitude limits absolute 17 / relative 3.
+Quadratic baseline solves, independent simulated centroids and sparse-field
+cross-validation are in ../satsim-calibrate/docs/calibration_report.md.
+
+Prototype study/report scripts were retired; production detection, matching,
+fitting, domain qualification and reports have separate maintained modules.
+RME01 needs better image/star coverage; production acceptance gates remain intact.
+
+Sources, test summaries and environment: test_results.json.
+Microbenchmark raw measurements: results.json.
+Original detector inputs remain unchanged.
