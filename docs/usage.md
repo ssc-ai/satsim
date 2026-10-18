@@ -580,6 +580,11 @@ SatSim supports two broad geometry modes:
 - `csv`: query a CSV star catalog from `path`.
 - `none`: render no stars.
 
+`sstr7` keeps each catalog zone it reads in memory (about 48 bytes per star,
+up to 1024 zones, or about 2 GB for the densest SSTRC7 zones). A long-running
+process that renders many pointings can call
+`satsim.geometry.sstr7.clear_star_cache()` between renders to release them.
+
 `geometry.stars.motion.mode` supports `affine`, `affine-polar`, and
 `none`. For catalog modes with a site/track, use `motion.mode: none` to let
 SatSim compute the apparent star motion from the tracking geometry.
