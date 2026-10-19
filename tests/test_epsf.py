@@ -400,14 +400,31 @@ def test_add_epsf_counts_matches_numpy_reference_deposit_with_off_frame_centers(
     np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-4)
 
 
-def test_add_epsf_counts_is_bit_identical_across_repeated_calls():
+def test_add_epsf_counts_is_bit_identical_across_repeated_cpu_calls():
     s_osf = 3
     fpa, r_os, c_os, cnt, lut = _random_epsf_case(96, 96, s_osf, 7, 4000, seed=5)
 
-    first = add_epsf_counts(tf.constant(fpa), r_os, c_os, cnt, lut, s_osf).numpy()
-    second = add_epsf_counts(tf.constant(fpa), r_os, c_os, cnt, lut, s_osf).numpy()
+    with tf.device('/CPU:0'):
+        first = add_epsf_counts(tf.constant(fpa), r_os, c_os, cnt, lut, s_osf).numpy()
+        second = add_epsf_counts(tf.constant(fpa), r_os, c_os, cnt, lut, s_osf).numpy()
 
     np.testing.assert_array_equal(first, second)
+
+
+@pytest.mark.skipif(not tf.config.get_visible_devices('GPU'), reason='GPU required')
+def test_add_epsf_counts_gpu_matches_reference_across_repeated_calls():
+    s_osf = 3
+    fpa, r_os, c_os, cnt, lut = _random_epsf_case(96, 96, s_osf, 7, 4000, seed=5)
+    expected = _reference_epsf_deposit(fpa, r_os, c_os, cnt, lut, s_osf, 'bilinear')
+
+    # Parallel GPU accumulation can change summation order between calls.
+    # Check each call against the float64 reference instead of requiring
+    # bit identity; use the same tolerance as the off-frame deposit test.
+    with tf.device('/GPU:0'):
+        for _ in range(3):
+            actual = add_epsf_counts(tf.constant(fpa), r_os, c_os, cnt, lut, s_osf)
+            assert 'GPU:0' in actual.device
+            np.testing.assert_allclose(actual.numpy(), expected, rtol=1e-5, atol=1e-4)
 
 
 def test_transform_and_add_epsf_preserves_flux_for_static_source():
