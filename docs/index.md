@@ -6,6 +6,7 @@
 
 installation
 usage
+wcs_distortion
 contributing
 api
 authors

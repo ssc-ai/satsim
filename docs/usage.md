@@ -380,6 +380,7 @@ observations:
 }
 ```
 
+(pixel-space-optical-distortion)=
 ### Pixel-space optical distortion
 
 `fpa.distortion` maps ideal pixel positions directly to detector positions.
@@ -1097,7 +1098,7 @@ source field can still change normalization and coverage quantiles. Runtime
 metadata identifies the model as `textured-v2` and records the active optical
 settings. The extra retained texture uses four bytes per source pixel per layer.
 
-See [the cloud comparison](../benchmarks/clouds/README.md) for before/after
+See [the cloud comparison](https://github.com/ssc-ai/satsim/blob/r0.27.0/benchmarks/clouds/README.md) for before/after
 maps, changes in mean attenuation and coverage, performance and qualification.
 
 Cloud motion uses a frame-midpoint approximation. Gimbal-induced cloud drift is

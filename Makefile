@@ -28,6 +28,13 @@ export PRINT_HELP_PYSCRIPT
 
 BROWSER := python3 -c "$$BROWSER_PYSCRIPT"
 
+# Keep native test pools bounded; environment or make arguments can override.
+test testp coverage cpucoverage: export OPENBLAS_NUM_THREADS ?= 1
+test testp coverage cpucoverage: export OMP_NUM_THREADS ?= 1
+test testp coverage cpucoverage: export NUMBA_NUM_THREADS ?= 1
+test testp coverage cpucoverage: export TF_NUM_INTRAOP_THREADS ?= 1
+test testp coverage cpucoverage: export TF_NUM_INTEROP_THREADS ?= 1
+
 help:
 	@python3 -c "$$PRINT_HELP_PYSCRIPT" < $(MAKEFILE_LIST)
 
@@ -65,15 +72,15 @@ test-all: ## run tests on every python3 version with tox
 	tox
 
 coverage: ## check code coverage quickly with the default python3
-	source gpu_select.sh && coverage run --source satsim -m pytest
-	coverage report -m
-	coverage html
+	source gpu_select.sh && python3 -m coverage run --source satsim -m pytest
+	python3 -m coverage report -m
+	python3 -m coverage html
 	$(BROWSER) htmlcov/index.html
 
-cpucoverage: ## check code coverage quickly with the default python3
-	CUDA_VISIBLE_DEVICES="" && coverage run --source satsim -m pytest
-	coverage report -m
-	coverage html
+cpucoverage: ## check code coverage with GPUs hidden from the default python3
+	CUDA_VISIBLE_DEVICES="" python3 -m coverage run --source satsim -m pytest
+	python3 -m coverage report -m
+	python3 -m coverage html
 	$(BROWSER) htmlcov/index.html
 
 docs: ## generate Sphinx HTML documentation, including API docs

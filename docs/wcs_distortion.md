@@ -3,7 +3,7 @@
 The simulator maps ideal detector coordinates to distorted coordinates directly.
 It does not load optical calibration files or invert SIP at render time.
 `fpa.distortion` contains the complete reusable model; sky pointing and time
-remain in the scene geometry. See [the JSON example](usage.md#pixel-space-optical-distortion).
+remain in the scene geometry. See {ref}`the JSON example <pixel-space-optical-distortion>`.
 
 ## Coordinate contract
 
@@ -86,4 +86,4 @@ all flips, crop, RA wrap, multiple oversampling factors and FFT/ePSF.
 TensorFlow graph execution, catalog bounds and export failures.
 
 Use `benchmarks/distortion/benchmark.py` for the direct-mapping measurement. See the
-[benchmark index](../benchmarks/README.md) for recorded results and their scope.
+[benchmark index](https://github.com/ssc-ai/satsim/blob/r0.27.0/benchmarks/README.md) for recorded results and their scope.

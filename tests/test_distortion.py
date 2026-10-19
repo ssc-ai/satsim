@@ -524,7 +524,7 @@ def test_stationary_catalog_halo_does_not_extrapolate(tmp_path):
     # Second star is in the conservative displacement halo but outside the
     # calibrated ideal footprint. It is beyond the padded detector support.
     sky = nominal.wcs_pix2world(np.array([[20., 30.], [-9., 30.]]) - [39.5, 31.5], 0)
-    catalog = tmp_path/'halo.csv'
+    catalog = tmp_path / 'halo.csv'
     catalog.write_text(''.join(f'{i},12,{ra:.12f},{dec:.12f}\n' for i,(ra,dec) in enumerate(sky)))
     ssp['geometry']['stars'] = {'mode':'csv', 'path':str(catalog), 'ra':120., 'dec':20.,
                                 'motion':{'mode':'none'}}

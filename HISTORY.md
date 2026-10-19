@@ -1,13 +1,17 @@
 History
 =======
 
-0.27.0 (unreleased)
+0.27.0
 ---------------------
 
 * **BEHAVIORAL CHANGE:** Preserve procedural optical texture inside saturated cloud coverage envelopes, floored haze and full-coverage layers by default. Existing cloud configurations remain valid, but seeded outputs and mean attenuation can change; reproduce historical datasets with their recorded code version.
 * Add per-layer `transmission.min`, `transmission.max` and optional `transmission.gamma` controls. Interior transmission is mapped without clipping; edges blend toward clear sky at 1. Retain the same texture through moving crops and use the resulting transmission consistently for attenuation, glow and truth.
 * Add scene-independent pixel polynomial distortion (orders 2–7), with integer pixel centers, sampled star/target motion, consistent annotations and validated exposure-start TPV output.
-* Store distortion and affine corrections directly in JSON; calibration FITS/SIP inputs and `linear_wcs` are replaced by upstream polynomial fitting in satsim-calibrate.
+* Store distortion and affine corrections directly in portable JSON. FITS/WCS calibration and polynomial fitting stay upstream in satsim-calibrate; simulation distortion is independent of scene pointing.
+* Accelerate CPU ePSF stamp deposition with segmented accumulation. Floating-point summation order changes can produce small pixel differences; GPU accumulation remains subject to rounding-level variation between repeated calls. (#51)
+* Reduce SSTR7 star-zone cache memory by storing read-only NumPy arrays, vectorize catalog decoding, and add `satsim.geometry.sstr7.clear_star_cache()` to release cached zones. Catalog query values and ordering are preserved. (#51)
+* **API CHANGE:** Remove `satsim.geometry.sstr7.load_stars_for_zone`; replace calls to its `cache_clear()` method with `clear_star_cache()`. `query_by_min_max` now returns fresh dictionaries with plain-float magnitudes; missing magnitudes are `32.0`, and all-missing `query_by_los` magnitude arrays are now float64.
+* Include Markdown documentation and JSON schemas in the source distribution. Bound native thread pools by default in test/coverage Make targets while respecting explicit overrides, run coverage through the selected `python3` interpreter, and correctly hide GPUs in `make cpucoverage`.
 
 0.26.2
 ---------------------
