@@ -292,6 +292,12 @@ image-plane target:
   path. Cropped tiers are applied to stars only; targets keep the full kernel.
   Per-frame tier thresholds, source counts, wing/loss candidate bounds, and
   the binding criterion are recorded in frame metadata under `epsf.crop`.
+  When CPU-only ePSF renders run in parallel or in a CPU-limited container,
+  set `TF_NUM_INTRAOP_THREADS=1` and get parallelism from separate render
+  processes. The CPU stamp scatter gives each thread a range of output pixels
+  and every thread reads all of the updates, so extra intra-op threads add CPU
+  time without making the scatter faster. TensorFlow sizes its default thread
+  pool to the host's cores, not to a container's CPU limit.
 - `star_catalog_query_mode`: `frame` refreshes catalog stars every frame;
   `at_start` queries once.
 - `apply_star_wrap_around`: repeats stars as they drift through the padded
@@ -632,6 +638,11 @@ SatSim supports two broad geometry modes:
 - `sstr7`: query an SSTR7 catalog from `path`.
 - `csv`: query a CSV star catalog from `path`.
 - `none`: render no stars.
+
+`sstr7` keeps each catalog zone it reads in memory (about 48 bytes per star,
+up to 1024 zones, or about 2 GB for the densest SSTRC7 zones). A long-running
+process that renders many pointings can call
+`satsim.geometry.sstr7.clear_star_cache()` between renders to release them.
 
 `geometry.stars.motion.mode` supports `affine`, `affine-polar`, and
 `none`. For catalog modes with a site/track, use `motion.mode: none` to let

@@ -815,7 +815,8 @@ def add_epsf_counts(
         flat_indices = tf.reshape(rows * shape[1] + cols, [-1])
         scatter_values = tf.reshape(stamps, [-1])
         flat_image = tf.reshape(image, [-1])
-        flat_image = tf.tensor_scatter_nd_add(flat_image, tf.reshape(flat_indices, [-1, 1]), scatter_values)
+        # Negative ids would be dropped silently; for odd kernels intersects and stamp_pad keep every id in range.
+        flat_image = flat_image + tf.math.unsorted_segment_sum(scatter_values, flat_indices, tf.size(flat_image))
         image = tf.reshape(flat_image, shape)
         return end, image
 

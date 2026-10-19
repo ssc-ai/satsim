@@ -11,6 +11,40 @@ DEFAULT_SSTR7_PATH = os.environ['SATSIM_SSTR7_PATH'] if 'SATSIM_SSTR7_PATH' in o
 RECORD_LEN = 30
 RECORD_LEN_BYTES = RECORD_LEN * 2
 
+# read_star and _decode_records multiply by these same Python floats, which
+# keeps the two parsers bit-identical.
+_MILLIARCSEC = 4.84813681109535993589914102358e-9
+_YEAR = 3.1556952e7
+_ANGLE_SCALE = _MILLIARCSEC  # to radians
+_PROPER_MOTION_SCALE = 0.32 * _MILLIARCSEC / _YEAR  # to radians / sec
+_PARALLAX_SCALE = 0.032 * _MILLIARCSEC
+_MV_SCALE = 1.0e-3
+
+_MV_PRIORITY = (
+    0,  # Open
+    5,  # Johnson_R
+    8,  # Sloan_r
+    4,  # Johnson_V
+    3,  # Johnson_B
+)
+_MV_MISSING = 32
+
+# One on-disk record, in read_star's native byte order. np.frombuffer raises
+# only when a buffer is not a whole number of records; _load_zone_stars checks
+# the byte count to catch truncation.
+_RECORD_DTYPE = np.dtype([
+    ('ra', '=i4'),
+    ('dec', '=i4'),
+    ('ra_pm', '=i2'),
+    ('dec_pm', '=i2'),
+    ('parallax', '=i2'),
+    ('mv', '=i2', (18,)),
+    ('_unused', 'V{}'.format(RECORD_LEN_BYTES - 50)),
+])
+
+# One decoded star, 48 bytes; field names are the read_star dict keys.
+_STAR_DTYPE = np.dtype([(name, np.float64) for name in ('ra', 'dec', 'ra_pm', 'dec_pm', 'parallax', 'mv')])
+
 
 @lru_cache(maxsize=10)
 def load_index(filename, numRaZones=60, numDecZones=1800):
@@ -142,27 +176,109 @@ def load_zone(currentZone, rootPath):
 
 
 @lru_cache(maxsize=1024)
-def load_stars_for_zone(id, pos, length, bound, rootPath):  # ra_min, ra_max):
-    """Load stars for specified zone.
-    """
-    buffer, start, end = load_zone({"id": id, "pos": pos, "length": length}, rootPath)
-    stars = []
-    if bound == 'minRA':
-        for s in [i * RECORD_LEN_BYTES for i in reversed(range((end - start) // RECORD_LEN_BYTES))]:
-            star = read_star(buffer[s:s + RECORD_LEN_BYTES])
-            stars.append(star)
-            # if star['ra'] < ra_min:
-            #     print('load minRA:', len(stars))
-            #     break
-    else:
-        for s in [i * RECORD_LEN_BYTES for i in range((end - start) // RECORD_LEN_BYTES)]:
-            star = read_star(buffer[s:s + RECORD_LEN_BYTES])
-            stars.append(star)
-            # if bound == 'maxRA' and star['ra'] > ra_max:
-            #     print('load maxRA:', len(stars))
-            #     break
+def _load_zone_stars(id, pos, length, rootPath):
+    """Load and decode every star in one catalog zone.
 
+    Args:
+        id: `int`, zone (SPD band) number, selects s{id:04d}.cat
+        pos: `int`, index of the zone's first record in that file
+        length: `int`, number of records in the zone
+        rootPath: `string`, path to root directory
+
+    Returns:
+        A read-only `numpy.ndarray` of `_STAR_DTYPE`, one element per record
+        in file order, shared by every later query of this zone
+    """
+    buffer, _, _ = load_zone({'id': id, 'pos': pos, 'length': length}, rootPath)
+    if len(buffer) != length * RECORD_LEN_BYTES:
+        raise ValueError('truncated zone in s{:04d}.cat: expected {} bytes at record {}, read {}'.format(
+            id, length * RECORD_LEN_BYTES, pos, len(buffer)))
+    stars = _decode_records(np.frombuffer(buffer, dtype=_RECORD_DTYPE))
+    stars.flags.writeable = False
     return stars
+
+
+def _decode_records(records):
+    """Vectorized `read_star` over a zone.
+
+    Args:
+        records: `numpy.ndarray` of `_RECORD_DTYPE`, raw catalog records
+
+    Returns:
+        A `numpy.ndarray` of `_STAR_DTYPE`; element i equals `read_star` of
+        record i bit for bit
+    """
+    # read_star multiplies a Python int by a Python float. Casting to float64
+    # first (exact for int32 and int16) and multiplying by the same constant
+    # gives the same bits under any numpy scalar promotion rules.
+    stars = np.empty(len(records), dtype=_STAR_DTYPE)
+    stars['ra'] = records['ra'].astype(np.float64) * _ANGLE_SCALE
+    stars['dec'] = records['dec'].astype(np.float64) * _ANGLE_SCALE
+    stars['ra_pm'] = records['ra_pm'].astype(np.float64) * _PROPER_MOTION_SCALE
+    stars['dec_pm'] = records['dec_pm'].astype(np.float64) * _PROPER_MOTION_SCALE
+    stars['parallax'] = records['parallax'].astype(np.float64) * _PARALLAX_SCALE
+    mv = records['mv'].astype(np.float64) * _MV_SCALE
+    best = np.full(len(records), float(_MV_MISSING))
+    # walk the priority list backwards so the first band below 32 is written last
+    for band in reversed(_MV_PRIORITY):
+        best = np.where(mv[:, band] < _MV_MISSING, mv[:, band], best)
+    stars['mv'] = best
+    return stars
+
+
+def _query_stars(ra_min, ra_max, dec_min, dec_max, rootPath, clip_min_max):
+    """Query the catalog for the stars within minimum and maximum right
+    ascension and declination.
+
+    Args:
+        ra_min: `float`, min RA bounds
+        ra_max: `float`, max RA bounds
+        dec_min: `float`, min dec bounds
+        dec_max: `float`, max dec bounds
+        rootPath: `string`, path to root directory
+        clip_min_max: `boolean`, clip stars outside of `ra_min` and `ra_max`
+
+    Returns:
+        A new `numpy.ndarray` of `_STAR_DTYPE`: zones in `select_zone` order,
+        each in reversed record order for `minRA` zones and file order
+        otherwise
+    """
+    zoneIndex = load_index(os.path.join(rootPath, 'sstrc.acc'), numRaZones=60, numDecZones=1800)
+
+    parts = []
+    for z in select_zone(ra_min, ra_max, dec_min, dec_max, zoneIndex, numRaZones=60, numDecZones=1800):
+        stars = _load_zone_stars(z['id'], z['pos'], z['length'], rootPath)
+        if z['bound'] == 'minRA':
+            # a view, so the cache holds each zone once in file order
+            stars = stars[::-1]
+        if clip_min_max and z['bound'] != 'inside':
+            # records within a zone are in RA order, so cutting at the first
+            # star past the edge drops every star beyond it
+            past_edge = stars['ra'] < ra_min if z['bound'] == 'minRA' else stars['ra'] > ra_max
+            first = np.flatnonzero(past_edge)
+            if first.size:
+                stars = stars[:first[0]]
+        parts.append(stars)
+
+    if not parts:
+        return np.empty(0, dtype=_STAR_DTYPE)
+    return np.concatenate(parts)
+
+
+def clear_star_cache():
+    """Release every cached catalog zone.
+
+    Queries cache each zone they read (up to 1024 zones, about 48 bytes per
+    star, or about 2 GB for the densest SSTRC7 zones) so later queries near
+    the same pointing skip the disk. A long-running process that renders many
+    pointings can call this between renders to return that memory; the next
+    query re-reads its zones from disk. Arrays already returned by
+    `query_by_los` or `query_by_min_max` stay valid.
+
+    The zone index read from `sstrc.acc` stays cached: it has a fixed size
+    per catalog path and does not grow with the number of pointings.
+    """
+    _load_zone_stars.cache_clear()
 
 
 def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_SSTR7_PATH, pad_mult=0,
@@ -205,11 +321,11 @@ def query_by_los(height, width, y_fov, x_fov, ra, dec, rot=0, rootPath=DEFAULT_S
     cmin = np.radians(cmin)
     cmax = np.radians(cmax)
 
-    stars = query_by_min_max(cmin[0], cmax[0], cmin[1], cmax[1], rootPath)
+    stars = _query_stars(cmin[0], cmax[0], cmin[1], cmax[1], rootPath, clip_min_max=True)
 
-    rra = np.degrees(np.array([s['ra'] for s in stars]))
-    ddec = np.degrees(np.array([s['dec'] for s in stars]))
-    mm = np.array([s['mv'] for s in stars])
+    rra = np.degrees(stars['ra'])
+    ddec = np.degrees(stars['dec'])
+    mm = stars['mv'].copy()
 
     cc, rr = w.wcs_world2pix(rra, ddec, 0)
 
@@ -253,39 +369,8 @@ def query_by_min_max(ra_min, ra_max, dec_min, dec_max, rootPath=DEFAULT_SSTR7_PA
         A `list`, stars within the bounds of input parameters
     """
 
-    zoneIndex = load_index(os.path.join(rootPath, 'sstrc.acc'), numRaZones=60, numDecZones=1800)
-
-    zones = select_zone(ra_min, ra_max, dec_min, dec_max, zoneIndex, numRaZones=60, numDecZones=1800)
-
-    stars = []
-    for z in zones:
-        ss = load_stars_for_zone(
-            z["id"],
-            z["pos"],
-            z["length"],
-            z["bound"],
-            rootPath
-        )
-
-        if clip_min_max:
-
-            def clip_stars():
-                if z['bound'] == 'minRA':
-                    for i in range(len(ss)):
-                        if ss[i]['ra'] < ra_min:
-                            return ss[0:i]
-                else:
-                    # break for `maxRA` and not `inside`
-                    for i in range(len(ss)):
-                        if z['bound'] == 'maxRA' and ss[i]['ra'] > ra_max:
-                            return ss[0:i]
-                return ss
-
-            ss = clip_stars()
-
-        stars += ss
-
-    return stars
+    stars = _query_stars(ra_min, ra_max, dec_min, dec_max, rootPath, clip_min_max)
+    return [dict(zip(_STAR_DTYPE.names, values)) for values in stars.tolist()]
 
 
 def read_star(buffer):
@@ -298,13 +383,6 @@ def read_star(buffer):
         A `dict`, the star position and magnitudes
     """
 
-    milliarcsec = 4.84813681109535993589914102358e-9
-    year = 3.1556952e7
-
-    angleScale = milliarcsec  # to radians
-    properMotionScale = 0.32 * milliarcsec / year  # to radians / sec
-    parallaxScale = 0.032 * milliarcsec
-
     raw = []
     raw = struct.unpack('=iihhh', buffer[0:14])
 
@@ -314,12 +392,12 @@ def read_star(buffer):
     ra, dec, ra_pm, dec_pm, parallax = raw[0:5]
 
     return {
-        'ra': ra * angleScale,
-        'dec': dec * angleScale,
-        'ra_pm': ra_pm * properMotionScale,
-        'dec_pm': dec_pm * properMotionScale,
-        'parallax': parallax * parallaxScale,
-        'mv': get_star_mv(np.asarray(raw_mv) * 1.0e-3)
+        'ra': ra * _ANGLE_SCALE,
+        'dec': dec * _ANGLE_SCALE,
+        'ra_pm': ra_pm * _PROPER_MOTION_SCALE,
+        'dec_pm': dec_pm * _PROPER_MOTION_SCALE,
+        'parallax': parallax * _PARALLAX_SCALE,
+        'mv': get_star_mv(np.asarray(raw_mv) * _MV_SCALE)
     }
 
 
@@ -332,15 +410,8 @@ def get_star_mv(mv):
     Returns:
         A `float`, the visual magnitude
     """
-    if mv[0] < 32:    # Open
-        return mv[0]
-    elif mv[5] < 32:  # Johnson_R
-        return mv[5]
-    elif mv[8] < 32:  # Sloan_r
-        return mv[8]
-    elif mv[4] < 32:  # Johnson_V
-        return mv[4]
-    elif mv[3] < 32:  # Johnson_B
-        return mv[3]
+    for band in _MV_PRIORITY:
+        if mv[band] < _MV_MISSING:
+            return mv[band]
 
-    return 32
+    return _MV_MISSING
