@@ -11,12 +11,21 @@
         "cloudLayer": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type"],
+            "required": [
+                "type"
+            ],
             "properties": {
                 "type": {
                     "description": "Cloud layer type. Presets (`patchy`, `cellular`, `veil`, `sheet`, and `fog`) provide tuned defaults for cloud shape and optical depth. Use `custom` to start from generic defaults and directly specify model parameters.",
                     "type": "string",
-                    "enum": ["patchy", "cellular", "veil", "sheet", "fog", "custom"]
+                    "enum": [
+                        "patchy",
+                        "cellular",
+                        "veil",
+                        "sheet",
+                        "fog",
+                        "custom"
+                    ]
                 },
                 "name": {
                     "description": "Optional human-readable metadata label for this layer. The name is used in generated metadata and diagnostics only; it does not affect cloud generation. Defaults to `cloud_<index>`.",
@@ -32,7 +41,7 @@
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/Integer.json"
                 },
                 "coverage": {
-                    "description": "Approximate realized sky fraction of the cloud mask for this layer, from 0.0 for clear to 1.0 for full coverage. For floored presets, coverage controls the above-floor cloud support while the mask remains full-frame because baseline attenuation is present everywhere. This is a fraction only; percent values such as 20 are not accepted.",
+                    "description": "Approximate realized sky fraction of the cloud mask for this layer, from 0.0 for clear to 1.0 for full coverage. For floored presets, coverage controls the above-floor cloud support while the mask remains full-frame because baseline attenuation is present everywhere. This is a fraction only; percent values such as 20 are not accepted. Full coverage retains spatial optical texture; it does not imply uniform transmission.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
                 },
                 "texture": {
@@ -68,10 +77,14 @@
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
                 },
                 "density_floor": {
-                    "description": "Optional minimum density added before optical-depth mapping. Use null for no explicit floor. Positive values are useful for veil, sheet, or fog-like layers where the frame should retain some baseline attenuation.",
+                    "description": "Optional baseline coverage-envelope floor. Positive values retain textured haze across the frame; zero coverage still produces clear sky. It is not a transmission floor.",
                     "anyOf": [
-                        { "type": "null" },
-                        { "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json" }
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
+                        }
                     ]
                 },
                 "brightness": {
@@ -103,18 +116,78 @@
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveInteger.json"
                 },
                 "tau_min": {
-                    "description": "Minimum optical depth used when converting nonzero cloud density into Beer-Lambert transmission. Higher values make even faint cloud regions more attenuating.",
+                    "description": "Minimum cloud-interior optical depth before scaling by the feathered coverage envelope.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
                 },
                 "tau_max": {
-                    "description": "Maximum optical depth reached by dense cloud regions. Higher values produce stronger attenuation and can make thick cloud regions nearly opaque. Runtime validation requires tau_max >= tau_min.",
+                    "description": "Maximum cloud-interior optical depth before scaling by the feathered coverage envelope.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
                 },
                 "tau_gamma": {
-                    "description": "Positive response exponent for mapping density into optical depth. Values below 1.0 make lower-density cloud regions more optically significant; values above 1.0 concentrate attenuation in denser regions.",
+                    "description": "Positive exponent applied to unsaturated interior texture when interpolating optical depth.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
+                },
+                "transmission": {
+                    "description": "Optional interior transmission bounds, replacing explicit tau controls. Cloud edges blend toward clear sky at 1. Layers with a positive density floor obey the bounds throughout the cloudy field. Bounds apply per layer, not to the combined stack.",
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/Clouds.json#/definitions/transmission"
                 }
-            }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "required": [
+                            "transmission"
+                        ]
+                    },
+                    "then": {
+                        "not": {
+                            "anyOf": [
+                                {
+                                    "required": [
+                                        "tau_min"
+                                    ]
+                                },
+                                {
+                                    "required": [
+                                        "tau_max"
+                                    ]
+                                },
+                                {
+                                    "required": [
+                                        "tau_gamma"
+                                    ]
+                                },
+                                {
+                                    "required": [
+                                        "optical"
+                                    ],
+                                    "properties": {
+                                        "optical": {
+                                            "anyOf": [
+                                                {
+                                                    "required": [
+                                                        "tau_min"
+                                                    ]
+                                                },
+                                                {
+                                                    "required": [
+                                                        "tau_max"
+                                                    ]
+                                                },
+                                                {
+                                                    "required": [
+                                                        "tau_gamma"
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
         },
         "texture": {
             "type": "object",
@@ -163,15 +236,15 @@
             "additionalProperties": false,
             "properties": {
                 "tau_min": {
-                    "description": "Minimum optical depth used when converting nonzero cloud density into Beer-Lambert transmission. Alias of clouds[].tau_min.",
+                    "description": "Minimum cloud-interior optical depth before scaling by the feathered coverage envelope.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
                 },
                 "tau_max": {
-                    "description": "Maximum optical depth reached by dense cloud regions. Alias of clouds[].tau_max.",
+                    "description": "Maximum cloud-interior optical depth before scaling by the feathered coverage envelope.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/NonnegativeFloat.json"
                 },
                 "tau_gamma": {
-                    "description": "Positive response exponent for mapping density into optical depth. Alias of clouds[].tau_gamma.",
+                    "description": "Positive exponent applied to unsaturated interior texture when interpolating optical depth.",
                     "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/PositiveFloat.json"
                 }
             }
@@ -265,9 +338,41 @@
         },
         "optionalUnitInterval": {
             "anyOf": [
-                { "type": "null" },
-                { "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json" }
+                {
+                    "type": "null"
+                },
+                {
+                    "$ref": "https://ssc-ai.github.io/satsim/schema/v1/types/UnitInterval.json"
+                }
             ]
+        },
+        "transmission": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "min",
+                "max"
+            ],
+            "properties": {
+                "min": {
+                    "description": "Lower interior transmission bound. Must not exceed max. Use a small positive value for opaque clouds; exact zero is excluded to keep optical depth finite.",
+                    "type": "number",
+                    "minimum": 1.1754943508222875e-38,
+                    "maximum": 1
+                },
+                "max": {
+                    "description": "Upper interior transmission bound. Feathered edges may exceed this toward 1.",
+                    "type": "number",
+                    "minimum": 1.1754943508222875e-38,
+                    "maximum": 1
+                },
+                "gamma": {
+                    "description": "Positive exponent applied to interior texture before transmission interpolation. Defaults to 1.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "default": 1
+                }
+            }
         }
     }
 }

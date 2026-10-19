@@ -623,8 +623,9 @@ def test_zero_and_full_coverage_layers_have_stable_optics():
 
     np.testing.assert_array_equal(opaque.density, np.ones_like(opaque.density))
     np.testing.assert_array_equal(opaque.mask, np.ones_like(opaque.mask, dtype=bool))
-    np.testing.assert_allclose(opaque.tau, np.full_like(opaque.tau, 0.7))
-    np.testing.assert_allclose(opaque.transmission, np.exp(np.full_like(opaque.transmission, -0.7)))
+    assert np.ptp(opaque.transmission) > 0.1
+    assert np.all((opaque.tau >= 0.1 - 1e-7) & (opaque.tau <= 0.7 + 1e-7))
+    np.testing.assert_allclose(opaque.transmission, np.exp(-opaque.tau))
 
 
 @pytest.mark.parametrize('cloud_type', ['custom', 'patchy', 'cellular'])
@@ -1453,8 +1454,14 @@ def test_runtime_clear_sky_omits_cloud_transmission_ground_truth():
     assert 'background_pre_cloud_pe' not in ground_truth
 
 
-def test_runtime_save_cloud_transmission_writes_standalone_product(tmp_path):
+@pytest.mark.parametrize("bounded", [False, True])
+def test_runtime_save_cloud_transmission_writes_standalone_product(tmp_path, bounded):
     ssp = _runtime_cloud_ssp([0.0, 0.0])
+    if bounded:
+        for layer in ssp["clouds"]:
+            for key in ("tau_min", "tau_max", "tau_gamma"):
+                layer.pop(key, None)
+            layer["transmission"] = {"min": 0.2, "max": 0.8}
     ssp['fpa']['num_frames'] = 1
     ssp['sim']['save_ground_truth'] = False
     ssp['sim']['save_segmentation'] = False
@@ -1664,7 +1671,8 @@ def test_cloud_attenuates_moving_target_per_path_sample():
     assert 0.01 < ob['cloud_transmission'] < 0.99
 
 
-def test_cloud_attenuates_star_at_mid_exposure_position(tmp_path):
+@pytest.mark.parametrize("bounded", [False, True])
+def test_cloud_attenuates_star_at_mid_exposure_position(tmp_path, bounded):
     # A single catalog star is attenuated before rendering by the
     # transmission sampled at its mid-exposure position (the same position
     # the star annotations sample), so the cloudy-to-clear flux ratio of the
@@ -1770,6 +1778,12 @@ def test_cloud_attenuates_star_at_mid_exposure_position(tmp_path):
             'brightness': None,
         }],
     }
+
+    if bounded:
+        for layer in ssp["clouds"]:
+            for key in ("tau_min", "tau_max", "tau_gamma"):
+                layer.pop(key, None)
+            layer["transmission"] = {"min": 0.2, "max": 0.8}
 
     frames_cloudy, frames_clear = _cloudy_and_clear_frames(ssp)
 

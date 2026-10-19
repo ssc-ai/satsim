@@ -10,7 +10,7 @@ from satsim.clouds.field import (
     normalize_unit,
     smoothstep,
 )
-from satsim.clouds.models import CloudGeometry
+from satsim.clouds.models import CloudGeometry, cloud_density_floor
 from satsim.util.validation import nonnegative_number, unit_interval
 
 
@@ -56,7 +56,7 @@ def generate_cloud_layer(config, geometry):
         density_floor=config.density_floor,
         mask_threshold=config.mask_threshold,
     )
-    return cloud_layer_from_density(config, density)
+    return cloud_layer_from_density(config, density, texture=texture)
 
 
 def cloud_texture(config, geometry):
@@ -108,12 +108,13 @@ def layer_geometry(config, geometry):
 
 
 def cloud_density_from_noise(noise, coverage, edge_width, density_floor, mask_threshold=0.02):
-    """Map normalized procedural noise into normalized cloud density.
+    """Map procedural noise into a feathered coverage envelope.
 
     ``coverage`` targets the realized mask fraction after edge softening. For
     floored layers, it targets the above-floor support while baseline
     attenuation keeps the mask full-frame. ``mask_threshold`` is the density
-    cutoff used when building the layer mask.
+    cutoff used when building the layer mask. Interior optical texture is
+    retained separately, so a saturated envelope does not flatten transmission.
     """
     values = np.clip(np.asarray(noise, dtype=np.float32), 0.0, 1.0)
     cloud_fraction = unit_interval('coverage', coverage)
@@ -129,8 +130,8 @@ def cloud_density_from_noise(noise, coverage, edge_width, density_floor, mask_th
 
     width = 0.06 + float(edge_width) + 0.10 * cloud_fraction
     gamma = max(0.45, 1.65 - 1.15 * cloud_fraction)
-    gain = 0.50 + 0.72 * cloud_fraction
-    floor = max(0.0, cloud_fraction - 0.85) * 0.25 if density_floor is None else float(density_floor)
+    gain = 1.0
+    floor = cloud_density_floor(cloud_fraction, density_floor)
     threshold = _density_threshold_for_coverage(
         values,
         cloud_fraction,

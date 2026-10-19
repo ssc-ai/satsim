@@ -4,6 +4,8 @@ History
 0.27.0 (unreleased)
 ---------------------
 
+* **BEHAVIORAL CHANGE:** Preserve procedural optical texture inside saturated cloud coverage envelopes, floored haze and full-coverage layers by default. Existing cloud configurations remain valid, but seeded outputs and mean attenuation can change; reproduce historical datasets with their recorded code version.
+* Add per-layer `transmission.min`, `transmission.max` and optional `transmission.gamma` controls. Interior transmission is mapped without clipping; edges blend toward clear sky at 1. Retain the same texture through moving crops and use the resulting transmission consistently for attenuation, glow and truth.
 * Add scene-independent pixel polynomial distortion (orders 2–7), with integer pixel centers, sampled star/target motion, consistent annotations and validated exposure-start TPV output.
 * Store distortion and affine corrections directly in JSON; calibration FITS/SIP inputs and `linear_wcs` are replaced by upstream polynomial fitting in satsim-calibrate.
 

@@ -8,6 +8,11 @@ import numpy as np
 from satsim.clouds.constants import DEFAULT_CLOUD_RANGE_M
 
 
+def cloud_density_floor(coverage, density_floor):
+    """Resolve the explicit or high-coverage baseline haze envelope."""
+    return max(0.0, coverage - 0.85) * 0.25 if density_floor is None else float(density_floor)
+
+
 @dataclass(frozen=True)
 class CloudGeometry:
     """Cloud-plane sampling geometry derived from the sensor FOV."""
@@ -72,10 +77,14 @@ class CloudLayerConfig:
     mask_threshold: float
     min_feature_scale_px: float
     amplitude_decay: float
+    transmission_min: float = None
+    transmission_max: float = None
+    transmission_gamma: float = 1.0
 
     def metadata(self):
         """Return JSON-serializable layer settings for run metadata."""
-        return {
+        metadata = {
+            'model': 'textured-v2',
             'name': self.name,
             'type': self.cloud_type,
             'seed': int(self.seed),
@@ -99,6 +108,16 @@ class CloudLayerConfig:
             'tau_max': float(self.tau_max),
             'tau_gamma': float(self.tau_gamma),
         }
+        if self.transmission_min is not None:
+            # Preset optical-depth defaults are inactive in this mode.
+            for key in ('tau_min', 'tau_max', 'tau_gamma'):
+                metadata.pop(key)
+            metadata['transmission'] = {
+                'min': self.transmission_min,
+                'max': self.transmission_max,
+                'gamma': self.transmission_gamma,
+            }
+        return metadata
 
 
 @dataclass(frozen=True)
@@ -111,6 +130,8 @@ class CloudLayer:
     tau: np.ndarray
     transmission: np.ndarray
     metadata: dict
+    # Unsaturated interior texture, retained when the coverage envelope is flat.
+    texture: np.ndarray = None
 
 
 @dataclass(frozen=True)
