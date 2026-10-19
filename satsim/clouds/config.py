@@ -150,6 +150,7 @@ def _parse_cloud_layer(raw_layer, index, sim_seed):
     if tau_max < tau_min:
         raise ValueError('tau_max must be greater than or equal to tau_min.')
     tau_gamma = positive_number('tau_gamma', base['tau_gamma'])
+    transmission_min, transmission_max, transmission_gamma = _transmission_settings(layer)
 
     return (CloudLayerConfig(
         name=str(raw_layer.get('name', 'cloud_{}'.format(index))),
@@ -174,7 +175,33 @@ def _parse_cloud_layer(raw_layer, index, sim_seed):
         mask_threshold=float(base['mask_threshold']),
         min_feature_scale_px=float(base['min_feature_scale_px']),
         amplitude_decay=float(base['amplitude_decay']),
+        transmission_min=transmission_min,
+        transmission_max=transmission_max,
+        transmission_gamma=transmission_gamma,
     ),)
+
+
+def _transmission_settings(layer):
+    """Parse an explicit interior transmission interval instead of tau controls."""
+    if 'transmission' not in layer:
+        return None, None, 1.0
+    settings = layer['transmission']
+    if not isinstance(settings, dict):
+        raise ValueError('transmission must be an object with min and max.')
+    if set(settings) - {'min', 'max', 'gamma'}:
+        raise ValueError('Unknown transmission field; expected min, max or gamma.')
+    if not {'min', 'max'} <= set(settings):
+        raise ValueError('transmission requires both min and max.')
+    if any(key in layer for key in ('tau_min', 'tau_max', 'tau_gamma')):
+        raise ValueError('transmission cannot be combined with explicit tau controls.')
+    low = unit_interval('transmission.min', settings['min'])
+    high = unit_interval('transmission.max', settings['max'])
+    if low < np.finfo(np.float32).tiny:
+        raise ValueError('transmission.min must be at least float32 tiny (1.17549435e-38) for finite optical depth; use a small positive value for opaque clouds.')
+    if low > high:
+        raise ValueError('transmission.min must be less than or equal to transmission.max.')
+    gamma = positive_number('transmission.gamma', settings.get('gamma', 1.0))
+    return low, high, gamma
 
 
 def _normalize_cloud_layer(raw_layer, index):

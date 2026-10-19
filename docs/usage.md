@@ -992,7 +992,9 @@ Each cloud layer supports these fields:
 - `density_edge_width` or `texture.edge_width`: optional nonnegative edge
   softness value.
 - `density_floor` or `texture.floor`: optional `null` or value in
-  `[0.0, 1.0]`.
+  `[0.0, 1.0]`. This is a floor on the coverage envelope, not on transmission.
+  Positive floors retain textured baseline haze, including outside the
+  above-floor cloud support. Zero coverage still gives completely clear sky.
 - `brightness` or `illumination.brightness`: optional cloud glow in visual
   magnitude per arcsec^2. Lower values are brighter.
 - `illumination.source_gains`: optional empirical brightening gains for
@@ -1015,7 +1017,77 @@ Each cloud layer supports these fields:
 - `locality_degree`: optional positive integer. Higher values make cloud
   support more localized and patchy.
 - `tau_min`, `tau_max`, and `tau_gamma` or their `optical` aliases:
-  optional optical depth controls.
+  optional cloud-interior optical depth controls. The original procedural
+  texture is raised to `tau_gamma` and mapped between `tau_min` and `tau_max`;
+  the feathered coverage envelope then scales optical depth toward zero.
+- `transmission`: optional object with required `min` and `max`, and optional
+  positive `gamma` (default `1`). This directly specifies cloud-interior
+  transmission instead of optical depth. Do not combine it with explicit
+  `tau_min`, `tau_max` or `tau_gamma`, including their `optical` aliases.
+
+### Cloud transmission variation (v0.27.0)
+
+Cloud coverage and interior optical texture are separate fields. A full cloud
+mask no longer forces a uniform transmission map, and flat coverage envelopes
+or density floors no longer erase the underlying texture. This is the default
+behavior for existing configurations as well as new transmission settings.
+Existing JSON remains valid, but seeded cloud images, mean attenuation and
+glow can differ from older releases. Use the recorded older code version to
+reproduce an archived dataset exactly.
+
+For example, to allow 20–80% transmission in fully covered cloud interiors:
+
+```json
+{
+  "clouds": [
+    {
+      "type": "patchy",
+      "seed": 123,
+      "coverage": 0.6,
+      "transmission": {"min": 0.2, "max": 0.8}
+    }
+  ]
+}
+```
+
+For texture `q` in `[0,1]` and coverage envelope `c` in `[0,1]`, this mode uses
+`T_interior = (1 - q**gamma) * max + q**gamma * min`, followed by
+`T = (1 - c) + c * T_interior`. Thus fully covered interiors (`c=1`) respect
+both bounds, genuinely clear sky (`c=0`) is exactly `1`, and feathered edges
+may exceed `max` as they blend toward clear sky.
+The segmentation mask is a threshold on `c`; it does not mark only interiors.
+
+A positive density floor (including the automatic floor above 85% coverage)
+means cloud material exists everywhere. These haze layers respect the bounds
+throughout the frame: `q**gamma * c` sets thickness within the allowed interval,
+without blending toward clear sky. The baseline region retains texture, and
+coverage still controls the additional thickness. Zero coverage overrides the
+floor and remains completely clear.
+
+The bounds are allowed values, not endpoints every crop must reach. Texture
+contrast and the sampled region can narrow the actual range. Equal bounds
+give uniform interiors with feathered edges; full coverage plus zero texture
+contrast also gives a uniform layer. Constant input texture stays constant:
+no artificial noise is added. With a constant texture, fractional mask coverage
+cannot generally be realized.
+
+Use `0 < min <= max <= 1`. To keep per-layer optical depth finite in float32,
+`min` must be at least `1.1754943508222875e-38`; use a practical small positive
+value such as `0.000001` for nearly opaque clouds. Exact zero is rejected.
+Optical depth is derived from the same transmission as `tau = -log(T)`.
+Bounds apply to each layer; stacked transmission can fall below an individual
+layer's minimum because transmissions multiply. Very small stacked values can
+underflow to zero in float32.
+
+The generated source field retains its texture when sampled into moving crops.
+There is no per-frame or per-crop rescaling, so overlapping views of that field
+agree at the same locations. Independently regenerating a differently sized
+source field can still change normalization and coverage quantiles. Runtime
+metadata identifies the model as `textured-v2` and records the active optical
+settings. The extra retained texture uses four bytes per source pixel per layer.
+
+See [the cloud comparison](../benchmarks/clouds/README.md) for before/after
+maps, changes in mean attenuation and coverage, performance and qualification.
 
 Cloud motion uses a frame-midpoint approximation. Gimbal-induced cloud drift is
 derived from the star-field translation, so clouds are treated as inertially

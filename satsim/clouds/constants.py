@@ -34,6 +34,7 @@ PUBLIC_LAYER_FIELDS = {
     'coverage',
     'texture',
     'optical',
+    'transmission',
     'geometry',
     'motion',
     'illumination',
