@@ -87,8 +87,9 @@ class GreatCircle(VectorFunction):
         lat = gc["latitude"]
 
         if np.ndim(dt) == 0:
-            lon = float(lon)
-            lat = float(lat)
+            # pygc returns one-element arrays even for scalar times.
+            lon = float(np.asarray(lon).item())
+            lat = float(np.asarray(lat).item())
 
         if self.observer is not None:
             if np.ndim(dt) == 0:
