@@ -1,0 +1,95 @@
+{
+  "samples": 1000000,
+  "repeats": 5,
+  "numpy": "1.26.4",
+  "scope": "CPU direct map including domain and Jacobian checks; excludes TF rendering and FITS output",
+  "source_sha256": "683572901315192ae03214d0c4e7d0e4f39bd9b52aecf638874b16fea379bfe9",
+  "orders": {
+    "2": {
+      "config": {
+        "model": "polynomial",
+        "order": 2,
+        "reference_pixel": [
+          1023.5,
+          1023.5
+        ],
+        "normalization_pixels": [
+          1024.0,
+          1024.0
+        ],
+        "dx": {
+          "2_0": 1.2,
+          "1_1": -0.3
+        },
+        "dy": {
+          "0_2": -0.8,
+          "1_1": 0.2
+        },
+        "valid_domain": {
+          "x": [
+            -32.5,
+            2079.5
+          ],
+          "y": [
+            -32.5,
+            2079.5
+          ]
+        }
+      },
+      "seconds": [
+        0.06569688799208961,
+        0.05924692400731146,
+        0.061999163997825235,
+        0.060905396996531636,
+        0.05844015898765065
+      ],
+      "median_seconds": 0.060905396996531636,
+      "traced_peak_bytes": 17380080,
+      "max_formula_error_px": 2.2737367544323206e-13
+    },
+    "3": {
+      "config": {
+        "model": "polynomial",
+        "order": 3,
+        "reference_pixel": [
+          1023.5,
+          1023.5
+        ],
+        "normalization_pixels": [
+          1024.0,
+          1024.0
+        ],
+        "dx": {
+          "2_0": 1.2,
+          "1_1": -0.3,
+          "3_0": 0.05
+        },
+        "dy": {
+          "0_2": -0.8,
+          "1_1": 0.2,
+          "0_3": -0.04
+        },
+        "valid_domain": {
+          "x": [
+            -32.5,
+            2079.5
+          ],
+          "y": [
+            -32.5,
+            2079.5
+          ]
+        }
+      },
+      "seconds": [
+        0.07271878200117499,
+        0.06257861701305956,
+        0.06694013401283883,
+        0.07316626500687562,
+        0.06461113298428245
+      ],
+      "median_seconds": 0.06694013401283883,
+      "traced_peak_bytes": 17511392,
+      "max_formula_error_px": 2.2737367544323206e-13
+    }
+  }
+}

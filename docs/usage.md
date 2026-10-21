@@ -292,6 +292,12 @@ image-plane target:
   path. Cropped tiers are applied to stars only; targets keep the full kernel.
   Per-frame tier thresholds, source counts, wing/loss candidate bounds, and
   the binding criterion are recorded in frame metadata under `epsf.crop`.
+  When CPU-only ePSF renders run in parallel or in a CPU-limited container,
+  set `TF_NUM_INTRAOP_THREADS=1` and get parallelism from separate render
+  processes. The CPU stamp scatter gives each thread a range of output pixels
+  and every thread reads all of the updates, so extra intra-op threads add CPU
+  time without making the scatter faster. TensorFlow sizes its default thread
+  pool to the host's cores, not to a container's CPU limit.
 - `star_catalog_query_mode`: `frame` refreshes catalog stars every frame;
   `at_start` queries once.
 - `apply_star_wrap_around`: repeats stars as they drift through the padded
@@ -373,6 +379,66 @@ observations:
   }
 }
 ```
+
+(pixel-space-optical-distortion)=
+### Pixel-space optical distortion
+
+`fpa.distortion` maps ideal pixel positions directly to detector positions.
+It is independent of pointing, time and calibration file formats:
+
+```json
+"distortion": {
+  "model": "polynomial",
+  "order": 3,
+  "reference_pixel": [1023.5, 1023.5],
+  "normalization_pixels": [1024.0, 1024.0],
+  "dx": {"2_0": 1.2, "1_1": -0.3, "3_0": 0.05},
+  "dy": {"0_2": -0.8, "1_1": 0.2, "0_3": -0.04},
+  "valid_domain": {"x": [-32.5, 2079.5], "y": [-32.5, 2079.5]}
+}
+```
+
+These illustrative coefficients describe a 2048 × 2048 detector with an ideal
+coordinate domain extending 32 pixels beyond its edges. With
+`u = (x-reference_x)/normalization_x` and
+`v = (y-reference_y)/normalization_y`, the result is
+`x_distorted = x + dx(u,v)`, `y_distorted = y + dy(u,v)`.
+The key `"i_j"` multiplies `u^i v^j`; its value is a displacement in native pixels.
+Missing terms are zero. Constant and linear terms can encode offsets and skew
+in the same block. Set `order: 2` and omit cubic terms for a quadratic model;
+orders 2 through 7 are supported.
+
+Coordinates are zero-based **integer pixel centers**, `(x,y) = (column,row)`,
+before output reflections or cropping. The first center is `(0,0)` and its
+edges are at `±0.5`. `reference_pixel` only defines the polynomial expansion
+origin; it does not independently shift the scene. The native-to-oversampled
+conversion is `(x+0.5)*osf-0.5`. Coefficients never change with oversampling.
+
+`valid_domain` bounds the ideal coordinates on which the model is supported.
+Include the necessary PSF padding and motion; evaluated positions outside it
+raise an error instead of extrapolating. Sampled folds and singularities are
+rejected. Omit the block or use `null` for legacy undistorted behavior.
+
+Celestial stars and targets always use the polynomial. Image-plane stars and
+line targets default to already-distorted coordinates; add `"image_plane":
+"ideal"` to map those too. Motion is transformed at each time sample. Full-frame
+FFT, native ePSF, output flips and cropping are supported. Piecewise FFT and
+sprite models are not supported with distortion. This feature changes source
+positions, not the PSF shape or radiance model.
+
+The simulator accepts neither calibration FITS paths, SIP keyword dictionaries,
+nor `linear_wcs`. Use `satsim-calibrate` to fit a pixel polynomial from a solved
+image and record the approximation error. Simulation geometry controls the
+scene's RA/Dec and roll independently.
+
+FITS **output** retains exposure-start sky coordinates. A separate inverse fit
+exports TPV and checks both serialized directions to 0.001 native pixel; an
+unqualified export raises `DistortionError`. Import-fit and export-fit errors
+are separate budgets. Headers record the checked output error in `WCSERR`;
+metadata records its polynomial order. Downstream readers must support TPV.
+An integrated streak centroid need not match an exposure-start WCS position.
+
+See [the coordinate contract and validation notes](wcs_distortion.md) for details.
 
 ## Dynamic Configuration
 
@@ -573,6 +639,11 @@ SatSim supports two broad geometry modes:
 - `sstr7`: query an SSTR7 catalog from `path`.
 - `csv`: query a CSV star catalog from `path`.
 - `none`: render no stars.
+
+`sstr7` keeps each catalog zone it reads in memory (about 48 bytes per star,
+up to 1024 zones, or about 2 GB for the densest SSTRC7 zones). A long-running
+process that renders many pointings can call
+`satsim.geometry.sstr7.clear_star_cache()` between renders to release them.
 
 `geometry.stars.motion.mode` supports `affine`, `affine-polar`, and
 `none`. For catalog modes with a site/track, use `motion.mode: none` to let
@@ -933,7 +1004,9 @@ Each cloud layer supports these fields:
 - `density_edge_width` or `texture.edge_width`: optional nonnegative edge
   softness value.
 - `density_floor` or `texture.floor`: optional `null` or value in
-  `[0.0, 1.0]`.
+  `[0.0, 1.0]`. This is a floor on the coverage envelope, not on transmission.
+  Positive floors retain textured baseline haze, including outside the
+  above-floor cloud support. Zero coverage still gives completely clear sky.
 - `brightness` or `illumination.brightness`: optional cloud glow in visual
   magnitude per arcsec^2. Lower values are brighter.
 - `illumination.source_gains`: optional empirical brightening gains for
@@ -956,7 +1029,77 @@ Each cloud layer supports these fields:
 - `locality_degree`: optional positive integer. Higher values make cloud
   support more localized and patchy.
 - `tau_min`, `tau_max`, and `tau_gamma` or their `optical` aliases:
-  optional optical depth controls.
+  optional cloud-interior optical depth controls. The original procedural
+  texture is raised to `tau_gamma` and mapped between `tau_min` and `tau_max`;
+  the feathered coverage envelope then scales optical depth toward zero.
+- `transmission`: optional object with required `min` and `max`, and optional
+  positive `gamma` (default `1`). This directly specifies cloud-interior
+  transmission instead of optical depth. Do not combine it with explicit
+  `tau_min`, `tau_max` or `tau_gamma`, including their `optical` aliases.
+
+### Cloud transmission variation (v0.27.0)
+
+Cloud coverage and interior optical texture are separate fields. A full cloud
+mask no longer forces a uniform transmission map, and flat coverage envelopes
+or density floors no longer erase the underlying texture. This is the default
+behavior for existing configurations as well as new transmission settings.
+Existing JSON remains valid, but seeded cloud images, mean attenuation and
+glow can differ from older releases. Use the recorded older code version to
+reproduce an archived dataset exactly.
+
+For example, to allow 20–80% transmission in fully covered cloud interiors:
+
+```json
+{
+  "clouds": [
+    {
+      "type": "patchy",
+      "seed": 123,
+      "coverage": 0.6,
+      "transmission": {"min": 0.2, "max": 0.8}
+    }
+  ]
+}
+```
+
+For texture `q` in `[0,1]` and coverage envelope `c` in `[0,1]`, this mode uses
+`T_interior = (1 - q**gamma) * max + q**gamma * min`, followed by
+`T = (1 - c) + c * T_interior`. Thus fully covered interiors (`c=1`) respect
+both bounds, genuinely clear sky (`c=0`) is exactly `1`, and feathered edges
+may exceed `max` as they blend toward clear sky.
+The segmentation mask is a threshold on `c`; it does not mark only interiors.
+
+A positive density floor (including the automatic floor above 85% coverage)
+means cloud material exists everywhere. These haze layers respect the bounds
+throughout the frame: `q**gamma * c` sets thickness within the allowed interval,
+without blending toward clear sky. The baseline region retains texture, and
+coverage still controls the additional thickness. Zero coverage overrides the
+floor and remains completely clear.
+
+The bounds are allowed values, not endpoints every crop must reach. Texture
+contrast and the sampled region can narrow the actual range. Equal bounds
+give uniform interiors with feathered edges; full coverage plus zero texture
+contrast also gives a uniform layer. Constant input texture stays constant:
+no artificial noise is added. With a constant texture, fractional mask coverage
+cannot generally be realized.
+
+Use `0 < min <= max <= 1`. To keep per-layer optical depth finite in float32,
+`min` must be at least `1.1754943508222875e-38`; use a practical small positive
+value such as `0.000001` for nearly opaque clouds. Exact zero is rejected.
+Optical depth is derived from the same transmission as `tau = -log(T)`.
+Bounds apply to each layer; stacked transmission can fall below an individual
+layer's minimum because transmissions multiply. Very small stacked values can
+underflow to zero in float32.
+
+The generated source field retains its texture when sampled into moving crops.
+There is no per-frame or per-crop rescaling, so overlapping views of that field
+agree at the same locations. Independently regenerating a differently sized
+source field can still change normalization and coverage quantiles. Runtime
+metadata identifies the model as `textured-v2` and records the active optical
+settings. The extra retained texture uses four bytes per source pixel per layer.
+
+See [the cloud comparison](https://github.com/ssc-ai/satsim/blob/r0.27.0/benchmarks/clouds/README.md) for before/after
+maps, changes in mean attenuation and coverage, performance and qualification.
 
 Cloud motion uses a frame-midpoint approximation. Gimbal-induced cloud drift is
 derived from the star-field translation, so clouds are treated as inertially
@@ -1242,3 +1385,9 @@ dataset = augment_satnet_with_satsim(
   `spatial_osf`, `padding`, frame size, or jobs if memory is exhausted.
 - Use the schema in `schema/v1` to audit accepted keys. Newer blocks such as
   clouds intentionally reject unknown fields.
+
+### Affine optical geometry
+
+Offsets and skew belong in the constant and linear terms of `fpa.distortion`.
+There is no separate `linear_wcs` configuration. See
+[the pixel coordinate contract](wcs_distortion.md).

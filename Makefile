@@ -28,6 +28,13 @@ export PRINT_HELP_PYSCRIPT
 
 BROWSER := python3 -c "$$BROWSER_PYSCRIPT"
 
+# Keep native test pools bounded; environment or make arguments can override.
+test testp coverage cpucoverage: export OPENBLAS_NUM_THREADS ?= 1
+test testp coverage cpucoverage: export OMP_NUM_THREADS ?= 1
+test testp coverage cpucoverage: export NUMBA_NUM_THREADS ?= 1
+test testp coverage cpucoverage: export TF_NUM_INTRAOP_THREADS ?= 1
+test testp coverage cpucoverage: export TF_NUM_INTEROP_THREADS ?= 1
+
 help:
 	@python3 -c "$$PRINT_HELP_PYSCRIPT" < $(MAKEFILE_LIST)
 
@@ -65,15 +72,15 @@ test-all: ## run tests on every python3 version with tox
 	tox
 
 coverage: ## check code coverage quickly with the default python3
-	source gpu_select.sh && coverage run --source satsim -m pytest
-	coverage report -m
-	coverage html
+	source gpu_select.sh && python3 -m coverage run --source satsim -m pytest
+	python3 -m coverage report -m
+	python3 -m coverage html
 	$(BROWSER) htmlcov/index.html
 
-cpucoverage: ## check code coverage quickly with the default python3
-	CUDA_VISIBLE_DEVICES="" && coverage run --source satsim -m pytest
-	coverage report -m
-	coverage html
+cpucoverage: ## check code coverage with GPUs hidden from the default python3
+	CUDA_VISIBLE_DEVICES="" python3 -m coverage run --source satsim -m pytest
+	python3 -m coverage report -m
+	python3 -m coverage html
 	$(BROWSER) htmlcov/index.html
 
 docs: ## generate Sphinx HTML documentation, including API docs
@@ -111,13 +118,13 @@ install: clean ## install the package to the active python3's site-packages
 	@echo  IMPORTANT: You may need to close and restart your shell after running "make install".
 
 docker: docs dist
-	docker build -t satsim:0.26.2 -t satsim:latest -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
+	docker build -t satsim:0.27.0 -t satsim:latest -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
 
 dind:
 	docker run --rm -it -v .:/workspace/ -w /workspace python:3.8-bullseye ./build.sh
-	docker build -t satsim:0.26.2-cuda11.2 -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
-	docker build -t satsim:0.26.2-cuda11.8 -f docker/ubuntu22.04_cuda11.8_py3.10.dockerfile .
-	docker build -t satsim:0.26.2-cuda12.5 -t satsim:0.26.2 -t satsim:latest -f docker/ubuntu24.04_cuda12.5_py3.12.dockerfile .
+	docker build -t satsim:0.27.0-cuda11.2 -f docker/ubuntu20.04_cuda11.2_py3.8.dockerfile .
+	docker build -t satsim:0.27.0-cuda11.8 -f docker/ubuntu22.04_cuda11.8_py3.10.dockerfile .
+	docker build -t satsim:0.27.0-cuda12.5 -t satsim:0.27.0 -t satsim:latest -f docker/ubuntu24.04_cuda12.5_py3.12.dockerfile .
 
 uninstall: clean
 	cat .install.log | xargs rm -rf

@@ -10,7 +10,7 @@ from satsim.clouds.constants import (
     SOLAR_DIRECT_BRIGHTENING,
     SOURCE_BRIGHTENING,
 )
-from satsim.clouds.models import CloudField, CloudLayer
+from satsim.clouds.models import CloudField, CloudLayer, cloud_density_floor
 from satsim.image.fpa import mv_to_pe
 
 
@@ -93,7 +93,10 @@ def crop_cloud_field(cloud_field, offset_px, height_px, width_px, pad_px=(0, 0),
         crop_starts.append([start_y, start_x])
         density, layer_clamped = sample_bilinear(layer.density, start_y, start_x, height_px, width_px)
         clamped = clamped or layer_clamped
-        layers.append(cloud_layer_from_density(layer.config, density))
+        texture = None
+        if layer.texture is not None:
+            texture, _ = sample_bilinear(layer.texture, start_y, start_x, height_px, width_px)
+        layers.append(cloud_layer_from_density(layer.config, density, texture=texture))
 
     field = combine_cloud_layers(tuple(layers))
     field.metadata['motion'] = {
@@ -109,11 +112,15 @@ def crop_cloud_field(cloud_field, offset_px, height_px, width_px, pad_px=(0, 0),
     return field
 
 
-def cloud_layer_from_density(config, density):
-    """Build a cloud layer from normalized density and optical config."""
+def cloud_layer_from_density(config, density, texture=None):
+    """Build a layer from its coverage envelope and unsaturated optical texture.
+
+    Explicit density-only callers use density for both fields. Generated layers
+    retain their original texture, including under a constant envelope.
+    """
     density = np.asarray(density, dtype=np.float32)
     mask = density > config.mask_threshold
-    tau, transmission = optical_fields(density, config)
+    tau, transmission = optical_fields(density, config, texture=texture)
     metadata = config.metadata()
     metadata['stats'] = {
         'density': array_stats(density),
@@ -121,6 +128,8 @@ def cloud_layer_from_density(config, density):
         'tau': array_stats(tau),
         'transmission': array_stats(transmission),
     }
+    if texture is not None:
+        metadata['stats']['texture'] = array_stats(texture)
     return CloudLayer(
         config=config,
         density=density,
@@ -128,6 +137,7 @@ def cloud_layer_from_density(config, density):
         tau=tau,
         transmission=transmission,
         metadata=metadata,
+        texture=texture,
     )
 
 
@@ -167,10 +177,32 @@ def combine_cloud_layers(layers):
     )
 
 
-def optical_fields(density, config):
-    """Return optical depth and transmission arrays for a cloud density field."""
+def optical_fields(density, config, texture=None):
+    """Map interior texture to optics, feathering the envelope toward clear sky.
+
+    No normalization depends on the current crop. Transmission bounds describe
+    fully covered interiors; cloud boundaries blend toward one. A nonzero haze
+    floor means the entire layer is cloudy, so bounds apply throughout it.
+    """
     cloud = np.clip(np.asarray(density, dtype=np.float32), 0.0, 1.0)
-    thickness = np.power(cloud, config.tau_gamma, dtype=np.float32)
+    texture = cloud if texture is None else np.clip(np.asarray(texture, dtype=np.float32), 0.0, 1.0)
+    if config.transmission_min is not None:
+        # Float64 and a convex combination avoid cancellation near zero when
+        # callers request nearly opaque interiors. Exact zero is rejected.
+        weight = np.power(texture.astype(np.float64), config.transmission_gamma)
+        floored = cloud_density_floor(config.coverage, config.density_floor) > 0
+        if floored:
+            # Baseline haze is cloud material, not a clear/cloud boundary.
+            # The envelope changes thickness within the allowed interval.
+            weight *= cloud
+        interior = (1.0 - weight) * config.transmission_max + weight * config.transmission_min
+        if floored:
+            transmission = np.where(cloud > 0, interior, 1.0).astype(np.float32)
+        else:
+            transmission = ((1.0 - cloud.astype(np.float64)) + cloud * interior).astype(np.float32)
+        tau = -np.log(transmission).astype(np.float32)
+        return tau, transmission
+    thickness = np.power(texture, config.tau_gamma, dtype=np.float32)
     tau = config.tau_min + thickness * (config.tau_max - config.tau_min)
     tau = np.where(cloud > 0.0, tau * cloud, 0.0).astype(np.float32)
     transmission = np.exp(-tau).astype(np.float32)

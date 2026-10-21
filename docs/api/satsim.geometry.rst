@@ -33,6 +33,22 @@ satsim.geometry.csvsc module
    :undoc-members:
    :show-inheritance:
 
+satsim.geometry.distortion module
+---------------------------------
+
+.. automodule:: satsim.geometry.distortion
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+satsim.geometry.distortion\_wcs module
+--------------------------------------
+
+.. automodule:: satsim.geometry.distortion_wcs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.geometry.draw module
 ---------------------------
 

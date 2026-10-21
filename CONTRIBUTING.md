@@ -87,6 +87,35 @@ Before you submit a merge request, check that it meets these guidelines:
 
 ## Tips
 
+Run coverage without opening a browser on a headless host:
+
+```bash
+make coverage BROWSER=true
+```
+
+`make cpucoverage BROWSER=true` hides GPUs from the test process. Both targets
+use the coverage module installed for `python3`. GPU-only tests skip on CPU;
+renderer tolerances can also depend on the TensorFlow version and device.
+
+The `test`, `testp`, `coverage`, and `cpucoverage` Make targets default the
+OpenBLAS, OpenMP, Numba, and TensorFlow thread pools to one worker each to avoid
+oversubscribing the host. Existing environment values are respected; overrides
+can also be passed to make, for example
+`make coverage TF_NUM_INTRAOP_THREADS=4 BROWSER=true`. These defaults apply only
+to the test and coverage Make targets.
+
+If TensorFlow aborts with a native error, disable pytest's output capture so
+the diagnostic preceding the Python stack trace is retained:
+
+```bash
+set -o pipefail
+PYTEST_ADDOPTS="-s -vv" make coverage BROWSER=true 2>&1 | tee coverage-native.log
+```
+
+Keep the native diagnostic and TensorFlow/CUDA versions with the failure report.
+The Python stack trace alone identifies the active operation, but may not
+explain why the native runtime aborted.
+
 To run a subset of tests:
 
 ```

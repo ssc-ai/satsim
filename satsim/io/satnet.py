@@ -141,6 +141,7 @@ def set_frame_annotation(data,frame_num,height,width,obs,box_size=None,box_pad=0
             star_os_pix['min_mv'],
             variable=star_os_pix.get('variable'),
             cloud_transmission=star_os_pix.get('cloud_transmission'),
+            annotation_positions=star_os_pix.get('annotation_positions'),
         )
         objs.extend(star_annotations)
 
@@ -268,7 +269,7 @@ def write_annotation(dir_name, sat_name, meta_data, frame_num, ssp, save_pickle=
     save_json(os.path.join(dir_name, 'config.json'), ssp, save_pickle=save_pickle)
 
 
-def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, snr_aperture=None, min_mv=10, box_size=None, box_pad=0, variable=None, cloud_transmission=None):
+def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_stars_os, pe_stars_os, m_stars_os, t_start_star, t_end_star, star_rot_rate, star_tran_os, ra_stars, dec_stars, seg_id_stars, snr_aperture=None, min_mv=10, box_size=None, box_pad=0, variable=None, cloud_transmission=None, annotation_positions=None):
     """Generates the star annotation data from the SatSim internal star data. Data is typically in oversampled pixel space.
 
     Args:
@@ -317,8 +318,9 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
     c_stars_os = tf.convert_to_tensor(c_stars_os, dtype=tf.float32)
     pe_stars_os = tf.convert_to_tensor(pe_stars_os, dtype=tf.float32)
     m_stars_os = tf.convert_to_tensor(m_stars_os, dtype=tf.float32)
-    ra_stars = tf.convert_to_tensor(ra_stars, dtype=tf.float32)
-    dec_stars = tf.convert_to_tensor(dec_stars, dtype=tf.float32)
+    sky_dtype = tf.float64 if annotation_positions is not None else tf.float32
+    ra_stars = tf.convert_to_tensor(ra_stars, dtype=sky_dtype)
+    dec_stars = tf.convert_to_tensor(dec_stars, dtype=sky_dtype)
     seg_id_stars = tf.convert_to_tensor(seg_id_stars, dtype=tf.int32)
 
     (rr0, cc0) = rotate_and_translate(h_minus_1, w_minus_1, r_stars_os[mask], c_stars_os[mask], t_start_star, star_rot_rate, star_tran_os)
@@ -327,6 +329,9 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
 
     rr = np.stack([rr0, rrm, rr1], axis=1) - h_pad_os
     cc = np.stack([cc0, ccm, cc1], axis=1) - w_pad_os
+    if annotation_positions is not None:
+        rr = np.asarray(annotation_positions[0])[mask_np] - h_pad_os
+        cc = np.asarray(annotation_positions[1])[mask_np] - w_pad_os
     cloud_transmission = None if cloud_transmission is None else np.asarray(cloud_transmission, dtype=np.float32)
     cloud_row_osf = None
     cloud_col_osf = None
@@ -356,8 +361,8 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
             if snr_aperture is not None:
                 annotation['snr_aperture'] = _cast_to_float(snr_ap) if snr_ap is not None else None
             if cloud_transmission is not None and cloud_row_osf is not None and cloud_col_osf is not None:
-                cloud_sample_row = oversampled_to_detector(r[1], cloud_row_osf)
-                cloud_sample_col = oversampled_to_detector(c[1], cloud_col_osf)
+                cloud_sample_row = oversampled_to_detector(r[len(r) // 2], cloud_row_osf)
+                cloud_sample_col = oversampled_to_detector(c[len(c) // 2], cloud_col_osf)
                 annotation['cloud_sample_row'] = _cast_to_float(cloud_sample_row)
                 annotation['cloud_sample_col'] = _cast_to_float(cloud_sample_col)
                 annotation['cloud_transmission'] = _sample_bilinear_clamped(

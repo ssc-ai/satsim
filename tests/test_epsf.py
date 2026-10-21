@@ -337,6 +337,96 @@ def test_add_epsf_counts_matches_across_batch_sizes():
         np.testing.assert_allclose(actual, expected, atol=1e-6)
 
 
+def _random_epsf_case(height, width, s_osf, kernel_size, count, seed):
+    rng = np.random.default_rng(seed)
+    half = kernel_size // 2
+    # Centers reach one pixel past half a kernel beyond every frame edge.
+    r_os = rng.uniform(-(half + 1) * s_osf, (height + half + 1) * s_osf, count).astype(np.float32)
+    c_os = rng.uniform(-(half + 1) * s_osf, (width + half + 1) * s_osf, count).astype(np.float32)
+    cnt = rng.uniform(1.0, 100.0, count).astype(np.float32)
+    lut = rng.random([s_osf, s_osf, kernel_size, kernel_size], dtype=np.float32)
+    fpa = rng.random([height, width], dtype=np.float32)
+    return fpa, r_os, c_os, cnt, lut
+
+
+def _reference_epsf_deposit(fpa, r_os, c_os, cnt, lut, s_osf, point_rendering):
+    r = np.asarray(r_os, np.float64)
+    c = np.asarray(c_os, np.float64)
+    cnt = np.asarray(cnt, np.float64)
+    if point_rendering == 'bilinear':
+        r0 = np.floor(r)
+        c0 = np.floor(c)
+        dr = r - r0
+        dc = c - c0
+        rr = np.concatenate([r0, r0, r0 + 1, r0 + 1])
+        cc = np.concatenate([c0, c0 + 1, c0, c0 + 1])
+        weights = np.concatenate([(1 - dr) * (1 - dc), (1 - dr) * dc, dr * (1 - dc), dr * dc])
+        values = np.tile(cnt, 4) * weights
+    else:
+        rr = np.floor(r)
+        cc = np.floor(c)
+        values = cnt
+    rr = rr.astype(np.int64)
+    cc = cc.astype(np.int64)
+
+    kernel_size = lut.shape[2]
+    pad = kernel_size + 1
+    height, width = fpa.shape
+    offsets = np.arange(kernel_size) - kernel_size // 2
+    stamps = lut[rr % s_osf, cc % s_osf].astype(np.float64) * values[:, None, None]
+    rows = np.broadcast_to((rr // s_osf + pad)[:, None, None] + offsets[None, :, None], stamps.shape)
+    cols = np.broadcast_to((cc // s_osf + pad)[:, None, None] + offsets[None, None, :], stamps.shape)
+    image = np.zeros([height + 2 * pad, width + 2 * pad])
+    np.add.at(image, (rows, cols), stamps)
+    return fpa + image[pad:pad + height, pad:pad + width]
+
+
+@pytest.mark.parametrize('point_rendering', ['bilinear', 'floor'], ids=['bilinear', 'floor'])
+def test_add_epsf_counts_matches_numpy_reference_deposit_with_off_frame_centers(point_rendering):
+    s_osf = 3
+    fpa, r_os, c_os, cnt, lut = _random_epsf_case(13, 17, s_osf, 7, 300, seed=11)
+
+    actual = add_epsf_counts(
+        tf.constant(fpa),
+        r_os,
+        c_os,
+        cnt,
+        lut,
+        s_osf,
+        point_rendering=point_rendering,
+    ).numpy()
+
+    expected = _reference_epsf_deposit(fpa, r_os, c_os, cnt, lut, s_osf, point_rendering)
+    np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-4)
+
+
+def test_add_epsf_counts_is_bit_identical_across_repeated_cpu_calls():
+    s_osf = 3
+    fpa, r_os, c_os, cnt, lut = _random_epsf_case(96, 96, s_osf, 7, 4000, seed=5)
+
+    with tf.device('/CPU:0'):
+        first = add_epsf_counts(tf.constant(fpa), r_os, c_os, cnt, lut, s_osf).numpy()
+        second = add_epsf_counts(tf.constant(fpa), r_os, c_os, cnt, lut, s_osf).numpy()
+
+    np.testing.assert_array_equal(first, second)
+
+
+@pytest.mark.skipif(not tf.config.get_visible_devices('GPU'), reason='GPU required')
+def test_add_epsf_counts_gpu_matches_reference_across_repeated_calls():
+    s_osf = 3
+    fpa, r_os, c_os, cnt, lut = _random_epsf_case(96, 96, s_osf, 7, 4000, seed=5)
+    expected = _reference_epsf_deposit(fpa, r_os, c_os, cnt, lut, s_osf, 'bilinear')
+
+    # Parallel GPU accumulation can change summation order between calls.
+    # Check each call against the float64 reference instead of requiring
+    # bit identity; use the same tolerance as the off-frame deposit test.
+    with tf.device('/GPU:0'):
+        for _ in range(3):
+            actual = add_epsf_counts(tf.constant(fpa), r_os, c_os, cnt, lut, s_osf)
+            assert 'GPU:0' in actual.device
+            np.testing.assert_allclose(actual.numpy(), expected, rtol=1e-5, atol=1e-4)
+
+
 def test_transform_and_add_epsf_preserves_flux_for_static_source():
     lut = build_epsf_lut(None, 3, 1)
     img = transform_and_add_epsf(

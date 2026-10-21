@@ -107,3 +107,6 @@ def get_min_max_ra_dec(height, width, y_ifov, x_ifov, ra, dec, rot=0, pad_mult=0
         cmax = [maxTheta, maxPhi]
 
     return cmin, cmax, w
+
+
+OPTICAL_GEOMETRY_API = 3  # Direct pixel polynomials; no calibration formats in simulation.

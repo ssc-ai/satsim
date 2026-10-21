@@ -1,0 +1,1771 @@
+{
+  "baseline_commit": "2143a20",
+  "archive_path": "/workspace/git/satsim-utils/datasets/clouds_v1/runs/fig_patchy2/configs/lmnt03/lmnt03_patchy_low_00.json",
+  "archive_sha256": "e1c07e770c56822009e6530dcbf74aa8d60a3fe38325addf22c7758f8e3f60d5",
+  "preview_geometry": {
+    "height_px": 384,
+    "width_px": 288,
+    "y_fov_deg": 3.193994030187939,
+    "x_fov_deg": 2.400005216608189,
+    "cloud_range_m": 3000.0,
+    "y_center_offset_m": 0.0,
+    "x_center_offset_m": 0.0
+  },
+  "cases": {
+    "AMOS patchy example": {
+      "config": {
+        "type": "patchy",
+        "seed": 827990538,
+        "coverage": 0.3435,
+        "optical": {
+          "tau_max": 3.5625,
+          "tau_gamma": 1.1661
+        },
+        "illumination": {
+          "source_gains": {
+            "lunar": 0.227
+          }
+        },
+        "wind_speed": 0.0
+      },
+      "bounded_config": {
+        "type": "patchy",
+        "seed": 827990538,
+        "coverage": 0.3435,
+        "illumination": {
+          "source_gains": {
+            "lunar": 0.227
+          }
+        },
+        "wind_speed": 0.0,
+        "transmission": {
+          "min": 0.2,
+          "max": 0.8
+        }
+      },
+      "cross_section_row": 0,
+      "measurements": {
+        "Before": {
+          "mean_transmission": 0.8555667996406555,
+          "min_transmission": 0.14389249682426453,
+          "max_transmission": 1.0,
+          "mask_coverage": 0.343505859375,
+          "interior_fraction": 0.0,
+          "interior_transmission_min": null,
+          "interior_transmission_max": null,
+          "flat_cloudy_neighbor_fraction": 0.1916172463535823,
+          "old_largest_cloudy_plateau_fraction": 0.19352970596751692,
+          "range_on_old_plateau": 0.0,
+          "std_on_old_plateau": 1.4901161193847656e-08
+        },
+        "New default": {
+          "mean_transmission": 0.8245968222618103,
+          "min_transmission": 0.028367817401885986,
+          "max_transmission": 1.0,
+          "mask_coverage": 0.34349681712962965,
+          "interior_fraction": 0.06391059027777778,
+          "interior_transmission_min": 0.028367817401885986,
+          "interior_transmission_max": 0.11561595648527145,
+          "flat_cloudy_neighbor_fraction": 0.0,
+          "old_largest_cloudy_plateau_fraction": 0.19352970596751692,
+          "range_on_old_plateau": 0.09052444249391556,
+          "std_on_old_plateau": 0.023208415135741234
+        },
+        "Explicit range 0.2\u20130.8": {
+          "mean_transmission": 0.9019469022750854,
+          "min_transmission": 0.20000000298023224,
+          "max_transmission": 1.0,
+          "mask_coverage": 0.34349681712962965,
+          "interior_fraction": 0.06391059027777778,
+          "interior_transmission_min": 0.20000000298023224,
+          "interior_transmission_max": 0.4227275550365448,
+          "flat_cloudy_neighbor_fraction": 0.0,
+          "old_largest_cloudy_plateau_fraction": 0.19352970596751692,
+          "range_on_old_plateau": 0.2276708036661148,
+          "std_on_old_plateau": 0.05182754620909691
+        }
+      }
+    },
+    "Haze with a density floor": {
+      "config": {
+        "type": "fog",
+        "seed": 42,
+        "coverage": 0.5
+      },
+      "bounded_config": {
+        "type": "fog",
+        "seed": 42,
+        "coverage": 0.5,
+        "transmission": {
+          "min": 0.2,
+          "max": 0.8
+        }
+      },
+      "cross_section_row": 0,
+      "measurements": {
+        "Before": {
+          "mean_transmission": 0.7522108554840088,
+          "min_transmission": 0.7377362251281738,
+          "max_transmission": 0.7535346150398254,
+          "mask_coverage": 1.0,
+          "interior_fraction": 0.0,
+          "interior_transmission_min": null,
+          "interior_transmission_max": null,
+          "flat_cloudy_neighbor_fraction": 0.501270325203252,
+          "old_largest_cloudy_plateau_fraction": 0.5012116608796297,
+          "range_on_old_plateau": 0.0,
+          "std_on_old_plateau": 5.960464477539063e-08
+        },
+        "New default": {
+          "mean_transmission": 0.7280929684638977,
+          "min_transmission": 0.6503845453262329,
+          "max_transmission": 0.7992953062057495,
+          "mask_coverage": 1.0,
+          "interior_fraction": 0.0,
+          "interior_transmission_min": null,
+          "interior_transmission_max": null,
+          "flat_cloudy_neighbor_fraction": 0.0,
+          "old_largest_cloudy_plateau_fraction": 0.5012116608796297,
+          "range_on_old_plateau": 0.07072669267654419,
+          "std_on_old_plateau": 0.01651976816356182
+        },
+        "Explicit range 0.2\u20130.8": {
+          "mean_transmission": 0.6644476652145386,
+          "min_transmission": 0.6200330853462219,
+          "max_transmission": 0.7027999758720398,
+          "mask_coverage": 1.0,
+          "interior_fraction": 0.0,
+          "interior_transmission_min": null,
+          "interior_transmission_max": null,
+          "flat_cloudy_neighbor_fraction": 0.0,
+          "old_largest_cloudy_plateau_fraction": 0.5012116608796297,
+          "range_on_old_plateau": 0.03785604238510132,
+          "std_on_old_plateau": 0.008874286897480488
+        }
+      }
+    },
+    "Full cloud coverage": {
+      "config": {
+        "type": "custom",
+        "seed": 42,
+        "coverage": 1.0,
+        "feature_scales_m": [
+          10,
+          20,
+          40,
+          80
+        ],
+        "optical": {
+          "tau_min": 0.05,
+          "tau_max": 1.5
+        }
+      },
+      "bounded_config": {
+        "type": "custom",
+        "seed": 42,
+        "coverage": 1.0,
+        "feature_scales_m": [
+          10,
+          20,
+          40,
+          80
+        ],
+        "transmission": {
+          "min": 0.2,
+          "max": 0.8
+        }
+      },
+      "cross_section_row": 0,
+      "measurements": {
+        "Before": {
+          "mean_transmission": 0.2231302112340927,
+          "min_transmission": 0.22313015162944794,
+          "max_transmission": 0.22313015162944794,
+          "mask_coverage": 1.0,
+          "interior_fraction": 1.0,
+          "interior_transmission_min": 0.22313015162944794,
+          "interior_transmission_max": 0.22313015162944794,
+          "flat_cloudy_neighbor_fraction": 1.0,
+          "old_largest_cloudy_plateau_fraction": 1.0,
+          "range_on_old_plateau": 0.0,
+          "std_on_old_plateau": 5.960464477539063e-08
+        },
+        "New default": {
+          "mean_transmission": 0.5180935263633728,
+          "min_transmission": 0.22313015162944794,
+          "max_transmission": 0.9512293934822083,
+          "mask_coverage": 1.0,
+          "interior_fraction": 1.0,
+          "interior_transmission_min": 0.22313015162944794,
+          "interior_transmission_max": 0.9512293934822083,
+          "flat_cloudy_neighbor_fraction": 9.073751451800232e-06,
+          "old_largest_cloudy_plateau_fraction": 1.0,
+          "range_on_old_plateau": 0.7280992269515991,
+          "std_on_old_plateau": 0.14147163927555084
+        },
+        "Explicit range 0.2\u20130.8": {
+          "mean_transmission": 0.5062348246574402,
+          "min_transmission": 0.20000000298023224,
+          "max_transmission": 0.800000011920929,
+          "mask_coverage": 1.0,
+          "interior_fraction": 1.0,
+          "interior_transmission_min": 0.20000000298023224,
+          "interior_transmission_max": 0.800000011920929,
+          "flat_cloudy_neighbor_fraction": 1.8147502903600465e-05,
+          "old_largest_cloudy_plateau_fraction": 1.0,
+          "range_on_old_plateau": 0.6000000238418579,
+          "std_on_old_plateau": 0.11376402527093887
+        }
+      }
+    }
+  },
+  "notes": [
+    "Field-only diagnostics at reduced detector resolution, same angular footprint.",
+    "Old and new defaults share identical original textures and tau settings.",
+    "The explicit bounded example replaces tau settings with min=0.2, max=0.8.",
+    "Bounds are allowed intervals, not a guarantee every view reaches both endpoints.",
+    "Mean attenuation changes are reported, not fitted away."
+  ],
+  "environment": {
+    "python": "3.10.12",
+    "numpy": "1.26.4",
+    "system": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "threads": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "NUMBA_NUM_THREADS": "1",
+      "TF_NUM_INTRAOP_THREADS": "1",
+      "TF_NUM_INTEROP_THREADS": "1"
+    }
+  },
+  "mapping_benchmark": {
+    "pixels": 1048576,
+    "repeats": 5,
+    "old": {
+      "median_seconds": 0.010075700003653765,
+      "peak_traced_mb": 21.002017974853516
+    },
+    "default": {
+      "median_seconds": 0.011651163978967816,
+      "peak_traced_mb": 25.002269744873047
+    },
+    "bounded": {
+      "median_seconds": 0.027861553011462092,
+      "peak_traced_mb": 40.06425476074219
+    },
+    "scope": "Mapping only, same arrays; excludes generation, rendering, export and persistent texture storage."
+  },
+  "generation_benchmark": {
+    "shape": [
+      1024,
+      1024
+    ],
+    "repeats": 5,
+    "old": {
+      "median_seconds": 0.48691614900599234,
+      "peak_traced_mb": 30.002857208251953
+    },
+    "default": {
+      "median_seconds": 0.48218010799610056,
+      "peak_traced_mb": 34.00297927856445
+    },
+    "bounded": {
+      "median_seconds": 0.5185921759984922,
+      "peak_traced_mb": 49.064884185791016
+    },
+    "scope": "One patchy layer, noise + coverage + optics + statistics, after JIT warmup. Excludes rendering."
+  },
+  "crop_benchmark": {
+    "shape": [
+      512,
+      512
+    ],
+    "repeats": 5,
+    "old": {
+      "median_seconds": 0.007345736987190321,
+      "peak_traced_mb": 9.565742492675781
+    },
+    "default": {
+      "median_seconds": 0.012103979010134935,
+      "peak_traced_mb": 10.565879821777344
+    },
+    "bounded": {
+      "median_seconds": 0.014240482007153332,
+      "peak_traced_mb": 12.314956665039062
+    },
+    "scope": "Bilinear moving crop, optics + field composition + statistics; excludes rendering."
+  },
+  "parameter_sweep": {
+    "checks": "pass",
+    "cases": [
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.9704360961914062,
+        "transmission_range": 0.6351701617240906,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.9912518262863159,
+        "transmission_range": 0.23047411441802979,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.6680160164833069,
+        "transmission_range": 0.9698026180267334,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.801522970199585,
+        "transmission_range": 0.800000011920929,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.3893747627735138,
+        "transmission_range": 0.9695526361465454,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5275914669036865,
+        "transmission_range": 0.6000000238418579,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 1
+        },
+        "mean_transmission": 0.28026044368743896,
+        "transmission_range": 0.9500012993812561,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 1,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.48684823513031006,
+        "transmission_range": 0.6000000238418579,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.976188600063324,
+        "transmission_range": 0.39564013481140137,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.9936007261276245,
+        "transmission_range": 0.11510521173477173,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.6776378750801086,
+        "transmission_range": 0.9693011045455933,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.8084943890571594,
+        "transmission_range": 0.7962350249290466,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.3295600712299347,
+        "transmission_range": 0.9695526361465454,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.48993805050849915,
+        "transmission_range": 0.6000000238418579,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 1
+        },
+        "mean_transmission": 0.2497871369123459,
+        "transmission_range": 0.9500012993812561,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "custom",
+          "seed": 42,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.4590129256248474,
+        "transmission_range": 0.6000000238418579,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.9146778583526611,
+        "transmission_range": 0.9998766183853149,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.961766242980957,
+        "transmission_range": 0.800000011920929,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.6024041175842285,
+        "transmission_range": 0.9998766183853149,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.8422617316246033,
+        "transmission_range": 0.800000011920929,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.23511742055416107,
+        "transmission_range": 0.9973797798156738,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6362894773483276,
+        "transmission_range": 0.6000000238418579,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 1
+        },
+        "mean_transmission": 0.051255062222480774,
+        "transmission_range": 0.8186073303222656,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 1,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6061172485351562,
+        "transmission_range": 0.6000000238418579,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.9204424619674683,
+        "transmission_range": 0.9998766183853149,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.97122722864151,
+        "transmission_range": 0.800000011920929,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.5660890340805054,
+        "transmission_range": 0.9998766183853149,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.8219133019447327,
+        "transmission_range": 0.800000011920929,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.2148468941450119,
+        "transmission_range": 0.9973797798156738,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5755710601806641,
+        "transmission_range": 0.6000000238418579,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 1
+        },
+        "mean_transmission": 0.03872189670801163,
+        "transmission_range": 0.8186073303222656,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "patchy",
+          "seed": 42,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5524914860725403,
+        "transmission_range": 0.6000000238418579,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.9717662334442139,
+        "transmission_range": 0.7734290361404419,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.9910358190536499,
+        "transmission_range": 0.34635984897613525,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.7543169260025024,
+        "transmission_range": 0.9612697958946228,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.881661057472229,
+        "transmission_range": 0.7584462761878967,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.4649215042591095,
+        "transmission_range": 0.9615048170089722,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5954329967498779,
+        "transmission_range": 0.5696249604225159,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 1
+        },
+        "mean_transmission": 0.254696249961853,
+        "transmission_range": 0.8403428196907043,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 1,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.500003457069397,
+        "transmission_range": 0.5399999618530273,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.9762967228889465,
+        "transmission_range": 0.6400647163391113,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.9930800795555115,
+        "transmission_range": 0.23837941884994507,
+        "mask_coverage": 0.10009765625
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.7228051424026489,
+        "transmission_range": 0.9612712860107422,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.8575934171676636,
+        "transmission_range": 0.7584551572799683,
+        "mask_coverage": 0.5
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.4456125497817993,
+        "transmission_range": 0.9615048170089722,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5748735666275024,
+        "transmission_range": 0.5696249604225159,
+        "mask_coverage": 0.89990234375
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 1
+        },
+        "mean_transmission": 0.2686412036418915,
+        "transmission_range": 0.8403428196907043,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "cellular",
+          "seed": 42,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5000165700912476,
+        "transmission_range": 0.5399999618530273,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.9754503965377808,
+        "transmission_range": 0.03407937288284302,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.7819812297821045,
+        "transmission_range": 0.02302086353302002,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.9632415175437927,
+        "transmission_range": 0.1347312331199646,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.7728999257087708,
+        "transmission_range": 0.09938102960586548,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.8744821548461914,
+        "transmission_range": 0.3393508195877075,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.7000669836997986,
+        "transmission_range": 0.2870069146156311,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 1
+        },
+        "mean_transmission": 0.6672957539558411,
+        "transmission_range": 0.36356180906295776,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 1,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.4999597370624542,
+        "transmission_range": 0.36000001430511475,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.9754678010940552,
+        "transmission_range": 0.036962687969207764,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.7819639444351196,
+        "transmission_range": 0.025094211101531982,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.9665753841400146,
+        "transmission_range": 0.13480764627456665,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.7753589749336243,
+        "transmission_range": 0.09944230318069458,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.8913227319717407,
+        "transmission_range": 0.3238747715950012,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.7147572636604309,
+        "transmission_range": 0.2708803415298462,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 1
+        },
+        "mean_transmission": 0.666278600692749,
+        "transmission_range": 0.36356180906295776,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "veil",
+          "seed": 42,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5000262260437012,
+        "transmission_range": 0.36000001430511475,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.17210492491722107,
+        "transmission_range": 0.34111037850379944,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6799929141998291,
+        "transmission_range": 0.12508922815322876,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.1653369963169098,
+        "transmission_range": 0.36906003952026367,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6724241375923157,
+        "transmission_range": 0.1738588809967041,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.11894674599170685,
+        "transmission_range": 0.38894426822662354,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6198545694351196,
+        "transmission_range": 0.2959790825843811,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 1
+        },
+        "mean_transmission": 0.01989089697599411,
+        "transmission_range": 0.09567304700613022,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 1,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5000003576278687,
+        "transmission_range": 0.31200000643730164,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.1604960709810257,
+        "transmission_range": 0.34320706129074097,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6799684762954712,
+        "transmission_range": 0.1276668906211853,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.1563342809677124,
+        "transmission_range": 0.36905965209007263,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6762117147445679,
+        "transmission_range": 0.17385786771774292,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.11430762708187103,
+        "transmission_range": 0.38762035965919495,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6402506828308105,
+        "transmission_range": 0.2744443714618683,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 1
+        },
+        "mean_transmission": 0.014014986343681812,
+        "transmission_range": 0.09567304700613022,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "sheet",
+          "seed": 42,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.4999985992908478,
+        "transmission_range": 0.31200000643730164,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.7290068864822388,
+        "transmission_range": 0.1379193663597107,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6649983525276184,
+        "transmission_range": 0.0757560133934021,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.7280541658401489,
+        "transmission_range": 0.1489107608795166,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.664411187171936,
+        "transmission_range": 0.08276689052581787,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.7068136930465698,
+        "transmission_range": 0.2092912197113037,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6512945890426636,
+        "transmission_range": 0.12352770566940308,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 1
+        },
+        "mean_transmission": 0.4965360164642334,
+        "transmission_range": 0.20849400758743286,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 1,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5,
+        "transmission_range": 0.1679999828338623,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 0
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 0,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 1.0,
+        "transmission_range": 0.0,
+        "mask_coverage": 0.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 0.1
+        },
+        "mean_transmission": 0.729019284248352,
+        "transmission_range": 0.13790297508239746,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 0.1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6649984121322632,
+        "transmission_range": 0.07574570178985596,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 0.5
+        },
+        "mean_transmission": 0.7280305027961731,
+        "transmission_range": 0.1489107608795166,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 0.5,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6643889546394348,
+        "transmission_range": 0.08276689052581787,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 0.9
+        },
+        "mean_transmission": 0.7063939571380615,
+        "transmission_range": 0.20975041389465332,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 0.9,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.6510108709335327,
+        "transmission_range": 0.12385344505310059,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 1
+        },
+        "mean_transmission": 0.49659547209739685,
+        "transmission_range": 0.20849400758743286,
+        "mask_coverage": 1.0
+      },
+      {
+        "config": {
+          "type": "fog",
+          "seed": 42,
+          "coverage": 1,
+          "transmission": {
+            "min": 0.2,
+            "max": 0.8
+          }
+        },
+        "mean_transmission": 0.5,
+        "transmission_range": 0.1679999828338623,
+        "mask_coverage": 1.0
+      }
+    ]
+  },
+  "persistent_texture_bytes_per_pixel_per_layer": 4,
+  "source_sha256": {
+    "satsim/clouds/__init__.py": "bff8012ba3dfa5bfaf67bbc10b363de9606be7488dd65cc2dd08beef618909ca",
+    "satsim/clouds/config.py": "e4f2906bd850f64763fb113fb2912aa0480b10172cba101e2bbb58cec32811eb",
+    "satsim/clouds/constants.py": "bf08d0084e861d1971aa9d2125ae24bb5794a38367953d9480e4aa7492b50fc8",
+    "satsim/clouds/field.py": "3d3e8cda67a24b3adf9ac03b9b605527a525a5138fd9d39ea7e596abcd305198",
+    "satsim/clouds/generation.py": "5b7397e79ca034d8a96d5de299fc7b7d12173d3992dc17c1f7bb8b91ac0fc6a7",
+    "satsim/clouds/models.py": "3cd093f07179ba896761e336457be0d275ccb6ec4df3ecbced3116c5431322ae"
+  },
+  "qualification": {
+    "full_suite": {
+      "tests": 1044,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 1044,
+      "junit_sha256": "c2d26fc2bd58bac7d7fa4caa4b93928984ea3ab5990b37188b4a370bab073468"
+    },
+    "cloud_suite": {
+      "tests": 148,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 148,
+      "junit_sha256": "3b685847a7274413d04a678df4942bcbf6777c884f8bc6ec4192f055077382f5"
+    }
+  },
+  "diagnostic_sha256": "b1a2800fc1ef2b2d3dca34f1fd90f45e4bf51fd7e915c6f273ac010226e2f866"
+}
