@@ -70,7 +70,7 @@ def get_min_max_ra_dec(height, width, y_ifov, x_ifov, ra, dec, rot=0, pad_mult=0
         [crpix + width + wp, crpix + height + hp],
         [crpix + width + wp, crpix + height * 0.5],
         [crpix + width + wp, crpix - hp],
-        [crpix + width * 0.5, crpix - hp]], np.float_)
+        [crpix + width * 0.5, crpix - hp]], np.float64)
 
     center = np.array([[width / 2.0, height / 2.0]])
 
