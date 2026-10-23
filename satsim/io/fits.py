@@ -20,6 +20,9 @@ _COMPRESSION_TYPES = {
     'plio': 'PLIO_1',
 }
 
+# One-microsecond date precision, plus 10 ps for split-JD arithmetic roundoff.
+_EXPOSURE_TOLERANCE_SECONDS = 1e-6 + 1e-11
+
 
 def _normalize_compression(fits_compression):
     if fits_compression is None or fits_compression is False:
@@ -59,7 +62,8 @@ def _exposure_timing(dt_start, exposure_time, exposure_end, astrometrics):
     """Resolve acquisition timing independently of the astrometric/WCS epoch.
 
     Explicit arguments and per-frame exposure metadata must agree to one
-    microsecond (the serialized date precision). Legacy astrometric-only
+    microsecond (the serialized date precision), allowing picosecond roundoff.
+    Legacy astrometric-only
     callers supply a midpoint, from which start is derived using duration.
     A legacy WCS DATE-OBS is a last timing reference before a call-time UTC
     default; it never overrides explicit timing or an astrometric midpoint.
@@ -79,7 +83,7 @@ def _exposure_timing(dt_start, exposure_time, exposure_end, astrometrics):
         result = _utc_time(argument, key) if argument is not None else None
         if key in metadata:
             other = _utc_time(metadata[key], key)
-            if result is not None and abs((result - other).to_value('sec')) > 1e-6:
+            if result is not None and abs((result - other).to_value('sec')) > _EXPOSURE_TOLERANCE_SECONDS:
                 raise ValueError('Conflicting explicit {} values.'.format(key))
             if result is None:
                 result = other
@@ -89,7 +93,9 @@ def _exposure_timing(dt_start, exposure_time, exposure_end, astrometrics):
     end = explicit_time(exposure_end, 'exposure_end')
     if start is None:
         if 'time' in metadata:
-            start = _utc_time(metadata['time'], "astrometrics['time']") - TimeDelta(duration / 2, format='sec')
+            start = _utc_time(metadata['time'], "astrometrics['time']")
+            if duration != 0:
+                start = start - TimeDelta(duration / 2, format='sec')
         elif 'DATE-OBS' in metadata.get('wcs_header', {}):
             wcs = metadata['wcs_header']
             start = Time(wcs['DATE-OBS'], format='fits', scale=wcs.get('TIMESYS', 'UTC').lower()).utc
@@ -98,14 +104,22 @@ def _exposure_timing(dt_start, exposure_time, exposure_end, astrometrics):
             raise ValueError('exposure_end requires an exposure start or legacy timing reference.')
         else:
             start = _utc_time(datetime.now(timezone.utc), 'current time')
-    expected_end = start + TimeDelta(duration, format='sec')
+    # Even adding zero can change Astropy's two-part time representation.
+    expected_end = start if duration == 0 else start + TimeDelta(duration, format='sec')
     if end is None:
         end = expected_end
-    elif abs((end - expected_end).to_value('sec')) > 1e-6:
+    elif abs((end - expected_end).to_value('sec')) > _EXPOSURE_TOLERANCE_SECONDS:
         raise ValueError('Exposure boundaries conflict with exposure_time.')
-    if end < start:
+    elapsed = (end - start).to_value('sec')
+    if elapsed < -_EXPOSURE_TOLERANCE_SECONDS:
         raise ValueError('Exposure end precedes exposure start.')
-    midpoint = start + (end - start) / 2
+    if duration == 0:
+        # Validate explicit boundaries before canonicalizing all three epochs.
+        return start, start, start, duration
+    if elapsed < 0:
+        # A tolerated numerical reversal must not create reversed FITS dates.
+        end = max(start, expected_end)
+    midpoint = start if end == start else start + (end - start) / 2
     return start, midpoint, end, duration
 
 

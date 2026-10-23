@@ -163,10 +163,13 @@ For direct `satsim.io.fits.save` calls, `dt_start` is exposure start and
 `dt_start` and `astrometrics['exposure_start']` must agree if both are supplied.
 Optional `exposure_end` and `astrometrics['exposure_end']` must agree with each
 other and with start plus duration to within one microsecond, the serialized
-date precision. Invalid dates, nonfinite or negative durations, and conflicting
+date precision, with a picosecond allowance for arithmetic roundoff.
+Invalid dates, nonfinite or negative durations, and conflicting
 explicit timing raise `ValueError`. A zero-duration exposure writes identical
-start, midpoint, and end dates. An end without a start or legacy timing
-reference is rejected.
+start, midpoint, and end dates using one canonical epoch, after validating any
+supplied boundaries. An end marginally before start within the one-microsecond
+tolerance is normalized to the end computed from the nonnegative duration.
+An end without a start or legacy timing reference is rejected.
 
 If no explicit start is supplied, the writer derives start from the legacy
 astrometric `time` **midpoint minus half the supplied duration**. Without that

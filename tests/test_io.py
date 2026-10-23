@@ -153,7 +153,7 @@ def test_zero_duration_and_call_time_default(tmp_path, monkeypatch):
 
         @classmethod
         def now(cls, tz=None):
-            value = cls(2026, 10, 22, 10, 0, cls.next_second, tzinfo=timezone.utc)
+            value = cls(2026, 10, 23, 0, 45, cls.next_second, 999999, tzinfo=timezone.utc)
             cls.next_second += 10
             return value
 
@@ -163,8 +163,58 @@ def test_zero_duration_and_call_time_default(tmp_path, monkeypatch):
         fits.save(filename, np.zeros((2, 2)))
         with afits.open(filename) as hdus:
             hdr = hdus[0].header
-            _assert_exposure_header(hdr, '2026-10-22T10:00:{:02d}'.format(index * 10), 0)
+            _assert_exposure_header(hdr, '2026-10-23T00:45:{:02d}.999999'.format(index * 10), 0)
             assert hdr['DATE-OBS'] == hdr['DATE-AVG'] == hdr['DATE-END']
+
+
+@pytest.mark.parametrize('compression', [None, 'gzip'])
+@pytest.mark.parametrize('source', ['explicit', 'clock', 'metadata', 'midpoint', 'wcs'])
+def test_zero_duration_fractional_timing_sources(tmp_path, monkeypatch, compression, source):
+    start = datetime(2026, 10, 23, 0, 45, 0, 999999, tzinfo=timezone.utc)
+    kwargs = {}
+    if source == 'explicit':
+        kwargs.update(dt_start=start, exposure_time=0)
+    elif source == 'clock':
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 10, 23, 0, 45, 0, 999999, tzinfo=timezone.utc)
+        monkeypatch.setattr(fits, 'datetime', Clock)
+    elif source == 'metadata':
+        kwargs['astrometrics'] = {'exposure_start': start, 'exposure_end': start}
+    elif source == 'midpoint':
+        kwargs['astrometrics'] = {'time': start}
+    else:
+        kwargs['astrometrics'] = {'wcs_header': {'DATE-OBS': '2026-10-23T00:45:00.999999'}}
+    filename = tmp_path / 'zero.fits'
+    fits.save(filename, np.zeros((2, 2)), fits_compression=compression, **kwargs)
+    with afits.open(filename) as hdus:
+        hdr = hdus[1 if compression else 0].header
+        _assert_exposure_header(hdr, start, 0)
+        assert hdr['DATE-OBS'] == hdr['DATE-BEG'] == hdr['DATE-AVG'] == hdr['DATE-END']
+        assert hdr['DATE-OBS'] == '2026-10-23T00:45:00.999999'
+
+
+@pytest.mark.parametrize('duration', [0.0, 0.25e-6])
+@pytest.mark.parametrize('offset', [-2e-6, -1e-6, -0.75e-6, 0.75e-6, 1e-6, 2e-6])
+def test_exposure_ordering_uses_boundary_tolerance(tmp_path, duration, offset):
+    start = Time('2026-10-23T00:45:00.999999', scale='utc', precision=9)
+    end = start + TimeDelta(duration + offset, format='sec')
+    filename = tmp_path / 'boundary.fits'
+    if abs(offset) > 1e-6:
+        with pytest.raises(ValueError, match='boundaries conflict'):
+            fits.save(filename, np.zeros((2, 2)), duration, start, exposure_end=end)
+        assert not filename.exists()
+    else:
+        fits.save(filename, np.zeros((2, 2)), duration, start, exposure_end=end)
+        with afits.open(filename) as hdus:
+            hdr = hdus[0].header
+            _assert_exposure_header(hdr, start, duration)
+            dates = [Time(hdr[key], format='fits', scale='utc')
+                     for key in ['DATE-OBS', 'DATE-AVG', 'DATE-END']]
+            assert dates[0] <= dates[1] <= dates[2]
+            if duration == 0:
+                assert hdr['DATE-OBS'] == hdr['DATE-AVG'] == hdr['DATE-END']
 
 
 @pytest.mark.parametrize('kwargs', [
