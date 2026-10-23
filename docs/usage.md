@@ -192,7 +192,7 @@ expecting start can continue using `DATE-OBS + EXPTIME/2` to obtain midpoint
 for new output, or use `DATE-AVG` directly without adding half an exposure
 again. No real-sensor timing bias is applied to synthetic output. Pin the code
 revision in dataset provenance because timestamp semantics differ across
-versions. See `HISTORY.md`'s Unreleased behavioral-change entry.
+versions. See `HISTORY.md`'s 0.27.1 behavioral-change entry.
 The keyword definitions follow [FITS 4.0, sections 9.1 and 9.5](https://fits.gsfc.nasa.gov/standard40/fits_standard40aa-le.pdf).
 
 ## Configuration Basics
