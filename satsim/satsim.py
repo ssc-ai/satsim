@@ -239,7 +239,7 @@ def gen_images(ssp, eager=True, output_dir='./', sample_num=0, output_debug=Fals
                     'meta_data': copy.deepcopy(meta_data),
                     'frame_num': frame_num,
                     'exposure_time': t_exposure,
-                    'time_stamp': dt,
+                    'time_stamp': astrometrics['exposure_start'],
                     'ssp': ssp_orig,
                     'show_obs_boxes': ssp['sim']['show_obs_boxes'],
                     'show_star_boxes': ssp['sim']['show_star_boxes'],
@@ -457,6 +457,8 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
         output_debug: `boolean`, output intermediate debug files.
         dir_debug: `str`, directory to output debug files.
         with_meta: `boolean`, add metadata to the return function.
+            exposure_start/exposure_end are per-frame UTC FITS date strings;
+            time, when present, remains the astrometric exposure midpoint.
         eager: `boolean`, Has no effect. `True` only.
         num_sets: `int`, number of sets until generator exits. Set to 0 to run forever.
 
@@ -1134,6 +1136,11 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             ts_start = time.utc_from_list(tt, t_start)
             ts_end = time.utc_from_list(tt, t_end)
             ts_mid = time.mid(ts_start, ts_end)
+            exposure_start_utc = time.to_astropy(ts_start)
+            exposure_end_utc = time.to_astropy(ts_end)
+            exposure_start_utc.precision = exposure_end_utc.precision = 6
+            astrometrics['exposure_start'] = exposure_start_utc.to_value('fits', subfmt='date_hms')
+            astrometrics['exposure_end'] = exposure_end_utc.to_value('fits', subfmt='date_hms')
             t_jd = float(time.to_astropy(ts_mid).jd)
             t_start_star = t_start
             t_end_star = t_end
@@ -1353,10 +1360,9 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                 header['WCSERR'] = distortion.metadata['wcs_export']['maximum_checked_error_px']
                 header['WCSMJD'] = float(ts_start.tt - 2400000.5)
                 header['WCSREF'] = 'Exposure start; WCSMJD uses TT'
-                header['DATE-OBS'] = ts_start.utc_datetime().replace(tzinfo=None).isoformat()
-                header['TIME-OBS'] = str(ts_start.utc_datetime().time())
-                from astropy.time import Time as AstropyTime
-                header['MJD-OBS'] = float(AstropyTime(ts_start.utc_datetime()).mjd)
+                header['DATE-OBS'] = astrometrics['exposure_start']
+                header['TIME-OBS'] = astrometrics['exposure_start'].split('T')[1]
+                header['MJD-OBS'] = float(exposure_start_utc.mjd)
                 astrometrics['wcs_header'] = header
                 astrometrics['distortion'] = dict(
                     distortion.metadata, temporal_samples=int(t_osf),

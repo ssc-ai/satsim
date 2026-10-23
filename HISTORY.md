@@ -1,6 +1,15 @@
 History
 =======
 
+0.27.1
+---------------------
+
+* Support NumPy 2 and Astropy 6+ by replacing the removed `np.float_` alias with `np.float64`, removing the Astropy upper-version cap, and adding `asdf-astropy` for ASDF transform loading. (#55)
+* Fix scalar great-circle propagation with NumPy 2.4+ by explicitly extracting the single longitude and latitude values returned by `pygc`. (#57)
+* Accelerate star annotation generation by converting masked TensorFlow columns to NumPy once before iterating over stars, preserving annotation values, types, ordering and optional fields. (#62)
+* **BEHAVIORAL CHANGE:** Standardize FITS `DATE-OBS` as the start of each simulated exposure. Previously, tracked output without distortion wrote the exposure midpoint, while distortion-WCS output wrote exposure start; untracked output could use file-generation time. Add `DATE-BEG`, arithmetic-midpoint `DATE-AVG`, `DATE-END`, and `TIMESYS='UTC'`; synchronize time-of-day, shutter, exposure-duration and UTC MJD fields, and serialize dates to six fractional digits without timezone suffixes. Astrometric midpoint quantities and the validated WCS reference epoch (`WCSMJD`, TT) are preserved. Consumers that treated affected legacy `DATE-OBS` as a midpoint should use `DATE-AVG` for new output or derive midpoint from exposure start and duration; do not add half an exposure to `DATE-AVG` again. Historical files are not modified; do not apply a blanket half-exposure correction because older output paths differ. Record the code revision in dataset provenance. (#58)
+* Preserve zero-duration FITS writes at fractional-second epochs by canonicalizing validated start, midpoint and end timestamps to the same instant; apply the documented timing tolerance consistently. (#58)
+
 0.27.0
 ---------------------
 
