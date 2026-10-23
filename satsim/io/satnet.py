@@ -345,17 +345,17 @@ def _generate_star_annotations(height, width, h_pad_os, w_pad_os, r_stars_os, c_
     for r, c, pe, mv, ra, dec, sid, var, snr_ap in zip(
         rr,
         cc,
-        pe_stars_os[mask],
-        m_stars_os[mask],
-        ra_stars[mask],
-        dec_stars[mask],
-        seg_id_stars[mask],
+        pe_stars_os[mask].numpy(),
+        m_stars_os[mask].numpy(),
+        ra_stars[mask].numpy(),
+        dec_stars[mask].numpy(),
+        seg_id_stars[mask].numpy(),
         variable_masked,
         snr_aperture_masked,
     ):
         if np.isnan(r).any() or np.isnan(c).any():
             continue
-        annotation = _annotate_object(height, width, r, c, mv, pe.numpy(), sid, True, box_size, box_pad, "Star", 2)
+        annotation = _annotate_object(height, width, r, c, mv, pe, sid, True, box_size, box_pad, "Star", 2)
         if annotation is not None:
             annotation['ra'] = _cast_to_float(ra)
             annotation['dec'] = _cast_to_float(dec)
