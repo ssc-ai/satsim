@@ -336,7 +336,10 @@ image-plane target:
   center convention as FFT rendering.
   Set `sim.epsf.$cache` to cache the final phase-indexed ePSF LUT. FFT mode
   continues to use `fpa.psf.$cache` for single optical PSF caching; ePSF cache
-  entries are keyed separately by render mode and LUT parameters.
+  entries are keyed separately by render mode and LUT parameters. A warm
+  native LUT cache renders without regenerating the optical PSF for either
+  `star_render_mode`; `fallback_to_fft_for_models` and `augment.fpa.psf`
+  configurations still generate it.
   `normalize` defaults to `false` so finite ePSF kernels do not boost
   photometry when energy falls outside the stamp; set it to `true` only when
   each cropped stamp should be forced to unit flux. `batch_element_budget`

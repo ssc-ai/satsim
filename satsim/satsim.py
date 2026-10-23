@@ -843,7 +843,6 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
             ssp['sim']['mode'] == 'epsf'
             and not pydash.objects.has(ssp, 'augment.fpa.psf')
             and not epsf_cfg.get('fallback_to_fft_for_models', False)
-            and ssp['sim'].get('star_render_mode', 'transform') != 'streak'
         )
 
     def _gen_psf_and_epsf_lut():

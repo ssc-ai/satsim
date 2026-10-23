@@ -1199,84 +1199,26 @@ def test_auto_temporal_osf_reduces_only_epsf_transform():
     assert(epsf_transform_osf == 8)
 
 
-def test_epsf_pipeline_cache_hit_skips_psf_generation(tmp_path):
+@pytest.mark.parametrize('star_render_mode', ['transform', 'streak'])
+def test_epsf_pipeline_cache_hit_skips_psf_generation(tmp_path, star_render_mode):
 
     configure_eager()
 
-    ssp = config.load_json('./tests/config_static.json')
-    ssp['sim']['mode'] = 'epsf'
+    ssp = _small_no_noise_target_config('epsf')
     ssp['sim']['epsf'] = {
         'kernel_size': 1,
         'normalize': True,
         '$cache': str(tmp_path),
     }
-    ssp['sim']['spacial_osf'] = 1
-    ssp['sim']['temporal_osf'] = 1
-    ssp['sim']['padding'] = 0
-    ssp['sim']['enable_shot_noise'] = False
-    ssp['fpa']['height'] = 11
-    ssp['fpa']['width'] = 13
-    ssp['fpa']['num_frames'] = 1
-    ssp['fpa']['time']['exposure'] = 1
-    ssp['fpa']['psf'] = {
-        'mode': 'none',
-    }
-    ssp['fpa']['dark_current'] = 0
-    ssp['fpa']['noise']['read'] = 0
-    ssp['fpa']['noise']['electronic'] = 0
-    ssp['background']['galactic'] = 0
-    ssp['geometry']['stars']['mv']['bins'] = []
-    ssp['geometry']['stars']['mv']['density'] = []
-    ssp['geometry']['obs']['list'] = [
-        {
-            "mode": "line",
-            "origin": [0.5, 0.5],
-            "velocity": [0, 0],
-            "pe": 100.0
-        },
-    ]
-
-    y_ifov = ssp['fpa']['y_fov'] / ssp['fpa']['height']
-    x_ifov = ssp['fpa']['x_fov'] / ssp['fpa']['width']
-    cache_param = _epsf_lut_cache_param(ssp, 1, 1, y_ifov, x_ifov, 1)
-    _save_epsf_lut_cache(cache_param, np.ones([1, 1, 1, 1], dtype=np.float32))
-
-    with mock.patch('satsim.satsim._gen_psf', side_effect=AssertionError('cache miss')):
-        dirname = gen_images(
-            ssp,
-            eager=True,
-            output_dir='./.images',
-            output_debug=True,
-            set_name=_gen_name('test_epsf_lut_cache_hit'),
-        )
-
-    with open(os.path.join(dirname, 'Debug', 'fpa_conv_targ_0.pickle'), 'rb') as f:
-        epsf_targ = pickle.load(f)
-
-    np.testing.assert_allclose(np.sum(epsf_targ), 100.0, atol=1e-4)
-
-
-def test_epsf_cache_hit_with_native_star_streak_still_generates_psf(tmp_path):
-
-    configure_eager()
-
-    ssp = _small_no_noise_target_config('epsf')
-    ssp['fpa']['psf'] = {
-        'mode': 'gaussian',
-        'eod': 0.5,
-    }
-    ssp['sim']['epsf'] = {
-        'kernel_size': 9,
-        '$cache': str(tmp_path),
-    }
-    ssp['sim']['star_render_mode'] = 'streak'
+    ssp['sim']['star_render_mode'] = star_render_mode
 
     y_ifov = ssp['fpa']['y_fov'] / ssp['fpa']['height']
     x_ifov = ssp['fpa']['x_fov'] / ssp['fpa']['width']
     psf_h_os = ssp['fpa']['height'] + 2 * ssp['sim']['padding']
     psf_w_os = ssp['fpa']['width'] + 2 * ssp['sim']['padding']
+    psf_h_os, psf_w_os = _gen_psf_shape(ssp, psf_h_os, psf_w_os, 1)
     cache_param = _epsf_lut_cache_param(ssp, psf_h_os, psf_w_os, y_ifov, x_ifov, 1)
-    _save_epsf_lut_cache(cache_param, np.ones([1, 1, 9, 9], dtype=np.float32))
+    _save_epsf_lut_cache(cache_param, np.ones([1, 1, 1, 1], dtype=np.float32))
 
     with mock.patch('satsim.satsim._gen_psf', wraps=_gen_psf) as gen_psf_mock:
         dirname = gen_images(
@@ -1284,13 +1226,13 @@ def test_epsf_cache_hit_with_native_star_streak_still_generates_psf(tmp_path):
             eager=True,
             output_dir='./.images',
             output_debug=True,
-            set_name=_gen_name('test_epsf_cache_native_star_streak'),
+            set_name=_gen_name('test_epsf_lut_cache_hit_' + star_render_mode),
         )
 
-    assert(gen_psf_mock.call_count == 1)
+    assert(gen_psf_mock.call_count == 0)
     rendered_flux = np.sum(_load_debug_frame(dirname, 'fpa_conv_star') + _load_debug_frame(dirname, 'fpa_conv_targ'))
     assert(np.isfinite(rendered_flux))
-    assert(rendered_flux > 0.0)
+    np.testing.assert_allclose(rendered_flux, 100.0, atol=1e-4)
 
 
 def test_epsf_star_streak_with_fallback_flag_matches_fftconv2p_runtime():
