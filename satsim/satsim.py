@@ -988,7 +988,7 @@ def image_generator(ssp, output_dir='.', output_debug=False, dir_debug='./Debug'
                     star_tran_os,
                     s_osf,
                     sim_mode=ssp['sim']['mode'],
-                    star_render_mode=ssp['sim']['star_render_mode'],
+                    fallback_to_fft_for_models=epsf_uses_fft_fallback,
                 )
                 logger.debug('Auto temporal oversample factor set to {}.'.format(t_osf.numpy()))
             else:
@@ -2130,8 +2130,13 @@ def _match_detector_parity(size, reference_size):
 
 def _auto_temporal_osf_for_star_motion(
         h_fpa_pad_os, w_fpa_pad_os, t_exposure, star_rot_rate, star_tran_os,
-        s_osf, sim_mode='fftconv2p', star_render_mode='transform'):
-    """Return the automatic temporal oversampling factor for star rendering."""
+        s_osf, sim_mode='fftconv2p', fallback_to_fft_for_models=False):
+    """Return the automatic temporal oversampling factor for star rendering.
+
+    Native ePSF stars use the detector-pixel trail length for either
+    ``star_render_mode``. FFT modes, and ePSF with
+    ``fallback_to_fft_for_models``, keep the finer oversampled-pixel rule.
+    """
     rrr, ccc = rotate_and_translate(
         h_fpa_pad_os,
         w_fpa_pad_os,
@@ -2145,11 +2150,10 @@ def _auto_temporal_osf_for_star_motion(
     ccc -= [0, w_fpa_pad_os]
     trail_os = tf.reduce_max(tf.sqrt(rrr * rrr + ccc * ccc))
 
-    star_render_mode = normalize_star_render_mode(star_render_mode)
-    if sim_mode == 'epsf' and star_render_mode == 'transform':
+    if sim_mode == 'epsf' and not fallback_to_fft_for_models:
         t_osf = tf.cast(tf.math.ceil(trail_os / tf.cast(s_osf, tf.float32)) + 1, tf.int32)
     else:
-        # Preserve the legacy FFT/streak oversampled-pixel rule.
+        # Preserve the legacy FFT oversampled-pixel rule.
         t_osf = tf.cast(trail_os + 1, tf.int32)
     return tf.maximum(t_osf, tf.constant(1, tf.int32))
 

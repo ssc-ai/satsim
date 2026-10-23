@@ -300,7 +300,8 @@ def render_epsf(
     Both ``star_render_mode`` values render stars natively the same way: each
     star deposits its optical ePSF at every exposure-bin midpoint sample, as
     ``transform_and_add_epsf`` describes. Frames with ``obs_model`` targets
-    and ``fallback_to_fft_for_models`` render through ``render_full`` instead.
+    and ``fallback_to_fft_for_models`` render through ``render_full`` instead,
+    with per-source star transforms whatever ``star_render_mode`` says.
 
     Pass the ``psf_os`` used to build ``epsf_lut``, or its known
     ``psf_support_shape`` ``(height, width)`` when the array itself is
@@ -313,9 +314,7 @@ def render_epsf(
     if batch_size_cap is None and batch_size is not None:
         batch_size_cap = batch_size
 
-    star_render_mode = normalize_star_render_mode(star_render_mode)
-    if star_position_transform is not None:
-        star_render_mode = 'transform'
+    normalize_star_render_mode(star_render_mode)
     unsupported_model = obs_model is not None and len(obs_model) > 0
     if unsupported_model:
         if fallback_to_fft_for_models:
@@ -343,7 +342,7 @@ def render_epsf(
                 star_tran_os,
                 render_separate=render_separate,
                 obs_model=obs_model,
-                star_render_mode=star_render_mode,
+                star_render_mode='transform',
                 point_rendering=point_rendering,
                 star_position_transform=star_position_transform,
             )

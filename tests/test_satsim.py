@@ -1155,48 +1155,28 @@ def test_epsf_lut_cache_key_includes_phase_nearest_grid(tmp_path):
     assert(changed != cache_param)
 
 
-def test_auto_temporal_osf_reduces_only_epsf_transform():
-    h = 90
-    w = 90
-    t_exp = 1.0
-    rotation = 0.0
-    translation = [18.2, 0.0]
-    s_osf = 3
-
-    fft_osf = _auto_temporal_osf_for_star_motion(
-        h,
-        w,
-        t_exp,
-        rotation,
-        translation,
-        s_osf,
-        sim_mode='fftconv2p',
-        star_render_mode='transform',
-    ).numpy()
-    epsf_transform_osf = _auto_temporal_osf_for_star_motion(
-        h,
-        w,
-        t_exp,
-        rotation,
-        translation,
-        s_osf,
-        sim_mode='epsf',
-        star_render_mode='transform',
-    ).numpy()
-    epsf_streak_osf = _auto_temporal_osf_for_star_motion(
-        h,
-        w,
-        t_exp,
-        rotation,
-        translation,
-        s_osf,
-        sim_mode='epsf',
-        star_render_mode='streak',
+@pytest.mark.parametrize(
+    'sim_mode,fallback_to_fft_for_models,expected',
+    [
+        ('epsf', False, 8),
+        ('epsf', True, 19),
+        ('fftconv2p', False, 19),
+    ],
+    ids=['epsf', 'epsf-fallback', 'fft'],
+)
+def test_auto_temporal_osf_uses_detector_rule_only_for_native_epsf(sim_mode, fallback_to_fft_for_models, expected):
+    t_osf = _auto_temporal_osf_for_star_motion(
+        90,
+        90,
+        1.0,
+        0.0,
+        [18.2, 0.0],
+        3,
+        sim_mode=sim_mode,
+        fallback_to_fft_for_models=fallback_to_fft_for_models,
     ).numpy()
 
-    assert(fft_osf == 19)
-    assert(epsf_streak_osf == fft_osf)
-    assert(epsf_transform_osf == 8)
+    assert(t_osf == expected)
 
 
 @pytest.mark.parametrize('star_render_mode', ['transform', 'streak'])
@@ -1235,13 +1215,14 @@ def test_epsf_pipeline_cache_hit_skips_psf_generation(tmp_path, star_render_mode
     np.testing.assert_allclose(rendered_flux, 100.0, atol=1e-4)
 
 
-def test_epsf_star_streak_with_fallback_flag_matches_fftconv2p_runtime():
+@pytest.mark.parametrize('fallback_to_fft_for_models', [False, True], ids=['native', 'fallback-flag'])
+def test_epsf_native_stars_match_fftconv2p_transform_runtime(fallback_to_fft_for_models):
 
     configure_eager()
 
     ssp_fft = _small_no_noise_target_config('fftconv2p')
     ssp_fft['sim']['padding'] = 8
-    ssp_fft['sim']['star_render_mode'] = 'streak'
+    ssp_fft['sim']['star_render_mode'] = 'transform'
     ssp_fft['sim']['temporal_osf'] = 20
     ssp_fft['fpa']['height'] = 41
     ssp_fft['fpa']['width'] = 41
@@ -1258,98 +1239,44 @@ def test_epsf_star_streak_with_fallback_flag_matches_fftconv2p_runtime():
         'eod': 0.5,
     }
 
-    ssp_epsf = copy.deepcopy(ssp_fft)
-    ssp_epsf['sim']['mode'] = 'epsf'
-    ssp_epsf['sim']['render_size'] = [41, 41]
-    ssp_epsf['sim']['epsf'] = {
-        'kernel_size': 31,
-        'psf_generation_size': 57,
-        'fallback_to_fft_for_models': True,
-        'crop': {
-            'mode': 'off',
-        },
-    }
-
     np.random.seed(42)
     dirname_fft = gen_images(
         ssp_fft,
         eager=True,
         output_dir='./.images',
         output_debug=True,
-        set_name=_gen_name('test_fft_runtime_reference'),
+        set_name=_gen_name('test_fft_transform_runtime_reference'),
     )
-    np.random.seed(42)
-    dirname_epsf = gen_images(
-        ssp_epsf,
-        eager=True,
-        output_dir='./.images',
-        output_debug=True,
-        set_name=_gen_name('test_epsf_fft_fallback_gaussian'),
-    )
+    expected = _load_debug_frame(dirname_fft, 'fpa_conv_star')
 
-    np.testing.assert_allclose(
-        _load_debug_frame(dirname_epsf, 'fpa_conv_star'),
-        _load_debug_frame(dirname_fft, 'fpa_conv_star'),
-        atol=6e-3,
-    )
+    epsf_frames = {}
+    for star_render_mode in ('transform', 'streak'):
+        ssp_epsf = copy.deepcopy(ssp_fft)
+        ssp_epsf['sim']['mode'] = 'epsf'
+        ssp_epsf['sim']['star_render_mode'] = star_render_mode
+        ssp_epsf['sim']['render_size'] = [41, 41]
+        ssp_epsf['sim']['epsf'] = {
+            'kernel_size': 31,
+            'psf_generation_size': 57,
+            'fallback_to_fft_for_models': fallback_to_fft_for_models,
+            'crop': {
+                'mode': 'off',
+            },
+        }
 
+        np.random.seed(42)
+        dirname_epsf = gen_images(
+            ssp_epsf,
+            eager=True,
+            output_dir='./.images',
+            output_debug=True,
+            set_name=_gen_name('test_epsf_native_star_' + star_render_mode),
+        )
+        epsf_frames[star_render_mode] = _load_debug_frame(dirname_epsf, 'fpa_conv_star')
 
-def test_epsf_native_star_streak_with_gaussian_psf_matches_fftconv2p_runtime():
-
-    configure_eager()
-
-    ssp_fft = _small_no_noise_target_config('fftconv2p')
-    ssp_fft['sim']['padding'] = 8
-    ssp_fft['sim']['star_render_mode'] = 'streak'
-    ssp_fft['sim']['temporal_osf'] = 20
-    ssp_fft['fpa']['height'] = 41
-    ssp_fft['fpa']['width'] = 41
-    ssp_fft['geometry']['obs']['list'] = []
-    ssp_fft['geometry']['stars']['mv']['bins'] = [10, 11]
-    ssp_fft['geometry']['stars']['mv']['density'] = [1.0]
-    ssp_fft['geometry']['stars']['motion'] = {
-        'mode': 'affine',
-        'rotation': 0.0,
-        'translation': [0.0, 0.1],
-    }
-    ssp_fft['fpa']['psf'] = {
-        'mode': 'gaussian',
-        'eod': 0.5,
-    }
-
-    ssp_epsf = copy.deepcopy(ssp_fft)
-    ssp_epsf['sim']['mode'] = 'epsf'
-    ssp_epsf['sim']['render_size'] = [41, 41]
-    ssp_epsf['sim']['epsf'] = {
-        'kernel_size': 31,
-        'psf_generation_size': 57,
-        'crop': {
-            'mode': 'off',
-        },
-    }
-
-    np.random.seed(42)
-    dirname_fft = gen_images(
-        ssp_fft,
-        eager=True,
-        output_dir='./.images',
-        output_debug=True,
-        set_name=_gen_name('test_fft_native_star_streak_reference'),
-    )
-    np.random.seed(42)
-    dirname_epsf = gen_images(
-        ssp_epsf,
-        eager=True,
-        output_dir='./.images',
-        output_debug=True,
-        set_name=_gen_name('test_epsf_native_star_streak_gaussian'),
-    )
-
-    np.testing.assert_allclose(
-        _load_debug_frame(dirname_epsf, 'fpa_conv_star'),
-        _load_debug_frame(dirname_fft, 'fpa_conv_star'),
-        atol=6e-3,
-    )
+    assert(np.sum(expected) > 0)
+    np.testing.assert_array_equal(epsf_frames['streak'], epsf_frames['transform'])
+    np.testing.assert_allclose(epsf_frames['transform'], expected, atol=6e-3)
 
 
 def test_epsf_native_star_streak_preserves_flux_and_shifts_after_first_frame(tmp_path):
@@ -1410,6 +1337,50 @@ def test_epsf_native_star_streak_preserves_flux_and_shifts_after_first_frame(tmp
 
     np.testing.assert_allclose(np.sum(frame1), np.sum(frame0), rtol=1e-5, atol=1e-3)
     np.testing.assert_allclose(np.asarray(centroid1) - np.asarray(centroid0), expected_shift, atol=0.03)
+
+
+def test_epsf_modeled_target_fallback_keeps_fft_sampling_and_per_source_stars():
+
+    configure_eager()
+
+    ssp = _small_no_noise_target_config('epsf')
+    ssp['sim']['spacial_osf'] = 3
+    ssp['sim']['temporal_osf'] = 'auto'
+    ssp['sim']['padding'] = 8
+    ssp['sim']['star_render_mode'] = 'streak'
+    ssp['sim']['epsf'] = {
+        'kernel_size': 31,
+        'fallback_to_fft_for_models': True,
+    }
+    ssp['fpa']['height'] = 41
+    ssp['fpa']['width'] = 41
+    ssp['fpa']['psf'] = {
+        'mode': 'gaussian',
+        'eod': 0.5,
+    }
+    ssp['geometry']['stars']['mv'] = {
+        'bins': [10, 11],
+        'density': [10.0],
+    }
+    ssp['geometry']['stars']['motion'] = {
+        'mode': 'affine',
+        'rotation': 0.0,
+        'translation': [18.2 / 3, 0.0],
+    }
+    ssp['geometry']['obs']['list'][0]['model'] = lambda x, t: np.ones((3, 3), np.float32) / 9
+
+    control = copy.deepcopy(ssp)
+    control['sim']['mode'] = 'fftconv2p'
+    control['sim']['star_render_mode'] = 'transform'
+
+    np.random.seed(42)
+    expected = next(image_generator(control, with_meta=True))
+    np.random.seed(42)
+    actual = next(image_generator(ssp, with_meta=True))
+
+    assert(np.sum(expected[4]) > 0)
+    np.testing.assert_allclose(actual[4], expected[4], rtol=1e-5, atol=1e-5)
+    np.testing.assert_array_equal(actual[5], expected[5])
 
 
 def test_piecewise():

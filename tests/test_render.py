@@ -783,70 +783,63 @@ def test_render_epsf_unsupported_obs_model_raises_without_fallback():
         )
 
 
-def test_render_epsf_fallback_star_streak_matches_render_full():
+def test_render_epsf_fallback_renders_per_source_transform_stars():
     args = _render_setup()
     osf = args[6]
     epsf_lut = build_epsf_lut(args[7], osf, 31)
-    r_stars_os = [
-        args[4] + _detector_to_oversampled(20.25, osf),
-        args[4] + _detector_to_oversampled(22.75, osf),
-    ]
-    c_stars_os = [
-        args[5] + _detector_to_oversampled(21.50, osf),
-        args[5] + _detector_to_oversampled(23.10, osf),
-    ]
-    pe_stars_os = [500.0, 750.0]
+    model = np.zeros([args[2], args[3]], dtype=np.float32)
+    model[args[4] + 36:args[4] + 42, args[5] + 6:args[5] + 12] = 5.0
+    common = (
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        args[5],
+        osf,
+    )
+    source_args = (
+        [],
+        [],
+        [],
+        [
+            args[4] + _detector_to_oversampled(20.25, osf),
+            args[4] + _detector_to_oversampled(22.75, osf),
+        ],
+        [
+            args[5] + _detector_to_oversampled(21.50, osf),
+            args[5] + _detector_to_oversampled(23.10, osf),
+        ],
+        [500.0, 750.0],
+        -0.5,
+        1.0,
+        8,
+        0.01,
+        [4.0, -6.0],
+    )
 
     expected = render_full(
-        args[0],
-        args[1],
-        args[2],
-        args[3],
-        args[4],
-        args[5],
-        osf,
+        *common,
         args[7],
-        [],
-        [],
-        [],
-        r_stars_os,
-        c_stars_os,
-        pe_stars_os,
-        0.0,
-        1.0,
-        1,
-        0.0,
-        [0.0, 0.0],
+        *source_args,
         render_separate=True,
-        star_render_mode='streak',
-    )[0].numpy()
+        obs_model=[model],
+        star_render_mode='transform',
+    )
     actual = render_epsf(
-        args[0],
-        args[1],
-        args[2],
-        args[3],
-        args[4],
-        args[5],
-        osf,
+        *common,
         epsf_lut,
-        [],
-        [],
-        [],
-        r_stars_os,
-        c_stars_os,
-        pe_stars_os,
-        0.0,
-        1.0,
-        1,
-        0.0,
-        [0.0, 0.0],
+        *source_args,
         render_separate=True,
+        obs_model=[model],
         star_render_mode='streak',
         fallback_to_fft_for_models=True,
         psf_os=args[7],
-    )[0].numpy()
+    )
 
-    np.testing.assert_allclose(actual, expected, atol=1e-4)
+    assert np.sum(expected[0].numpy()) > 0
+    np.testing.assert_array_equal(actual[0].numpy(), expected[0].numpy())
+    np.testing.assert_array_equal(actual[1].numpy(), expected[1].numpy())
 
 
 def test_render_epsf_fallback_obs_model_matches_render_full():

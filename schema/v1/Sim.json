@@ -105,7 +105,7 @@
                     "minimum": 1
                 },
                 "fallback_to_fft_for_models": {
-                    "description": "Fall back to the existing FFT renderer for unsupported ePSF paths such as obs_model targets. Native ePSF star_render_mode `streak` does not require this fallback.",
+                    "description": "Fall back to the FFT renderer for frames with obs_model targets. Fallback frames render stars with per-star transforms. When set, automatic temporal_osf uses the FFT sampling rule for every frame.",
                     "type": "boolean",
                     "default": false
                 },

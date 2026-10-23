@@ -307,9 +307,11 @@ image-plane target:
   list renders tiles and can reduce peak GPU memory for large images.
 - `spatial_osf`: spatial oversampling factor. `spacial_osf` is also accepted (pre v0.24.0).
 - `temporal_osf`: temporal samples used to smear motion. `"auto"` derives a
-  value from star motion. In ePSF `star_render_mode: "transform"`, auto
-  sampling uses detector-pixel trail length. Native ePSF star samples are
-  placed at exposure-bin centers to avoid endpoint bias.
+  value from star motion. Native ePSF star rendering uses the detector-pixel
+  trail length for both `star_render_mode` values. FFT rendering, and ePSF
+  configs that set `fallback_to_fft_for_models`, use the finer
+  oversampled-pixel rule. Native ePSF star samples are placed at exposure-bin
+  centers to avoid endpoint bias.
 - `padding`: extra real pixels around the image for off-frame sources and
   convolution.
 - `samples`: number of independent transformed configurations to generate.
@@ -354,7 +356,8 @@ image-plane target:
   are ignored. `phase_nearest` cannot be used with FFT fallback. ePSF currently
   renders full detector-space frames; a list-valued `render_size` is used only
   as the PSF-generation reference, not for tiling. Sprite/model targets require
-  FFT fallback.
+  FFT fallback. Frames that fall back to FFT render stars with per-source
+  transforms whatever `star_render_mode` says.
   `sim.epsf.crop.mode` defaults to `auto`, rendering dim stars with centered
   crops of the full ePSF LUT. Auto mode derives total-flux thresholds from the
   active ePSF wing signal and the per-pixel noise floor using
