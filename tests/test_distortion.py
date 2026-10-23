@@ -6,6 +6,8 @@ import importlib
 import numpy as np
 import pytest
 import tensorflow as tf
+from astropy.io import fits as afits
+from astropy.time import Time
 from astropy.wcs import WCS
 from astropy.wcs.utils import wcs_to_celestial_frame
 from astropy.coordinates import ICRS
@@ -228,8 +230,19 @@ def test_no_site_catalog_wcs_at_exposure_start(tmp_path, rotation, translation, 
         )
         # Reopen the independently qualified output WCS.
         _, header = output_fits.save(
-            str(tmp_path / "frame{}.fits".format(i)), np.asarray(frame[4]), astrometrics=frame[2]
+            str(tmp_path / "frame{}.fits".format(i)), np.asarray(frame[4]),
+            exposure_time=ssp['fpa']['time']['exposure'], astrometrics=frame[2]
         )
+        header = afits.getheader(tmp_path / "frame{}.fits".format(i))
+        start = Time(frame[2]['exposure_start'], format='fits', scale='utc')
+        assert header['DATE-OBS'] == header['DATE-BEG'] == frame[2]['exposure_start']
+        assert header['DATE-END'] == frame[2]['exposure_end']
+        assert header['TIMESYS'] == 'UTC'
+        assert 'start' in header.comments['DATE-OBS'].lower()
+        assert abs((Time(header['DATE-AVG'], format='fits', scale='utc') - start).sec - 0.5) < 1e-6
+        assert abs((header['MJD-OBS'] - start.mjd) * 86400) < 1e-5
+        assert 'TT' in header['WCSREF']
+        assert abs((header['WCSMJD'] - start.tt.mjd) * 86400) < 5e-5
         wcs = WCS(header)
         assert header["RADESYS"] == "ICRS"
         assert isinstance(wcs_to_celestial_frame(wcs), ICRS)
@@ -294,13 +307,48 @@ def test_generator_target_truth_annotation_and_fits(tmp_path, mode, crop):
     expected = [np.average(ob["rrr"], weights=ob["pp"]), np.average(ob["rcc"], weights=ob["pp"])]
     np.testing.assert_allclose(centroid(target), expected, atol=0.04)
     np.testing.assert_allclose(np.sum(target), np.sum(ob["pp"]), rtol=3e-3)
-    _, header = output_fits.save(str(tmp_path / "output.fits"), np.asarray(target), astrometrics=meta)
+    _, header = output_fits.save(str(tmp_path / "output.fits"), np.asarray(target),
+                                 exposure_time=ssp['fpa']['time']['exposure'], astrometrics=meta)
     assert header["CTYPE1"] == "RA---TPV"
     assert "PV1_1" in header
     assert "WCSMJD" in header
     written = WCS(header)
     points = np.array([[15.0, 15.0], [25.0, 35.0]])
     np.testing.assert_allclose(written.all_world2pix(written.all_pix2world(points, 0), 0), points, atol=1e-5)
+
+
+@pytest.mark.parametrize('compression', [None, 'gzip'])
+@pytest.mark.parametrize('tracked', [False, True])
+def test_distortion_and_plain_output_have_identical_acquisition_timing(tmp_path, compression, tracked):
+    ssp = small_scene(tmp_path)
+    ssp['geometry']['time'] = [2015, 4, 24, 23, 59, 58.5]
+    ssp['fpa']['num_frames'] = 3
+    ssp['fpa']['time'] = {'exposure': 1.75, 'gap': 0.375}
+    if tracked:
+        ssp['geometry']['site'] = config.load_json('tests/config_site_tle_simple.json')['geometry']['site']
+        ssp['geometry']['site']['track']['mode'] = 'sidereal'
+    plain = copy.deepcopy(ssp)
+    del plain['fpa']['distortion']
+    distorted = list(image_generator(ssp, with_meta=True, num_sets=1))
+    ordinary = list(image_generator(plain, with_meta=True, num_sets=1))
+    for index, (distorted_frame, ordinary_frame) in enumerate(zip(distorted, ordinary)):
+        headers = []
+        for name, frame in [('distorted', distorted_frame), ('ordinary', ordinary_frame)]:
+            filename = tmp_path / '{}-{}.fits'.format(name, index)
+            output_fits.save(filename, np.asarray(frame[0]), exposure_time=1.75,
+                             astrometrics=frame[2], fits_compression=compression)
+            with afits.open(filename) as hdus:
+                header = hdus[1 if compression else 0].header.copy()
+                np.testing.assert_array_equal(hdus[1 if compression else 0].data, frame[0])
+            headers.append(header)
+            # Export does not change the generator's midpoint measurement epoch.
+            if tracked:
+                assert abs((Time(header['DATE-AVG'], format='fits', scale='utc') - Time(frame[2]['time'])).sec) < 1e-6
+        for key in ['DATE-OBS', 'DATE-BEG', 'DATE-AVG', 'DATE-END', 'TIME-OBS',
+                    'SH-UT001', 'SH-UT002', 'TIMESYS', 'EXPTIME', 'EXPOSURE', 'MJD-OBS']:
+            assert headers[0][key] == headers[1][key]
+        assert headers[0]['WCSMJD'] == distorted_frame[2]['wcs_header']['WCSMJD']
+        assert headers[0]['WCSREF'] == 'Exposure start; WCSMJD uses TT'
 
 
 def test_config_rejects_unknown_keys_and_piecewise(tmp_path):
@@ -373,7 +421,8 @@ def test_catalog_star_and_orbit_share_exported_wcs(tmp_path, mode, flipud, flipl
     ssp["geometry"]["obs"]["list"] = [target]
     frame = next(image_generator(ssp, output_dir=str(tmp_path), with_meta=True, num_sets=1))
     assert len(frame[3]) == 1
-    _, h = output_fits.save(str(tmp_path / "sky.fits"), np.asarray(frame[4]), astrometrics=frame[2])
+    _, h = output_fits.save(str(tmp_path / "sky.fits"), np.asarray(frame[4]),
+                            exposure_time=ssp['fpa']['time']['exposure'], astrometrics=frame[2])
     w = WCS(h)
     expected = w.all_world2pix([[91.79056434, -3.41884296]], 0)[0][::-1]
     np.testing.assert_allclose(centroid(frame[4]), expected, atol=0.01)

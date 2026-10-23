@@ -1,6 +1,11 @@
 History
 =======
 
+Unreleased
+---------------------
+
+* **BEHAVIORAL CHANGE:** Standardize FITS `DATE-OBS` as the start of each simulated exposure. Previously, tracked output without distortion wrote the exposure midpoint, while distortion-WCS output wrote exposure start; untracked output could use file-generation time. Add `DATE-BEG`, arithmetic-midpoint `DATE-AVG`, `DATE-END`, and `TIMESYS='UTC'`; synchronize time-of-day, shutter, exposure-duration and UTC MJD fields, and serialize dates to six fractional digits without timezone suffixes. Astrometric midpoint quantities and the validated WCS reference epoch (`WCSMJD`, TT) are preserved. Consumers that treated affected legacy `DATE-OBS` as a midpoint should use `DATE-AVG` for new output or derive midpoint from exposure start and duration; do not add half an exposure to `DATE-AVG` again. Historical files are not modified; do not apply a blanket half-exposure correction because older output paths differ. Record the code revision in dataset provenance.
+
 0.27.0
 ---------------------
 

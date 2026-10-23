@@ -126,6 +126,72 @@ Each CLI or `gen_multi` run creates a timestamped directory under
 All three simulator paths preserve the final transformed `config.json`.
 Transformation debug stages are written as `config_pass_*.json` when available.
 
+### FITS exposure timing
+
+EO science-image headers use the actual simulated boundaries of **each frame**,
+including frames without a site or tracked target. Frame gaps occur between
+exposures and are excluded from exposure duration. File-write time and the
+tracking reference epoch do not set acquisition timestamps. Timing cards live
+on the primary science HDU for uncompressed FITS and the compressed science
+image extension for compressed FITS.
+
+| Keyword | Meaning |
+| --- | --- |
+| `DATE-OBS`, `DATE-BEG`, `SH-UT001` | Exposure start, with identical values |
+| `DATE-AVG` | Arithmetic temporal midpoint; not cloud-, flux-, or detection-weighted |
+| `DATE-END`, `SH-UT002` | Exposure end, with identical values |
+| `TIME-OBS` | Time-of-day component of exposure start |
+| `TIMESYS` | `UTC` |
+| `EXPTIME`, `EXPOSURE` | Exposure duration in seconds, excluding gaps |
+| `MJD-OBS` | UTC MJD of the same exposure-start instant as `DATE-OBS` |
+
+Dates have six fractional-second digits and no `Z` or timezone-offset suffix;
+`TIMESYS` declares UTC. Existing `MJD-BEG`, `MJD-AVG`, or `MJD-END` cards, when
+supplied, are synchronized too. Date strings resolve microseconds; scalar MJD
+values have floating-point and FITS serialization limits, so compare epochs
+using astronomy time utilities with appropriate tolerances.
+
+Frame annotation metadata exposes `exposure_start` and `exposure_end` as UTC
+FITS date strings. The existing astrometric `time` field, when present, retains
+its exposure-midpoint meaning, as do the associated pointing measurements.
+Distortion WCS coordinates and their reference epoch are preserved:
+`WCSREF` describes exposure-start WCS, and **`WCSMJD` remains TT**, even though
+the acquisition dates and `MJD-OBS` are UTC.
+
+For direct `satsim.io.fits.save` calls, `dt_start` is exposure start and
+`exposure_time` is duration; their positional order is unchanged. Explicit
+`dt_start` and `astrometrics['exposure_start']` must agree if both are supplied.
+Optional `exposure_end` and `astrometrics['exposure_end']` must agree with each
+other and with start plus duration to within one microsecond, the serialized
+date precision. Invalid dates, nonfinite or negative durations, and conflicting
+explicit timing raise `ValueError`. A zero-duration exposure writes identical
+start, midpoint, and end dates. An end without a start or legacy timing
+reference is rejected.
+
+If no explicit start is supplied, the writer derives start from the legacy
+astrometric `time` **midpoint minus half the supplied duration**. Without that
+reference it can use legacy WCS `DATE-OBS` (respecting its `TIMESYS`, defaulting
+to UTC). Only when all timing references are absent does it use current UTC,
+evaluated at call time. These legacy fallbacks never override explicit timing;
+the generator always supplies its own per-frame boundaries. Supply duration
+explicitly when writing generated frame metadata directly. Timezone-aware
+datetimes are converted to UTC; naive datetimes and date strings mean UTC and
+never use the host timezone. Astropy `Time` inputs are converted to UTC and
+support leap seconds. Tracking's legacy Python-datetime midpoint field cannot
+represent a leap second; this change does not extend tracked-collect support
+for that case.
+
+**Migration:** Older tracked, non-distortion output labelled midpoint as
+`DATE-OBS`; distortion output already labelled exposure start, and untracked
+output could use file-generation time. Historical files are not rewritten.
+Do not apply a blanket half-exposure correction to old products. Consumers
+expecting start can continue using `DATE-OBS + EXPTIME/2` to obtain midpoint
+for new output, or use `DATE-AVG` directly without adding half an exposure
+again. No real-sensor timing bias is applied to synthetic output. Pin the code
+revision in dataset provenance because timestamp semantics differ across
+versions. See `HISTORY.md`'s Unreleased behavioral-change entry.
+The keyword definitions follow [FITS 4.0, sections 9.1 and 9.5](https://fits.gsfc.nasa.gov/standard40/fits_standard40aa-le.pdf).
+
 ## Configuration Basics
 
 SatSim configurations are dictionaries serialized as JSON or YAML. The root
