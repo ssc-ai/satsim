@@ -1216,30 +1216,47 @@ def test_epsf_pipeline_cache_hit_skips_psf_generation(tmp_path, star_render_mode
 
 
 @pytest.mark.parametrize('fallback_to_fft_for_models', [False, True], ids=['native', 'fallback-flag'])
-def test_epsf_native_stars_match_fftconv2p_transform_runtime(fallback_to_fft_for_models):
+def test_epsf_native_stars_land_on_catalog_with_fftconv2p_flux_runtime(tmp_path, fallback_to_fft_for_models):
 
     configure_eager()
+
+    ra = 279.23410832
+    dec = 38.78299311
+    deg_per_pix = 1.0 / 41
+    pixel_offsets = [(-12.3, -9.6), (0.25, 0.4), (8.7, 13.2), (14.1, -15.5)]
+    catalog_path = tmp_path / 'stars.csv'
+    catalog_path.write_text(''.join(
+        '{},10.5,{:.8f},{:.8f}\n'.format(i, ra + dc * deg_per_pix / np.cos(np.radians(dec)), dec + dr * deg_per_pix)
+        for i, (dr, dc) in enumerate(pixel_offsets)
+    ))
 
     ssp_fft = _small_no_noise_target_config('fftconv2p')
     ssp_fft['sim']['padding'] = 8
     ssp_fft['sim']['star_render_mode'] = 'transform'
+    ssp_fft['sim']['star_catalog_query_mode'] = 'at_start'
     ssp_fft['sim']['temporal_osf'] = 20
     ssp_fft['fpa']['height'] = 41
     ssp_fft['fpa']['width'] = 41
+    ssp_fft['fpa']['y_fov'] = 1.0
+    ssp_fft['fpa']['x_fov'] = 1.0
     ssp_fft['geometry']['obs']['list'] = []
-    ssp_fft['geometry']['stars']['mv']['bins'] = [10, 11]
-    ssp_fft['geometry']['stars']['mv']['density'] = [1.0]
-    ssp_fft['geometry']['stars']['motion'] = {
-        'mode': 'affine',
+    ssp_fft['geometry']['stars'] = {
+        'mode': 'csv',
+        'path': str(catalog_path),
+        'ra': ra,
+        'dec': dec,
         'rotation': 0.0,
-        'translation': [0.0, 0.1],
+        'pad': 0.0,
+        'motion': {
+            'mode': 'affine',
+            'rotation': 0.0,
+            'translation': [0.0, 0.1],
+        },
     }
     ssp_fft['fpa']['psf'] = {
         'mode': 'gaussian',
         'eod': 0.5,
     }
-
-    np.random.seed(42)
     dirname_fft = gen_images(
         ssp_fft,
         eager=True,
@@ -1247,7 +1264,7 @@ def test_epsf_native_stars_match_fftconv2p_transform_runtime(fallback_to_fft_for
         output_debug=True,
         set_name=_gen_name('test_fft_transform_runtime_reference'),
     )
-    expected = _load_debug_frame(dirname_fft, 'fpa_conv_star')
+    fft_frame = _load_debug_frame(dirname_fft, 'fpa_conv_star')
 
     epsf_frames = {}
     for star_render_mode in ('transform', 'streak'):
@@ -1264,7 +1281,6 @@ def test_epsf_native_stars_match_fftconv2p_transform_runtime(fallback_to_fft_for
             },
         }
 
-        np.random.seed(42)
         dirname_epsf = gen_images(
             ssp_epsf,
             eager=True,
@@ -1274,9 +1290,20 @@ def test_epsf_native_stars_match_fftconv2p_transform_runtime(fallback_to_fft_for
         )
         epsf_frames[star_render_mode] = _load_debug_frame(dirname_epsf, 'fpa_conv_star')
 
-    assert(np.sum(expected) > 0)
+    r_stars_os, c_stars_os = _load_debug_frame(dirname_epsf, 'stars_os')[:2]
+    t_mid = ssp_fft['fpa']['time']['exposure'] / 2
+    expected_rc = np.stack([r_stars_os, c_stars_os], axis=1) - ssp_fft['sim']['padding'] + np.multiply(
+        ssp_fft['geometry']['stars']['motion']['translation'], t_mid)
+    frame = epsf_frames['transform']
+    centroids = []
+    for r, c in np.rint(expected_rc).astype(int):
+        window = frame[r - 5:r + 6, c - 5:c + 6]
+        centroids.append(np.add(scipy.ndimage.center_of_mass(window), [r - 5, c - 5]))
+
     np.testing.assert_array_equal(epsf_frames['streak'], epsf_frames['transform'])
-    np.testing.assert_allclose(epsf_frames['transform'], expected, atol=6e-3)
+    # The ePSF LUT is built with fftconv2p, which centers it about 0.025 px right of the PSF.
+    np.testing.assert_allclose(centroids, expected_rc, atol=0.05)
+    np.testing.assert_allclose(np.sum(frame), np.sum(fft_frame), rtol=5e-3)
 
 
 def test_epsf_native_star_streak_preserves_flux_and_shifts_after_first_frame(tmp_path):
