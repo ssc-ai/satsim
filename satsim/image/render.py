@@ -294,7 +294,8 @@ def render_epsf(
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
         batch_size_cap=None,
         fallback_to_fft_for_models=False, psf_os=None,
-        epsf_crop=None, epsf_metadata=None, psf_support_shape=None, star_position_transform=None):
+        epsf_crop=None, epsf_metadata=None, psf_support_shape=None, star_position_transform=None,
+        star_accumulator='auto'):
     """Render directly in detector space using an ePSF lookup table.
 
     Both ``star_render_mode`` values render stars natively the same way: each
@@ -302,6 +303,11 @@ def render_epsf(
     ``transform_and_add_epsf`` describes. Frames with ``obs_model`` targets
     and ``fallback_to_fft_for_models`` render through ``render_full`` instead,
     with per-source star transforms whatever ``star_render_mode`` says.
+
+    ``star_accumulator`` is passed to ``transform_and_add_epsf`` as its
+    ``accumulator``: ``'auto'`` sums stars with the compiled CPU kernel when
+    the render is eager and every star tensor is on the CPU. Targets always
+    deposit through TensorFlow.
 
     Pass the ``psf_os`` used to build ``epsf_lut``, or its known
     ``psf_support_shape`` ``(height, width)`` when the array itself is
@@ -381,8 +387,8 @@ def render_epsf(
 
     fpa_star = tf.zeros([h_pad_det, w_pad_det], tf.float32)
     star_tiers = resolve_epsf_tiers(epsf_lut, epsf_crop)
-    if star_position_transform is None:
-        r_stars_os, c_stars_os, pe_stars_os = filter_epsf_sources_in_bounds(
+    if epsf_metadata is not None and star_tiers is not None and star_position_transform is None:
+        _, _, pe_deposited = filter_epsf_sources_in_bounds(
             fpa_star,
             r_stars_os,
             c_stars_os,
@@ -395,10 +401,10 @@ def render_epsf(
             tf.shape(epsf_lut)[2],
             position_offset_os=(row_offset, col_offset),
         )
-        if epsf_metadata is not None and star_tiers is not None:
-            epsf_metadata.update(summarize_epsf_tiers(star_tiers, pe_stars_os))
-            epsf_metadata['mode'] = epsf_crop.get('mode')
-            epsf_metadata['sigma_pix'] = epsf_crop.get('sigma_pix')
+        epsf_metadata.update(summarize_epsf_tiers(star_tiers, pe_deposited))
+        epsf_metadata['mode'] = epsf_crop.get('mode')
+        epsf_metadata['sigma_pix'] = epsf_crop.get('sigma_pix')
+    # The deposit filters the caller's own star tensors so routing sees their placement.
     fpa_star = transform_and_add_epsf(
         fpa_star,
         r_stars_os,
@@ -411,13 +417,13 @@ def render_epsf(
         star_tran_os,
         epsf_lut,
         s_osf,
-        filter_out_of_bounds=False,
         point_rendering=point_rendering,
         epsf_tiers=star_tiers,
         batch_element_budget=batch_element_budget,
         batch_size_cap=batch_size_cap,
         position_offset_os=(row_offset, col_offset),
         position_transform=star_position_transform,
+        accumulator=star_accumulator,
     )
 
     fpa_targ = tf.zeros([h_pad_det, w_pad_det], tf.float32)

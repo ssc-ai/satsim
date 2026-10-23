@@ -8,6 +8,7 @@ import numpy as np
 import tensorflow as tf
 
 from satsim.geometry.transform import rotate_and_translate
+from satsim.image.epsf_cpu import add_epsf_stamps
 from satsim.image.fpa import add_counts, downsample
 from satsim.math import fftconv2p
 
@@ -18,6 +19,7 @@ EPSF_BATCH_MAX_DEFAULT = 262144
 EPSF_PHASE_ERROR_TARGET_PX = 0.02
 # Bounds the transformed coordinates handed to a position callback per batch.
 _POSITION_TRANSFORM_BATCH_SAMPLES = 65536
+_STAR_ACCUMULATORS = ('auto', 'tensorflow', 'cpu')
 
 
 def _validate_kernel_size(kernel_size):
@@ -698,7 +700,8 @@ def transform_and_add_epsf(
         epsf_lut, s_osf, batch_size=None, filter_out_of_bounds=True,
         point_rendering='bilinear', epsf_tiers=None,
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-        batch_size_cap=None, position_offset_os=0.0, position_transform=None):
+        batch_size_cap=None, position_offset_os=0.0, position_transform=None,
+        accumulator='auto'):
     """Apply star motion and deposit each star's ePSF at exposure-bin midpoints.
 
     Every star deposits ``cnt / t_osf`` at each of ``t_osf`` midpoint samples
@@ -707,7 +710,19 @@ def transform_and_add_epsf(
     deposit their full count once. ``filter_out_of_bounds`` drops only sources
     whose stamps cannot reach ``fpa`` (see ``filter_epsf_sources_in_bounds``)
     and is skipped with a ``position_transform``.
+
+    ``accumulator`` selects how the stamps are summed. ``'tensorflow'`` uses
+    TensorFlow ops on any device and in graphs. ``'cpu'`` sums in float64 with
+    a compiled CPU kernel and returns ``fpa.dtype``; it requires eager
+    execution, a float32 or float64 ``fpa`` and every tensor argument already
+    on the CPU, and raises ``ValueError`` otherwise rather than copying
+    anything. ``'auto'`` uses ``'cpu'`` when those conditions hold and
+    ``'tensorflow'`` otherwise. Both give the same samples, phases, weights and
+    tiers; only the summation order and precision differ. On the CPU path a
+    ``position_transform`` runs under the image's device scope, and its outputs
+    are not checked for placement.
     """
+    fpa = tf.convert_to_tensor(fpa)
     if batch_size_cap is None and batch_size is not None:
         batch_size_cap = batch_size
     stars = _plan_star_deposition(
@@ -721,7 +736,7 @@ def transform_and_add_epsf(
         batch_element_budget=batch_element_budget,
         batch_size_cap=batch_size_cap,
     )
-    return _deposit_stars(fpa, stars)
+    return _deposit_stars(fpa, stars, accumulator)
 
 
 @dataclass(frozen=True)
@@ -749,7 +764,9 @@ class _StarPlan:
     ``samples`` is 1 when rotation and translation are statically exactly
     zero and there is no ``position_transform``, and ``t_osf`` otherwise.
     ``time_grid`` holds the ``samples`` exposure-bin midpoints, and each
-    sample deposits a source's ``counts / samples``.
+    sample deposits a source's ``counts / samples``. ``input_devices`` lists
+    the devices of the caller's tensor arguments as passed, before any cast or
+    copy.
     """
     groups: Tuple[_StarGroup, ...]
     samples: tf.Tensor
@@ -763,6 +780,7 @@ class _StarPlan:
     position_transform: Optional[Callable]
     batch_element_budget: Optional[int]
     batch_size_cap: Optional[int]
+    input_devices: Tuple[str, ...]
 
 
 def _plan_star_deposition(
@@ -776,6 +794,8 @@ def _plan_star_deposition(
     flux tiers and batched. Works in eager and graph mode.
     """
     point_rendering = _validate_point_rendering(point_rendering)
+    input_devices = _input_devices(
+        fpa, r_os, c_os, cnt, t_start, t_end, t_osf, rotation, translation, epsf_lut, s_osf, position_offset_os)
     s_osf = tf.cast(s_osf, tf.int32)
     shape = tf.shape(fpa)
     h_minus_1 = tf.cast(shape[0] * s_osf, tf.float32) - 1.0
@@ -842,7 +862,30 @@ def _plan_star_deposition(
         position_transform=position_transform,
         batch_element_budget=batch_element_budget,
         batch_size_cap=batch_size_cap,
+        input_devices=input_devices,
     )
+
+
+def _input_devices(*values):
+    """Return the device of every tensor in ``values``, walking nested lists and tuples.
+
+    Python scalars, strings, ``None`` and numeric NumPy arrays live on the host
+    and add nothing. Any other leaf, such as a sparse tensor or an object
+    array, adds an empty device so it never counts as a CPU input.
+    """
+    devices = []
+    for value in tf.nest.flatten(values):
+        if isinstance(value, (tf.Tensor, tf.Variable)):
+            devices.append(value.device)
+        elif not _is_host_value(value):
+            devices.append('')
+    return tuple(devices)
+
+
+def _is_host_value(value):
+    if value is None or isinstance(value, (bool, int, float, str, np.number, np.bool_)):
+        return True
+    return isinstance(value, np.ndarray) and value.dtype.kind in 'biuf'
 
 
 def _is_exact_zero_motion(rotation, translation, position_transform):
@@ -858,11 +901,49 @@ def _is_exact_zero_motion(rotation, translation, position_transform):
     return all(static is not None and np.all(np.asarray(static) == 0) for static in statics)
 
 
-def _deposit_stars(fpa, stars):
-    """Deposit every sample of the ``_StarPlan`` ``stars`` into ``fpa`` with TensorFlow ops.
+def _deposit_stars(fpa, stars, accumulator):
+    """Deposit every sample of the ``_StarPlan`` ``stars`` into ``fpa``.
 
-    Graph-safe and placement-agnostic; returns an image of ``fpa.dtype``.
+    The only place the accumulator is chosen. Placement is judged on the
+    caller's inputs and on every planned tensor the accumulator reads.
     """
+    devices = stars.input_devices + _input_devices(
+        stars.time_grid, stars.rotation, stars.translation, stars.frame_extent_os, stars.s_osf,
+        [(group.lut, group.rows, group.cols, group.counts) for group in stars.groups])
+    if _choose_star_accumulator(accumulator, tf.executing_eagerly(), devices, fpa.dtype) == 'cpu':
+        return _accumulate_stars_cpu(fpa, stars)
+    return _accumulate_stars_tf(fpa, stars)
+
+
+def _choose_star_accumulator(requested, executing_eagerly, devices, image_dtype):
+    """Return ``'cpu'`` or ``'tensorflow'`` for an ``accumulator`` request.
+
+    A render is eligible for ``'cpu'`` only when it executes eagerly, the image
+    dtype is float32 or float64, and every device string names a CPU (an empty
+    string, as graph tensors report, does not). Whether the host has a GPU is
+    never consulted. ``'auto'`` returns ``'cpu'`` exactly when eligible,
+    ``'tensorflow'`` always returns ``'tensorflow'``, and ``'cpu'`` raises
+    ``ValueError`` when the render is not eligible.
+    """
+    if requested not in _STAR_ACCUMULATORS:
+        raise ValueError("accumulator must be 'auto', 'tensorflow', or 'cpu'")
+    if requested == 'tensorflow':
+        return 'tensorflow'
+    if not executing_eagerly:
+        requirement = 'eager execution'
+    elif image_dtype not in (tf.float32, tf.float64):
+        requirement = 'a float32 or float64 image'
+    elif not all(tf.DeviceSpec.from_string(device).device_type == 'CPU' for device in devices):
+        requirement = 'every render tensor on the CPU'
+    else:
+        return 'cpu'
+    if requested == 'cpu':
+        raise ValueError('the cpu ePSF star accumulator requires {}'.format(requirement))
+    return 'tensorflow'
+
+
+def _accumulate_stars_tf(fpa, stars):
+    """Deposit ``stars`` with TensorFlow ops; graph-safe on any device."""
     for group in stars.groups:
         fpa = _deposit_star_group(fpa, stars, group)
     return fpa
@@ -894,6 +975,30 @@ def _deposit_star_group(fpa, stars, group):
 
     _, fpa = tf.while_loop(cond, body, (tf.constant(0, tf.int32), fpa))
     return fpa
+
+
+def _accumulate_stars_cpu(fpa, stars):
+    """Deposit ``stars`` with the compiled float64 kernel; return an image of ``fpa.dtype``.
+
+    Computes the same sample positions, phases, bilinear weights and
+    dtype-cast LUT values as ``_accumulate_stars_tf``; only the sum differs.
+    Callers must have routed here with ``_choose_star_accumulator``, so every
+    tensor is already on the CPU.
+    """
+    row_offset_os, col_offset_os = stars.offset_os
+    with tf.device(fpa.device):
+        image = np.array(fpa.numpy(), dtype=np.float64)
+        for group in stars.groups:
+            lut = tf.cast(group.lut, fpa.dtype)
+            lut_values = lut.numpy()
+            n = tf.shape(group.rows)[0]
+            start = 0
+            while start < n:
+                start, rr, cc, vv = _star_sample_batch(stars, group, start)
+                coords = _epsf_lookup_coords(
+                    rr, cc, vv, row_offset_os, col_offset_os, stars.point_rendering, fpa.dtype, stars.s_osf, lut)
+                add_epsf_stamps(image, *(coord.numpy() for coord in coords), lut_values)
+        return tf.constant(image.astype(fpa.dtype.as_numpy_dtype))
 
 
 def _star_sample_batch(stars, group, start):

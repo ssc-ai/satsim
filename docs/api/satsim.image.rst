@@ -33,6 +33,14 @@ satsim.image.epsf module
    :undoc-members:
    :show-inheritance:
 
+satsim.image.epsf\_cpu module
+-----------------------------
+
+.. automodule:: satsim.image.epsf_cpu
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 satsim.image.fpa module
 -----------------------
 

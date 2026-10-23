@@ -1,7 +1,9 @@
 """Native ePSF star fidelity against an independent float64 reference.
 
 The reference computes motion, phase lookup, bilinear deposition, clipping and
-flux-tier selection in NumPy without calling production helpers.
+flux-tier selection in NumPy without calling production helpers. Render cases
+run once per star accumulator and check which one ran; the ``cpu`` cases render
+under a CPU device scope so they also run on GPU hosts.
 """
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow")
@@ -12,7 +14,7 @@ import tensorflow as tf
 
 from satsim.image.epsf import add_epsf_counts, build_epsf_lut, transform_and_add_epsf
 from satsim.image.render import render_epsf
-from tests.epsf_helpers import assert_equivalent, float64_midpoint_bilinear_reference, quadratic_warp
+from tests.epsf_helpers import assert_equivalent, float64_midpoint_bilinear_reference, quadratic_warp, routed
 
 
 OSF = 3
@@ -27,13 +29,19 @@ def optics():
         x -= (size - 1) / 2
         psf = np.exp(-((y / 2.1) ** 2 + (x / 2.7) ** 2) / 2)
         psf += 0.13 * np.exp(-(((y - 3.2) / 1.8) ** 2 + ((x + 2.3) / 2.2) ** 2) / 2)
-        psf = tf.constant((psf / psf.sum()).astype(np.float32))
-        result[parity] = (psf, build_epsf_lut(psf, OSF, 7))
+        with tf.device('/CPU:0'):
+            psf = tf.constant((psf / psf.sum()).astype(np.float32))
+            result[parity] = (psf, build_epsf_lut(psf, OSF, 7))
     return result
 
 
 @pytest.fixture(params=['transform', 'streak'], ids=['transform', 'streak'])
 def star_mode(request):
+    return request.param
+
+
+@pytest.fixture(params=['tensorflow', 'cpu'], ids=['tensorflow', 'cpu'])
+def accumulator(request):
     return request.param
 
 
@@ -53,9 +61,9 @@ def test_direct_bilinear_lookup_matches_independent_reference():
 
 
 @pytest.mark.parametrize('parity', ['odd', 'even'], ids=['odd-support', 'even-support'])
-def test_stars_match_reference_across_phase_carry(optics, star_mode, parity):
+def test_stars_match_reference_across_phase_carry(optics, star_mode, accumulator, parity):
     psf, lut = optics[parity]
-    _check_scene(psf, lut, star_mode, [28.9997, 49.31, 73.94], [35.8, 54.0003, 69.125], [10, 1000, 1e5],
+    _check_scene(psf, lut, star_mode, accumulator, [28.9997, 49.31, 73.94], [35.8, 54.0003, 69.125], [10, 1000, 1e5],
                  velocity=(0.41, -0.73), start=2, end=5, samples=37)
 
 
@@ -69,15 +77,15 @@ def test_stars_match_reference_across_phase_carry(optics, star_mode, parity):
     ],
     ids=['signed-absolute-time', 'long-one-sided-trail', 'single-midpoint', 'static'],
 )
-def test_star_motion_quadrature_matches_reference(optics, star_mode, start, end, samples, velocity):
+def test_star_motion_quadrature_matches_reference(optics, star_mode, accumulator, start, end, samples, velocity):
     psf, lut = optics['even']
-    _check_scene(psf, lut, star_mode, [58.23], [70.77], [1200],
+    _check_scene(psf, lut, star_mode, accumulator, [58.23], [70.77], [1200],
                  start=start, end=end, samples=samples, velocity=velocity)
 
 
-def test_total_flux_tiers_in_bright_faint_crowding(optics, star_mode):
+def test_total_flux_tiers_in_bright_faint_crowding(optics, star_mode, accumulator):
     psf, lut = optics['odd']
-    _check_scene(psf, lut, star_mode, [52.2, 53.25, 52.7], [50.37, 49.8, 50.9], [10, 100, 1e5],
+    _check_scene(psf, lut, star_mode, accumulator, [52.2, 53.25, 52.7], [50.37, 49.8, 50.9], [10, 100, 1e5],
                  velocity=(-1.3, 0.8), crop={'mode': 'manual', 'threshold_pe': 100, 'kernel_size': 3})
 
 
@@ -86,28 +94,30 @@ def test_total_flux_tiers_in_bright_faint_crowding(optics, star_mode):
     [(0.055, False), (0.0, True)],
     ids=['field-rotation', 'position-transform'],
 )
-def test_nonuniform_star_motion_matches_reference(optics, star_mode, rotation, warp):
+def test_nonuniform_star_motion_matches_reference(optics, star_mode, accumulator, rotation, warp):
     psf, lut = optics['odd']
-    _check_scene(psf, lut, star_mode, [30.2, 78.7], [38.9, 83.25], [40, 3000],
+    _check_scene(psf, lut, star_mode, accumulator, [30.2, 78.7], [38.9, 83.25], [40, 3000],
                  rotation=rotation, warp=warp, velocity=(0.3, -0.2), start=2, end=5)
 
 
 @pytest.mark.parametrize('row', [-0.75, 72.25], ids=['negative-center-wing', 'bottom-center-wing'])
-def test_off_frame_optical_wings_are_deposited(optics, star_mode, row):
+def test_off_frame_optical_wings_are_deposited(optics, star_mode, accumulator, row):
     psf, lut = optics['odd']
     scene = dict(shape=(24, 24), pad=0, start=2, end=5, samples=37, velocity=(0, 0.2))
     expected = float64_midpoint_bilinear_reference(lut.numpy(), [row], [30.75], [200], **scene)
     assert expected.sum() > 0
 
-    filtered = transform_and_add_epsf(
-        tf.zeros((24, 24)), [row], [30.75], [200], 2., 5., 37, 0., [0., 0.2], lut, OSF).numpy()
-    rendered, _ = _render(psf, lut, [row], [30.75], [200], star_mode, **scene)
+    with routed(accumulator):
+        filtered = transform_and_add_epsf(
+            tf.zeros((24, 24)), [row], [30.75], [200], 2., 5., 37, 0., [0., 0.2], lut, OSF,
+            accumulator=accumulator).numpy()
+    rendered, _ = _render(psf, lut, [row], [30.75], [200], star_mode, accumulator, **scene)
 
     assert_equivalent(filtered, expected, 200)
     assert_equivalent(rendered, expected, 200)
 
 
-def test_rotating_arc_enters_frame_between_outside_endpoints(optics, star_mode):
+def test_rotating_arc_enters_frame_between_outside_endpoints(optics, star_mode, accumulator):
     psf, lut = optics['odd']
     center = (24 * OSF - 1) / 2
     radius = 55.0
@@ -119,57 +129,61 @@ def test_rotating_arc_enters_frame_between_outside_endpoints(optics, star_mode):
     expected = float64_midpoint_bilinear_reference(lut.numpy(), [row], [col], [500], **scene)
     assert expected.sum() > 0
 
-    actual, _ = _render(psf, lut, [row], [col], [500], star_mode, **scene)
+    actual, _ = _render(psf, lut, [row], [col], [500], star_mode, accumulator, **scene)
 
     assert_equivalent(actual, expected, 500)
 
 
 @pytest.mark.parametrize('parity', ['odd', 'even'], ids=['odd-support', 'even-support'])
-def test_warm_cache_support_shape_registers_like_psf(optics, star_mode, parity):
+def test_warm_cache_support_shape_registers_like_psf(optics, star_mode, accumulator, parity):
     psf, lut = optics[parity]
     scene = dict(velocity=(-1.1, 0.7), start=2, end=5)
-    cold, _ = _render(psf, lut, [55.23, 41.6], [60.77, 32.1], [2000, 50], star_mode, **scene)
-    warm, _ = _render(None, lut, [55.23, 41.6], [60.77, 32.1], [2000, 50], star_mode,
+    cold, _ = _render(psf, lut, [55.23, 41.6], [60.77, 32.1], [2000, 50], star_mode, accumulator, **scene)
+    warm, _ = _render(None, lut, [55.23, 41.6], [60.77, 32.1], [2000, 50], star_mode, accumulator,
                       psf_support_shape=tuple(psf.shape), **scene)
 
     np.testing.assert_array_equal(warm, cold)
 
 
 @pytest.mark.parametrize('parity', ['odd', 'even'], ids=['odd-support', 'even-support'])
-def test_target_pixels_are_bitwise_independent_of_star_mode(optics, parity):
+def test_target_pixels_are_bitwise_independent_of_star_mode(optics, accumulator, parity):
     psf, lut = optics[parity]
     scene = dict(targets=([14.2, 39.7, 70.9], [20.8, 42.1, 61.4], [0.1, 2e3, 4e5]),
                  velocity=(-1.1, 0.7), start=2, end=5)
-    _, transform_targets = _render(psf, lut, [55.23], [60.77], [2000], 'transform', **scene)
-    _, streak_targets = _render(psf, lut, [55.23], [60.77], [2000], 'streak', **scene)
+    _, transform_targets = _render(psf, lut, [55.23], [60.77], [2000], 'transform', accumulator, **scene)
+    _, streak_targets = _render(psf, lut, [55.23], [60.77], [2000], 'streak', accumulator, **scene)
 
     np.testing.assert_array_equal(streak_targets, transform_targets)
 
 
-def test_graph_rendering_matches_reference(optics, star_mode):
+def test_graph_rendering_uses_tensorflow(optics, star_mode):
     psf, lut = optics['odd']
     rows, cols, flux = [36.2, 70.9], [40.7, 82.1], [20., 2000.]
 
-    @tf.function
-    def graph_image():
-        return render_epsf(
+    def graph_image(star_accumulator):
+        return tf.function(lambda: render_epsf(
             96, 96, 120, 120, 12, 12, OSF, lut, [], [], [], rows, cols, flux,
-            2., 5., 7, 0.013, [0.41, -0.73], psf_os=psf, star_render_mode=star_mode)[0]
+            2., 5., 7, 0.013, [0.41, -0.73], psf_os=psf, star_render_mode=star_mode,
+            star_accumulator=star_accumulator)[0])()
 
     expected = float64_midpoint_bilinear_reference(
         lut.numpy(), rows, cols, flux, start=2, end=5, samples=7, rotation=0.013)
-    assert_equivalent(graph_image().numpy(), expected, sum(flux))
+    with routed('tensorflow'):
+        actual = graph_image('auto').numpy()
+    assert_equivalent(actual, expected, sum(flux))
+    with pytest.raises(ValueError, match='eager execution'):
+        graph_image('cpu')
 
 
-def _check_scene(psf, lut, star_mode, rows, cols, flux, **scene):
+def _check_scene(psf, lut, star_mode, accumulator, rows, cols, flux, **scene):
     offset = _support_offset(psf)
     expected = float64_midpoint_bilinear_reference(lut.numpy(), rows, cols, flux, offset=offset, **scene)
-    actual, _ = _render(psf, lut, rows, cols, flux, star_mode, **scene)
+    actual, _ = _render(psf, lut, rows, cols, flux, star_mode, accumulator, **scene)
     assert_equivalent(actual, expected, float(np.sum(flux)))
     if len(rows) > 1:
         for row, col, count in zip(rows, cols, flux):
             isolated = float64_midpoint_bilinear_reference(lut.numpy(), [row], [col], [count], offset=offset, **scene)
-            measured, _ = _render(psf, lut, [row], [col], [count], star_mode, **scene)
+            measured, _ = _render(psf, lut, [row], [col], [count], star_mode, accumulator, **scene)
             assert_equivalent(measured, isolated, float(count))
 
 
@@ -177,14 +191,16 @@ def _support_offset(psf):
     return tuple(-0.5 if int(size) % 2 == 0 else 0.0 for size in psf.shape)
 
 
-def _render(psf, lut, rows, cols, flux, star_mode, shape=(32, 32), pad=4, start=0, end=3, samples=37,
-            velocity=(0.41, -0.73), rotation=0, warp=False, crop=None, targets=([], [], []),
+def _render(psf, lut, rows, cols, flux, star_mode, accumulator, shape=(32, 32), pad=4, start=0, end=3,
+            samples=37, velocity=(0.41, -0.73), rotation=0, warp=False, crop=None, targets=([], [], []),
             psf_support_shape=None):
-    result = render_epsf(
-        shape[0] * OSF, shape[1] * OSF, (shape[0] + 2 * pad) * OSF, (shape[1] + 2 * pad) * OSF,
-        pad * OSF, pad * OSF, OSF, lut, *targets,
-        np.asarray(rows, np.float32), np.asarray(cols, np.float32), np.asarray(flux, np.float32),
-        float(start), float(end), samples, float(rotation), list(velocity),
-        psf_os=psf, psf_support_shape=psf_support_shape, star_render_mode=star_mode,
-        epsf_crop=crop, star_position_transform=quadratic_warp if warp else None)
+    with routed(accumulator):
+        result = render_epsf(
+            shape[0] * OSF, shape[1] * OSF, (shape[0] + 2 * pad) * OSF, (shape[1] + 2 * pad) * OSF,
+            pad * OSF, pad * OSF, OSF, lut, *targets,
+            np.asarray(rows, np.float32), np.asarray(cols, np.float32), np.asarray(flux, np.float32),
+            float(start), float(end), samples, float(rotation), list(velocity),
+            psf_os=psf, psf_support_shape=psf_support_shape, star_render_mode=star_mode,
+            epsf_crop=crop, star_position_transform=quadratic_warp if warp else None,
+            star_accumulator=accumulator)
     return result[0].numpy(), result[1].numpy()

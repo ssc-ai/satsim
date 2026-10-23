@@ -1,5 +1,10 @@
-"""Shared ePSF test helpers: the float64 star reference and its acceptance gates."""
+"""Shared ePSF test helpers: the float64 star reference, its acceptance gates and accumulator routing."""
+import contextlib
+
 import numpy as np
+import tensorflow as tf
+
+import satsim.image.epsf as epsf
 
 
 def quadratic_warp(rows, cols):
@@ -91,3 +96,22 @@ def assert_equivalent(actual, reference, source_flux):
         assert abs(np.sum(actual[aperture], dtype=np.float64) - aperture_flux) <= tolerance, metrics
     assert metrics['centroid_detector_pixels'] <= 1e-4, metrics
     assert metrics['moment_relative'] <= 1e-4, metrics
+
+
+@contextlib.contextmanager
+def routed(accumulator):
+    """Run under ``accumulator``'s placement and check that only it deposited stars."""
+    runs = []
+    accumulate = epsf._accumulate_stars_cpu
+
+    def spy(fpa, stars):
+        runs.append(fpa.device)
+        return accumulate(fpa, stars)
+
+    epsf._accumulate_stars_cpu = spy
+    try:
+        with tf.device('/CPU:0') if accumulator == 'cpu' else contextlib.nullcontext():
+            yield
+    finally:
+        epsf._accumulate_stars_cpu = accumulate
+    assert bool(runs) == (accumulator == 'cpu'), runs
