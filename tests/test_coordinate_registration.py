@@ -81,7 +81,6 @@ def _render_target(mode, osf, row, col, point_rendering='bilinear', phase_oversa
         *source_args,
         render_separate=True,
         point_rendering=point_rendering,
-        phase_oversample=phase_oversample,
         **psf_kwargs,
     )[1].numpy()
 

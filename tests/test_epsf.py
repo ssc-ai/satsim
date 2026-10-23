@@ -8,12 +8,11 @@ import tensorflow as tf
 
 from satsim.image.epsf import (
     add_epsf_counts,
-    add_epsf_counts_tiered,
     build_epsf_lut,
-    build_trailed_epsf_lut,
     crop_epsf_lut,
     effective_epsf_batch_size,
     epsf_wing_profile,
+    filter_epsf_sources_in_bounds,
     phase_nearest_error_bound_px,
     resolve_epsf_tiers,
     resolve_phase_oversample,
@@ -22,6 +21,7 @@ from satsim.image.epsf import (
 )
 from satsim.image.psf import gen_gaussian
 from satsim.util import configure_eager
+from tests.epsf_helpers import assert_equivalent, float64_midpoint_bilinear_reference
 
 
 configure_eager()
@@ -120,91 +120,6 @@ def test_build_epsf_lut_rejects_invalid_kernel_size():
 
     with pytest.raises(ValueError):
         build_epsf_lut(None, 3, 4)
-
-
-def test_build_trailed_epsf_lut_kernel_growth_and_static_degenerate_case():
-    static_lut = build_epsf_lut(None, 3, 5)
-    trailed_static_lut, effective_kernel = build_trailed_epsf_lut(
-        None,
-        3,
-        5,
-        0.0,
-        1.0,
-        5,
-        0.0,
-        [0.0, 0.0],
-    )
-
-    assert(effective_kernel == 5)
-    np.testing.assert_allclose(trailed_static_lut.numpy(), static_lut.numpy(), atol=1e-6)
-
-    _, effective_kernel = build_trailed_epsf_lut(
-        None,
-        3,
-        5,
-        0.0,
-        1.0,
-        20,
-        0.0,
-        [0.0, 7.0],
-    )
-
-    assert(effective_kernel == 9)
-
-
-def test_build_trailed_epsf_lut_preserves_flux_inside_effective_kernel():
-    lut, _ = build_trailed_epsf_lut(
-        None,
-        3,
-        5,
-        0.0,
-        1.0,
-        20,
-        0.0,
-        [3.0, 6.0],
-        normalize=False,
-    )
-
-    np.testing.assert_allclose(
-        tf.reduce_sum(lut, axis=[2, 3]).numpy(),
-        np.ones([3, 3]),
-        atol=2e-3,
-    )
-
-
-def test_build_trailed_epsf_lut_rebases_absolute_frame_times():
-    lut, _ = build_trailed_epsf_lut(
-        None,
-        1,
-        5,
-        5.0,
-        6.0,
-        20,
-        0.0,
-        [3.0, 0.0],
-        normalize=False,
-    )
-
-    np.testing.assert_allclose(
-        tf.reduce_sum(lut, axis=[2, 3]).numpy(),
-        np.ones([1, 1]),
-        atol=2e-3,
-    )
-
-
-def test_build_trailed_epsf_lut_rejects_absurd_kernel_growth():
-    with pytest.raises(ValueError, match='trailed ePSF effective kernel_size'):
-        build_trailed_epsf_lut(
-            None,
-            3,
-            5,
-            0.0,
-            1.0,
-            20,
-            0.0,
-            [300.0, 0.0],
-            max_kernel_size=21,
-        )
 
 
 def test_add_epsf_counts_bilinear_weights_and_centroid():
@@ -468,6 +383,142 @@ def test_transform_and_add_epsf_t_osf_one_samples_mid_exposure():
     np.testing.assert_allclose(_centroid(img), [6.0, 5.0], atol=1e-6)
 
 
+@pytest.mark.parametrize(
+    't_start, t_end, rotation, translation',
+    [
+        (0.0, 1.0, 0.0, [0.0, 0.0]),
+        (0.0, 1.0, 0.0, [7.0, -5.0]),
+        (-2.0, 1.5, 0.0, [-4.0, 3.0]),
+        (0.0, 1.0, 0.03, [0.0, 0.0]),
+        (0.0, 1.0, -0.02, [5.0, 2.0]),
+        (-1.0, 2.0, 0.3, [3.0, -6.0]),
+    ],
+    ids=['static', 'translation', 'signed-time', 'rotation', 'rotation-translation', 'wide-sweep'],
+)
+def test_default_filter_keeps_every_contributing_source(t_start, t_end, rotation, translation):
+    s_osf = 3
+    kernel_size = 5
+    halo = (kernel_size // 2 + 1) * s_osf
+    fpa, _, _, cnt, lut = _random_epsf_case(12, 14, s_osf, kernel_size, 600, seed=7)
+    rng = np.random.default_rng(3)
+    r_os = rng.uniform(-3 * halo, 12 * s_osf + 3 * halo, 600).astype(np.float32)
+    c_os = rng.uniform(-3 * halo, 14 * s_osf + 3 * halo, 600).astype(np.float32)
+
+    def render(filter_out_of_bounds):
+        return transform_and_add_epsf(
+            tf.constant(fpa), r_os, c_os, cnt, t_start, t_end, 8, rotation, translation, lut, s_osf,
+            filter_out_of_bounds=filter_out_of_bounds,
+        ).numpy()
+
+    kept, _, _ = filter_epsf_sources_in_bounds(
+        fpa, r_os, c_os, cnt, t_start, t_end, rotation, translation, s_osf, kernel_size)
+    assert 0 < kept.shape[0] < r_os.shape[0]
+    np.testing.assert_array_equal(render(True), render(False))
+
+
+@pytest.mark.parametrize('rotation', [0.0, 1e-6, -0.02], ids=['static', 'slow-rotation', 'rotation'])
+def test_filter_culls_beyond_support_halo(rotation):
+    # 12 detector rows at s_osf=3 span 36 oversampled rows; a 5-pixel kernel adds a 9-row halo.
+    rows = np.array([-9.5, -8.5, 44.5, 45.5], np.float32)
+
+    kept, _, _ = filter_epsf_sources_in_bounds(
+        tf.zeros([12, 12]), rows, np.full(4, 18.0, np.float32), np.ones(4, np.float32),
+        0.0, 1.0, rotation, [0.0, 0.0], 3, 5,
+    )
+
+    np.testing.assert_array_equal(kept.numpy(), [-8.5, 44.5])
+
+
+@pytest.mark.parametrize('point_rendering', ['floor', 'bilinear'])
+@pytest.mark.parametrize(
+    's_osf, offset',
+    [(1, 0.99), (1, 2.5), (1, -3.0), (3, 2.5), (3, (-4.0, 3.5))],
+    ids=['s1-just-over-one', 's1-positive', 's1-negative', 's3-positive', 's3-per-axis'],
+)
+def test_filter_keeps_every_contributing_source_for_any_offset(s_osf, offset, point_rendering):
+    halo = (5 // 2 + 1) * s_osf
+    edges = np.concatenate([
+        np.linspace(-halo - 4 * s_osf, -halo + 1, 200),
+        np.linspace(12 * s_osf + halo - 1, 12 * s_osf + halo + 4 * s_osf, 200),
+    ]).astype(np.float32)
+    middle = np.full(edges.shape, 6.0 * s_osf, np.float32)
+    rows = np.concatenate([edges, middle])
+    cols = np.concatenate([middle, edges])
+
+    def render(filter_out_of_bounds):
+        return transform_and_add_epsf(
+            tf.zeros([12, 12]), rows, cols, np.ones(rows.shape, np.float32), 0.0, 1.0, 1, 0.0, [0.0, 0.0],
+            tf.ones([s_osf, s_osf, 5, 5]), s_osf, filter_out_of_bounds=filter_out_of_bounds,
+            point_rendering=point_rendering, position_offset_os=offset,
+        ).numpy()
+
+    unfiltered = render(False)
+    assert unfiltered.sum() > 0
+    np.testing.assert_array_equal(render(True), unfiltered)
+
+
+def test_graph_render_accepts_lut_with_dynamic_kernel_size():
+    rows, cols, counts = [-30.0, -3.5, 4.25, 14.0], [6.0, 6.0, 5.5, 6.25], [5.0, 10.0, 20.0, 30.0]
+    lut = tf.ones([1, 1, 5, 5]) / 25.0
+
+    def render(epsf_lut):
+        return transform_and_add_epsf(tf.zeros([12, 12]), rows, cols, counts, 0.0, 1.0, 4, 0.0, [1.0, 0.0], epsf_lut, 1)
+
+    graph = tf.function(render, input_signature=[tf.TensorSpec([1, 1, None, None], tf.float32)])
+
+    np.testing.assert_allclose(graph(lut).numpy(), render(lut).numpy(), rtol=1e-6, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    'rotation, translation',
+    [(0.0, [0.0, 0.0]), (-0.0, [-0.0, 0.0]), (tf.constant(0.0), [tf.constant(0.0), tf.constant(0.0)])],
+    ids=['static', 'negative-zero', 'static-tensors'],
+)
+def test_exact_zero_motion_renders_identically_for_any_t_osf(rotation, translation):
+    def render(t_osf):
+        return transform_and_add_epsf(
+            tf.zeros([8, 8]), [12.3, 7.6], [11.7, 15.2], [10.0, 3.0], 0.0, 1.0, t_osf, rotation, translation,
+            build_epsf_lut(None, 3, 3), 3,
+        ).numpy()
+
+    np.testing.assert_array_equal(render(5), render(1))
+
+
+@pytest.mark.parametrize(
+    'rotation, translation, graph',
+    [(0.0, [3e-7, 0.0], False), (3e-8, [0.0, 0.0], False), (3e-8, [0.0, 0.0], True)],
+    ids=['slow-translation', 'slow-rotation', 'graph-rotation'],
+)
+def test_slow_motion_samples_every_midpoint(rotation, translation, graph):
+    lut = tf.constant(np.random.default_rng(5).uniform(0.1, 1.0, [3, 3, 5, 5]).astype(np.float32))
+
+    def render(rotation):
+        return transform_and_add_epsf(
+            tf.zeros([12, 12]), [6.4], [30.1], [10.0], 0.0, 1e7, 5, rotation, translation, lut, 3)
+
+    if graph:
+        render = tf.function(render, input_signature=[tf.TensorSpec([], tf.float32)])
+    expected = float64_midpoint_bilinear_reference(
+        lut.numpy(), [6.4], [30.1], [10.0], shape=(12, 12), pad=0, start=0, end=1e7, samples=5,
+        velocity=translation, rotation=rotation)
+
+    assert_equivalent(render(rotation).numpy(), expected, 10.0)
+
+
+def test_position_transform_sees_every_sample_without_motion():
+    seen = []
+
+    def transform(rr, cc):
+        seen.append(int(tf.size(rr)))
+        return rr, cc
+
+    transform_and_add_epsf(
+        tf.zeros([8, 8]), [12.0, 13.0], [12.0, 9.0], [10.0, 5.0], 0.0, 1.0, 5, 0.0, [0.0, 0.0],
+        build_epsf_lut(None, 3, 3), 3, position_transform=transform)
+
+    assert sum(seen) == 2 * 5
+
+
 def test_crop_epsf_lut_center_slice_and_validation():
     lut = tf.reshape(tf.range(49, dtype=tf.float32), [1, 1, 7, 7])
 
@@ -549,46 +600,6 @@ def test_resolve_epsf_tiers_manual_threshold_is_inclusive():
     assert(summary['tiers'][0]['count'] == 2)
     assert(summary['tiers'][1]['kernel_size'] == 5)
     assert(summary['tiers'][1]['count'] == 1)
-
-
-def test_add_epsf_counts_tiered_matches_manual_crop_composition():
-    lut = tf.ones([1, 1, 5, 5], tf.float32)
-    tiers = [
-        {'kernel_size': 1, 'flux_max': 10.0},
-        {'kernel_size': 5, 'flux_max': np.inf},
-    ]
-
-    actual = add_epsf_counts_tiered(
-        tf.zeros([11, 11], tf.float32),
-        [4, 6],
-        [4, 6],
-        [5.0, 20.0],
-        lut,
-        1,
-        tiers,
-        point_rendering='floor',
-    ).numpy()
-
-    expected = add_epsf_counts(
-        tf.zeros([11, 11], tf.float32),
-        [4],
-        [4],
-        [5.0],
-        crop_epsf_lut(lut, 1),
-        1,
-        point_rendering='floor',
-    )
-    expected = add_epsf_counts(
-        expected,
-        [6],
-        [6],
-        [20.0],
-        lut,
-        1,
-        point_rendering='floor',
-    ).numpy()
-
-    np.testing.assert_allclose(actual, expected)
 
 
 def test_transform_and_add_epsf_tiers_by_total_flux_not_temporal_sample():
@@ -704,67 +715,3 @@ def test_auto_crop_dense_dim_field_reduces_stamp_elements_by_more_than_4x():
 
     assert(summary['source_count'] == 154000)
     assert(summary['stamp_elements'] * 4 <= summary['full_stamp_elements'])
-
-
-def test_trailed_auto_crop_respects_trail_extent_and_error_bounds():
-    osf = 3
-    base_kernel = 15
-    noise_fraction = 0.25
-    sigma_pix = 20.0
-    psf_os = gen_gaussian(63, 63, 1.5 * osf).numpy()
-    lut, _, info = build_trailed_epsf_lut(
-        psf_os,
-        osf,
-        base_kernel,
-        0.0,
-        1.0,
-        20,
-        0.0,
-        [6.0, 0.0],
-        return_info=True,
-    )
-    tiers = resolve_epsf_tiers(
-        lut,
-        {
-            'mode': 'auto',
-            'noise_fraction': noise_fraction,
-            'sigma_pix': sigma_pix,
-            'sizes': [3, 5, 9, 13],
-        },
-        trail_det=info['trail_det'],
-    )
-    crop_tiers = [tier for tier in tiers if tier.get('mode') != 'full']
-    assert(crop_tiers)
-
-    for tier in crop_tiers:
-        assert(tier['kernel_size'] >= tier['core_size'] + info['trail_det'])
-
-    finite_crop_tiers = [
-        tier for tier in crop_tiers
-        if np.isfinite(tier['flux_max']) and tier['flux_max'] > 0
-    ]
-    tier = finite_crop_tiers[0] if finite_crop_tiers else crop_tiers[0]
-    flux = 1.0 if not np.isfinite(tier['flux_max']) else max(1e-6, 0.5 * tier['flux_max'])
-
-    full = add_epsf_counts(
-        tf.zeros([41, 41], tf.float32),
-        [20 * osf],
-        [20 * osf],
-        [flux],
-        lut,
-        osf,
-        point_rendering='floor',
-    ).numpy()
-    cropped = add_epsf_counts(
-        tf.zeros([41, 41], tf.float32),
-        [20 * osf],
-        [20 * osf],
-        [flux],
-        crop_epsf_lut(lut, tier['kernel_size']),
-        osf,
-        point_rendering='floor',
-    ).numpy()
-    diff = full - cropped
-
-    assert(np.max(np.abs(diff)) <= noise_fraction * sigma_pix + 1e-6)
-    assert(abs(np.sum(diff)) <= noise_fraction * np.sqrt(flux) + 1e-6)
