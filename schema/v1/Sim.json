@@ -50,7 +50,7 @@
             "default": 1
         },
         "star_render_mode": {
-            "description": "The star rendering mode. `streak` uses a shared streak shape for all stars and is recommended for dense rate-track star fields. In `epsf` mode, `streak` is implemented natively with a per-frame trailed ePSF LUT. `transform` uses discrete per-star transforms and is more computationally expensive with many stars. `fft` is accepted as a legacy alias for `streak`.",
+            "description": "The star rendering mode. In FFT rendering, `streak` uses a shared streak shape for all stars and `transform` uses discrete per-star transforms. Native `epsf` rendering treats both values the same: each star deposits its optical ePSF at every exposure-bin midpoint sample. `fft` is accepted as a legacy alias for `streak`.",
             "type": "string",
             "enum": ["transform", "streak", "fft"],
             "default": "transform"

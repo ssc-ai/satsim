@@ -308,15 +308,17 @@ image-plane target:
 - `spatial_osf`: spatial oversampling factor. `spacial_osf` is also accepted (pre v0.24.0).
 - `temporal_osf`: temporal samples used to smear motion. `"auto"` derives a
   value from star motion. In ePSF `star_render_mode: "transform"`, auto
-  sampling uses detector-pixel trail length, and samples are placed at
-  exposure-bin centers to avoid endpoint bias.
+  sampling uses detector-pixel trail length. Native ePSF star samples are
+  placed at exposure-bin centers to avoid endpoint bias.
 - `padding`: extra real pixels around the image for off-frame sources and
   convolution.
 - `samples`: number of independent transformed configurations to generate.
-- `star_render_mode`: `transform` renders per-star motion; `streak` uses a
-  shared star streak shape. In `epsf` mode, `streak` is implemented natively
-  with a per-frame trailed ePSF LUT and is recommended for dense rate-track
-  star fields. `fft` is accepted as a legacy alias for `streak`.
+- `star_render_mode`: `transform` renders per-star motion. In FFT rendering,
+  `streak` uses a shared star streak shape. Native `epsf` rendering treats
+  both values the same: each star deposits its optical ePSF at every
+  exposure-bin midpoint sample, and stars with exactly zero rotation and
+  translation and no distortion use one sample. `fft` is accepted as a legacy
+  alias for `streak`.
 - `point_rendering`: `bilinear` is the default and preserves sub-pixel point
   centroids by distributing fractional sources over neighboring oversampled
   pixels. Use `floor` to preserve legacy integer-pixel deposition behavior.
@@ -343,9 +345,7 @@ image-plane target:
   controls the fine phase-grid multiplier for `point_rendering:
   "phase_nearest"`; when omitted, SatSim derives it from a 0.02 detector-pixel
   worst-case centroid quantization target. `fallback_to_fft_for_models`
-  defaults to `false`. Native ePSF
-  `star_render_mode: "streak"` builds a trailed LUT in memory per frame; that
-  trailed LUT is not disk-cached. When
+  defaults to `false`. When
   `fallback_to_fft_for_models` is enabled, the optical PSF is generated at the
   full padded frame size and `psf_generation_size`/`psf_generation_padding`
   are ignored. `phase_nearest` cannot be used with FFT fallback. ePSF currently

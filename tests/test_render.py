@@ -10,6 +10,7 @@ from satsim.image.render import render_full, render_piecewise, render_epsf
 from satsim.image.epsf import build_epsf_lut
 from satsim.image.psf import gen_gaussian
 from satsim.image.coordinates import detector_to_oversampled
+from tests.epsf_helpers import assert_equivalent, float64_midpoint_bilinear_reference
 
 
 def _centroid(image):
@@ -139,7 +140,6 @@ def _render_epsf_target(row, col, pe=1000.0, point_rendering='bilinear', kernel_
         [0.0, 0.0],
         render_separate=True,
         point_rendering=point_rendering,
-        phase_oversample=phase_oversample,
     )
 
 
@@ -651,89 +651,14 @@ def test_render_epsf_crop_off_matches_absent_crop():
     assert(metadata == {})
 
 
-def test_render_epsf_tier_metadata_counts_visible_stars_only():
+@pytest.mark.parametrize('star_render_mode', ['transform', 'streak'], ids=['transform', 'streak'])
+def test_render_epsf_tier_metadata_counts_deposited_stars(star_render_mode):
     args = _render_setup()
     osf = args[6]
     epsf_lut = build_epsf_lut(args[7], osf, 31)
+    metadata = {}
 
-    for star_render_mode in ('transform', 'streak'):
-        metadata = {}
-        render_epsf(
-            args[0],
-            args[1],
-            args[2],
-            args[3],
-            args[4],
-            args[5],
-            osf,
-            epsf_lut,
-            [],
-            [],
-            [],
-            [args[4] + _detector_to_oversampled(20.25, osf), -100.0],
-            [args[5] + _detector_to_oversampled(21.75, osf), -100.0],
-            [5.0, 5.0],
-            0.0,
-            1.0,
-            1,
-            0.0,
-            [0.0, 0.0],
-            render_separate=True,
-            star_render_mode=star_render_mode,
-            epsf_crop={
-                'mode': 'manual',
-                'threshold_pe': 10.0,
-                'kernel_size': 5,
-            },
-            epsf_metadata=metadata,
-            psf_os=args[7],
-        )
-
-        assert(metadata['source_count'] == 1)
-        assert(sum(tier['count'] for tier in metadata['tiers']) == 1)
-
-
-def test_render_epsf_star_streak_matches_render_full_moving_stars_without_fallback():
-    args = _render_setup()
-    osf = args[6]
-    epsf_lut = build_epsf_lut(args[7], osf, 31)
-    r_stars_os = [
-        args[4] + _detector_to_oversampled(18.25, osf),
-        args[4] + _detector_to_oversampled(22.75, osf),
-        args[4] + _detector_to_oversampled(27.10, osf),
-    ]
-    c_stars_os = [
-        args[5] + _detector_to_oversampled(20.50, osf),
-        args[5] + _detector_to_oversampled(25.10, osf),
-        args[5] + _detector_to_oversampled(19.80, osf),
-    ]
-    pe_stars_os = [500.0, 750.0, 600.0]
-    star_tran_os = [3.0, 6.0]
-
-    expected = render_full(
-        args[0],
-        args[1],
-        args[2],
-        args[3],
-        args[4],
-        args[5],
-        osf,
-        args[7],
-        [],
-        [],
-        [],
-        r_stars_os,
-        c_stars_os,
-        pe_stars_os,
-        0.0,
-        1.0,
-        24,
-        0.0,
-        star_tran_os,
-        render_separate=True,
-        star_render_mode='streak',
-    )[0].numpy()
-    actual = render_epsf(
+    render_epsf(
         args[0],
         args[1],
         args[2],
@@ -745,126 +670,47 @@ def test_render_epsf_star_streak_matches_render_full_moving_stars_without_fallba
         [],
         [],
         [],
-        r_stars_os,
-        c_stars_os,
-        pe_stars_os,
+        [args[4] + _detector_to_oversampled(20.25, osf), -20.0, -100.0],
+        [args[5] + _detector_to_oversampled(21.75, osf), args[5], -100.0],
+        [5.0, 5.0, 5.0],
         0.0,
         1.0,
-        24,
+        1,
         0.0,
-        star_tran_os,
-        render_separate=True,
-        star_render_mode='streak',
-        psf_os=args[7],
-    )[0].numpy()
-
-    np.testing.assert_allclose(actual, expected, atol=1e-3)
-
-
-def test_render_epsf_star_streak_matches_render_full_absolute_start_translation():
-    args = _render_setup()
-    osf = args[6]
-    epsf_lut = build_epsf_lut(args[7], osf, 31)
-    r_stars_os = [
-        args[4] + _detector_to_oversampled(18.25, osf),
-        args[4] + _detector_to_oversampled(22.75, osf),
-    ]
-    c_stars_os = [
-        args[5] + _detector_to_oversampled(20.50, osf),
-        args[5] + _detector_to_oversampled(25.10, osf),
-    ]
-    pe_stars_os = [500.0, 750.0]
-    star_tran_os = [3.0, 0.0]
-
-    expected = render_full(
-        args[0],
-        args[1],
-        args[2],
-        args[3],
-        args[4],
-        args[5],
-        osf,
-        args[7],
-        [],
-        [],
-        [],
-        r_stars_os,
-        c_stars_os,
-        pe_stars_os,
-        5.0,
-        6.0,
-        24,
-        0.0,
-        star_tran_os,
-        render_separate=True,
-        star_render_mode='streak',
-    )[0].numpy()
-    actual = render_epsf(
-        args[0],
-        args[1],
-        args[2],
-        args[3],
-        args[4],
-        args[5],
-        osf,
-        epsf_lut,
-        [],
-        [],
-        [],
-        r_stars_os,
-        c_stars_os,
-        pe_stars_os,
-        5.0,
-        6.0,
-        24,
-        0.0,
-        star_tran_os,
-        render_separate=True,
-        star_render_mode='streak',
-        psf_os=args[7],
-    )[0].numpy()
-
-    np.testing.assert_allclose(np.sum(actual), np.sum(expected), atol=1e-3)
-    np.testing.assert_allclose(actual, expected, atol=1e-3)
-
-
-def test_render_epsf_star_streak_matches_render_full_rotation_without_fallback():
-    args = _render_setup()
-    osf = args[6]
-    epsf_lut = build_epsf_lut(args[7], osf, 31)
-    r_stars_os = [
-        args[4] + _detector_to_oversampled(18.25, osf),
-        args[4] + _detector_to_oversampled(22.75, osf),
-    ]
-    c_stars_os = [
-        args[5] + _detector_to_oversampled(20.50, osf),
-        args[5] + _detector_to_oversampled(25.10, osf),
-    ]
-    pe_stars_os = [500.0, 750.0]
-
-    expected = render_full(
-        args[0],
-        args[1],
-        args[2],
-        args[3],
-        args[4],
-        args[5],
-        osf,
-        args[7],
-        [],
-        [],
-        [],
-        r_stars_os,
-        c_stars_os,
-        pe_stars_os,
-        0.0,
-        1.0,
-        24,
-        0.02,
         [0.0, 0.0],
         render_separate=True,
-        star_render_mode='streak',
-    )[0].numpy()
+        star_render_mode=star_render_mode,
+        epsf_crop={
+            'mode': 'manual',
+            'threshold_pe': 10.0,
+            'kernel_size': 5,
+        },
+        epsf_metadata=metadata,
+        psf_os=args[7],
+    )
+
+    assert(metadata['source_count'] == 2)
+    assert(sum(tier['count'] for tier in metadata['tiers']) == 2)
+    assert('trail_det' not in metadata)
+
+
+@pytest.mark.parametrize('star_render_mode', ['transform', 'streak'], ids=['transform', 'streak'])
+@pytest.mark.parametrize(
+    'rows_det, cols_det, pe, t_start, t_end, rotation, translation',
+    [
+        ([18.25, 22.75, 27.10], [20.50, 25.10, 19.80], [500.0, 750.0, 600.0], 0.0, 1.0, 0.0, [3.0, 6.0]),
+        ([18.25, 22.75], [20.50, 25.10], [500.0, 750.0], 5.0, 6.0, 0.0, [3.0, 0.0]),
+        ([18.25, 22.75], [20.50, 25.10], [500.0, 750.0], 0.0, 1.0, 0.02, [0.0, 0.0]),
+    ],
+    ids=['moving', 'absolute-start-translation', 'rotation'],
+)
+def test_render_epsf_stars_match_float64_reference(star_render_mode, rows_det, cols_det, pe, t_start, t_end, rotation, translation):
+    args = _render_setup()
+    osf = args[6]
+    epsf_lut = build_epsf_lut(args[7], osf, 31)
+    r_stars_os = [args[4] + _detector_to_oversampled(row, osf) for row in rows_det]
+    c_stars_os = [args[5] + _detector_to_oversampled(col, osf) for col in cols_det]
+
     actual = render_epsf(
         args[0],
         args[1],
@@ -879,18 +725,32 @@ def test_render_epsf_star_streak_matches_render_full_rotation_without_fallback()
         [],
         r_stars_os,
         c_stars_os,
-        pe_stars_os,
-        0.0,
-        1.0,
+        pe,
+        t_start,
+        t_end,
         24,
-        0.02,
-        [0.0, 0.0],
+        rotation,
+        translation,
         render_separate=True,
-        star_render_mode='streak',
+        star_render_mode=star_render_mode,
         psf_os=args[7],
     )[0].numpy()
+    expected = float64_midpoint_bilinear_reference(
+        epsf_lut.numpy(),
+        r_stars_os,
+        c_stars_os,
+        pe,
+        shape=(args[0] // osf, args[1] // osf),
+        pad=args[4] // osf,
+        start=t_start,
+        end=t_end,
+        samples=24,
+        velocity=translation,
+        rotation=rotation,
+        offset=(-0.5, -0.5),
+    )
 
-    np.testing.assert_allclose(actual, expected, atol=1e-3)
+    assert_equivalent(actual, expected, sum(pe))
 
 
 def test_render_epsf_unsupported_obs_model_raises_without_fallback():
@@ -1067,7 +927,6 @@ def test_render_epsf_phase_nearest_rejects_fft_fallback():
             fallback_to_fft_for_models=True,
             psf_os=args[7],
             point_rendering='phase_nearest',
-            phase_oversample=phase_oversample,
         )
 
 
