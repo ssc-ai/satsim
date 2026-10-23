@@ -14,9 +14,11 @@ import scipy
 import pytest
 from tifffile import imread
 from astropy.io import fits as afits
+from astropy.time import Time, TimeDelta
 
 
 from satsim import config, gen_images
+from satsim.satsim import image_generator
 from satsim.satsim import (
     _auto_temporal_osf_for_star_motion,
     _epsf_lut_cache_param,
@@ -557,6 +559,72 @@ def _small_no_noise_target_config(mode='fftconv2p'):
         }
 
     return ssp
+
+
+@pytest.mark.parametrize('track_mode,compression', [
+    (None, None), (None, 'gzip'), ('sidereal', None), ('rate-sidereal', None),
+])
+def test_written_sequence_uses_simulated_exposure_boundaries(tmp_path, track_mode, compression):
+    from satsim.io.satnet import init_annotation, set_frame_annotation
+
+    class ImmediateWriter:
+        # Run real writers synchronously so file-writing failures propagate.
+        def task(self, function, kwargs, tag=None):
+            function(**kwargs)
+
+        def has_tag(self, tag):
+            return False
+
+    ssp = _small_no_noise_target_config()
+    ssp['sim'].update(save_ground_truth=False, save_segmentation=False,
+                      save_movie=False, fits_compression=compression)
+    ssp['geometry']['time'] = [2015, 4, 24, 23, 59, 59.125]
+    ssp['fpa']['time'] = {'exposure': 2.5, 'gap': 0.375}
+    count = 3 if track_mode is None else 7
+    ssp['fpa']['num_frames'] = count
+    if track_mode is not None:
+        ssp['geometry']['site'] = config.load_json('tests/config_site_tle_simple.json')['geometry']['site']
+        ssp['geometry']['site']['track']['mode'] = track_mode
+
+    # Independently render reference pixels and source geometry before export.
+    reference = list(image_generator(copy.deepcopy(ssp), with_meta=True, num_sets=1))
+    gen_images(ssp, output_dir=str(tmp_path), set_name='sequence', queue=ImmediateWriter())
+    files = sorted((tmp_path / 'sequence' / 'ImageFiles').glob('*.fits'))
+    assert len(files) == count
+    collect_start = Time('2015-04-24T23:59:59.125000', format='fits', scale='utc')
+    modes = []
+    for index, filename in enumerate(files):
+        with afits.open(filename) as hdus:
+            science = hdus[1 if compression else 0]
+            hdr = science.header
+            start = collect_start + TimeDelta(index * 2.875, format='sec')
+            for key, delta in [('DATE-OBS', 0), ('DATE-BEG', 0), ('DATE-AVG', 1.25), ('DATE-END', 2.5)]:
+                assert abs((Time(hdr[key], format='fits', scale='utc') - start).sec - delta) < 1e-6
+            assert hdr['DATE-OBS'] == hdr['SH-UT001'] == hdr['DATE-BEG']
+            assert hdr['DATE-END'] == hdr['SH-UT002']
+            assert hdr['TIMESYS'] == 'UTC'
+            assert hdr['EXPTIME'] == hdr['EXPOSURE'] == 2.5
+            modes.append(hdr['TRKMODE'])
+            np.testing.assert_array_equal(science.data, reference[index][0])
+        annotation = json.loads((tmp_path / 'sequence' / 'Annotations' / (filename.stem + '.json')).read_text())
+        metadata = annotation['data']['metadata']
+        assert metadata['exposure_start'] == hdr['DATE-OBS']
+        assert metadata['exposure_end'] == hdr['DATE-END']
+        if track_mode is not None:
+            measurement = Time(datetime.fromisoformat(metadata['time']))
+            assert abs((measurement - Time(hdr['DATE-AVG'], format='fits', scale='utc')).sec) < 1e-6
+        expected = set_frame_annotation(init_annotation('reference', 0, 17, 19, 1.0, 1.0),
+                                        index, 17, 19, reference[index][3], [20, 20],
+                                        star_os_pix=reference[index][12])
+        assert len(annotation['data']['objects']) == len(expected['data']['objects']) == 1
+        for written, original in zip(annotation['data']['objects'], expected['data']['objects']):
+            for key, value in original.items():
+                if key.startswith(('x_', 'y_')):
+                    assert written[key] == value
+    if track_mode == 'rate-sidereal':
+        assert modes == ['rate'] * 6 + ['sidereal']
+    elif track_mode == 'sidereal':
+        assert modes == ['sidereal'] * count
 
 
 def _load_debug_frame(dirname, name, frame=0):

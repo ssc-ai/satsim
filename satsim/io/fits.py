@@ -5,7 +5,9 @@ import numpy as np
 from astropy.io import fits
 from astropy import units as u
 from astropy.coordinates import SkyCoord
-from datetime import datetime, timedelta
+from astropy.time import Time, TimeDelta
+from datetime import datetime, timezone
+from copy import deepcopy
 
 from satsim import __version__
 
@@ -17,6 +19,9 @@ _COMPRESSION_TYPES = {
     'hcompress': 'HCOMPRESS_1',
     'plio': 'PLIO_1',
 }
+
+# One-microsecond date precision, plus 10 ps for split-JD arithmetic roundoff.
+_EXPOSURE_TOLERANCE_SECONDS = 1e-6 + 1e-11
 
 
 def _normalize_compression(fits_compression):
@@ -38,22 +43,136 @@ def _normalize_compression(fits_compression):
         fits_compression, valid))
 
 
-def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, overwrite=False, dtype='uint16', astrometrics=None, fits_compression=None):
+def _utc_time(value, name):
+    """Read a scalar epoch; naive datetimes and strings denote UTC."""
+    try:
+        if value is None:
+            raise ValueError('missing time')
+        if isinstance(value, datetime) and value.tzinfo is not None:
+            value = value.astimezone(timezone.utc)
+        epoch = Time(value).utc if isinstance(value, Time) else Time(value, scale='utc')
+        if not epoch.isscalar or not np.isfinite(epoch.jd1) or not np.isfinite(epoch.jd2):
+            raise ValueError('not a finite scalar time')
+    except (TypeError, ValueError) as exc:
+        raise ValueError('{} must be a valid scalar datetime, Astropy Time or UTC date string.'.format(name)) from exc
+    return epoch
+
+
+def _exposure_timing(dt_start, exposure_time, exposure_end, astrometrics):
+    """Resolve acquisition timing independently of the astrometric/WCS epoch.
+
+    Explicit arguments and per-frame exposure metadata must agree to one
+    microsecond (the serialized date precision), allowing picosecond roundoff.
+    Legacy astrometric-only
+    callers supply a midpoint, from which start is derived using duration.
+    A legacy WCS DATE-OBS is a last timing reference before a call-time UTC
+    default; it never overrides explicit timing or an astrometric midpoint.
+    """
+    try:
+        if isinstance(exposure_time, (bool, str)) or np.ndim(exposure_time) != 0:
+            raise ValueError('not a numeric scalar')
+        duration = float(exposure_time)
+        if not np.isfinite(duration) or duration < 0:
+            raise ValueError('not a finite nonnegative duration')
+    except (TypeError, ValueError) as exc:
+        raise ValueError('exposure_time must be a finite nonnegative number of seconds.') from exc
+
+    metadata = astrometrics if astrometrics is not None else {}
+
+    def explicit_time(argument, key):
+        result = _utc_time(argument, key) if argument is not None else None
+        if key in metadata:
+            other = _utc_time(metadata[key], key)
+            if result is not None and abs((result - other).to_value('sec')) > _EXPOSURE_TOLERANCE_SECONDS:
+                raise ValueError('Conflicting explicit {} values.'.format(key))
+            if result is None:
+                result = other
+        return result
+
+    start = explicit_time(dt_start, 'exposure_start')
+    end = explicit_time(exposure_end, 'exposure_end')
+    if start is None:
+        if 'time' in metadata:
+            start = _utc_time(metadata['time'], "astrometrics['time']")
+            if duration != 0:
+                start = start - TimeDelta(duration / 2, format='sec')
+        elif 'DATE-OBS' in metadata.get('wcs_header', {}):
+            wcs = metadata['wcs_header']
+            start = Time(wcs['DATE-OBS'], format='fits', scale=wcs.get('TIMESYS', 'UTC').lower()).utc
+            start = _utc_time(start, 'WCS DATE-OBS')
+        elif end is not None:
+            raise ValueError('exposure_end requires an exposure start or legacy timing reference.')
+        else:
+            start = _utc_time(datetime.now(timezone.utc), 'current time')
+    # Even adding zero can change Astropy's two-part time representation.
+    expected_end = start if duration == 0 else start + TimeDelta(duration, format='sec')
+    if end is None:
+        end = expected_end
+    elif abs((end - expected_end).to_value('sec')) > _EXPOSURE_TOLERANCE_SECONDS:
+        raise ValueError('Exposure boundaries conflict with exposure_time.')
+    elapsed = (end - start).to_value('sec')
+    if elapsed < -_EXPOSURE_TOLERANCE_SECONDS:
+        raise ValueError('Exposure end precedes exposure start.')
+    if duration == 0:
+        # Validate explicit boundaries before canonicalizing all three epochs.
+        return start, start, start, duration
+    if elapsed < 0:
+        # A tolerated numerical reversal must not create reversed FITS dates.
+        end = max(start, expected_end)
+    midpoint = start if end == start else start + (end - start) / 2
+    return start, midpoint, end, duration
+
+
+def _write_exposure_timing(hdr, start, midpoint, end, duration):
+    """Apply timing last so WCS metadata cannot replace acquisition epochs."""
+    dates = []
+    for epoch in (start, midpoint, end):
+        epoch = epoch.replicate()
+        epoch.precision = 6
+        dates.append(epoch.to_value('fits', subfmt='date_hms'))
+    hdr['TIMESYS'] = ('UTC', 'Time scale of acquisition timestamps')
+    hdr['DATE-OBS'] = (dates[0], 'Exposure start (UTC)')
+    hdr['DATE-BEG'] = (dates[0], 'Exposure start (UTC)')
+    hdr['DATE-AVG'] = (dates[1], 'Arithmetic midpoint (UTC); unweighted')
+    hdr['DATE-END'] = (dates[2], 'Exposure end (UTC)')
+    hdr['TIME-OBS'] = (dates[0].split('T')[1], 'Time of day at exposure start (UTC)')
+    hdr['SH-UT001'] = (dates[0], 'Shutter exposure start (UTC)')
+    hdr['SH-UT002'] = (dates[2], 'Shutter exposure end (UTC)')
+    hdr['EXPTIME'] = (duration, 'Exposure duration in seconds; excludes gaps')
+    hdr['EXPOSURE'] = (duration, 'Exposure duration in seconds; excludes gaps')
+    hdr['MJD-OBS'] = (float(start.utc.mjd), 'MJD of exposure start (UTC)')
+    for key, epoch in zip(('MJD-BEG', 'MJD-AVG', 'MJD-END'), (start, midpoint, end)):
+        if key in hdr:
+            hdr[key] = (float(epoch.utc.mjd), 'MJD of {} (UTC)'.format(key[4:].lower()))
+
+
+def save(filename, fpa, exposure_time=0, dt_start=None, header={}, overwrite=False, dtype='uint16', astrometrics=None, fits_compression=None, exposure_end=None):
     """Save a SatNet compatible FITS file.
 
     Args:
         filename: `string`, the FITS filename.
         fpa: `np.array`, input image as a 2D numpy array.
-        exposure_time: `float`, exposure time for header.
-        dt_start: `datetime`, datetime of start of exposure.
+        exposure_time: `float`, finite nonnegative exposure duration in seconds.
+            Zero writes identical start, midpoint and end timestamps.
+        dt_start: `datetime`, Astropy `Time` or UTC date string, exposure start.
+            Aware datetimes are converted to UTC; naive datetimes mean UTC.
+            If omitted, use astrometrics['exposure_start'], otherwise derive
+            start from the legacy astrometrics['time'] midpoint and duration,
+            otherwise use legacy WCS DATE-OBS, or current UTC at call time.
+            Explicit timing sources must agree; WCS dates cannot override them.
         header: `dict`, placeholder, not implemented
         overwrite: `boolean`, if True overwrite file if it exists
         dtype: `string`, 'int16', 'uint16', 'int32', 'uint32', or 'float32'. default: 'int16'
         fits_compression: `string`, FITS compression type. Valid values: 'none', 'gzip',
             'gzip2', 'rice', 'hcompress', 'plio'.
+        exposure_end: optional explicit end, in the same formats as dt_start.
+            Also read from astrometrics['exposure_end']. Boundaries must match
+            exposure_time within one microsecond. Dates are serialized as UTC
+            FITS strings to six fractional digits, without timezone suffixes.
     """
     
     ver = 'SATSIM {}'.format(__version__)
+    timing = _exposure_timing(dt_start, exposure_time, exposure_end, astrometrics)
 
     # copy data to be thread safe
     fpa_copy = np.copy(fpa)
@@ -64,11 +183,6 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     else:
         hdu = fits.PrimaryHDU(fpa_copy)
     hdr = hdu.header
-
-    if astrometrics is not None and 'time' in astrometrics:
-        dt_start = astrometrics['time']
-    if astrometrics is not None and 'wcs_header' in astrometrics:
-        dt_start = datetime.fromisoformat(astrometrics['wcs_header']['DATE-OBS'])
 
     def get_or_default(key, default=''):
         if astrometrics is None or key not in astrometrics:
@@ -95,8 +209,6 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     hdr['APTAREA']  = 0
     hdr['APTDIA']   = 0
     hdr['OBSERVER'] = get_or_default('observer')
-    hdr['DATE-OBS'] = dt_start.isoformat()
-    hdr['TIME-OBS'] = str(dt_start.time())
     hdr['SWCREATE'] = ver
     hdr['SET-TEMP'] = 0
     hdr['COLORCCD'] = 0
@@ -141,12 +253,8 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
     hdr['ORCHCOMM'] = orchcomm
     hdr['INSTRUME'] = ''
     hdr['FILTER']   = ''
-    hdr['EXPTIME']  = exposure_time
-    hdr['EXPOSURE'] = exposure_time
     hdr['CBLACK']   = int(np.amin(fpa.flatten()))
     hdr['CWHITE']   = int(np.median(fpa.flatten())*4)
-    hdr['SH-UT001'] = dt_start.isoformat()
-    hdr['SH-UT002'] = (dt_start + timedelta(seconds=exposure_time)).isoformat()
     hdr['CTYPE1']   = 'RA---TAN'
     hdr['CTYPE2']   = 'DEC--TAN'
     hdr['CRVAL1']   = get_or_default('ra_apparent' if has_apparent_wcs else 'ra', 0)
@@ -197,8 +305,9 @@ def save(filename, fpa, exposure_time=0, dt_start=datetime.now(), header={}, ove
         for key in list(hdr):
             if key.startswith(('CTYPE', 'CRPIX', 'CRVAL', 'CDELT', 'CROTA', 'CD1_', 'CD2_', 'PC1_', 'PC2_')):
                 del hdr[key]
-        hdr.update(astrometrics['wcs_header'])
+        hdr.update(deepcopy(astrometrics['wcs_header']))
 
+    _write_exposure_timing(hdr, *timing)
     hdu.writeto(filename, overwrite=overwrite)
 
     return hdu, hdr
