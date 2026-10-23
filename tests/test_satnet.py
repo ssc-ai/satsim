@@ -6,6 +6,7 @@ from collections import OrderedDict
 from datetime import datetime
 
 import numpy as np
+import pytest
 import tifffile
 import tensorflow as tf
 
@@ -365,3 +366,177 @@ def test_annotation_empty():
     b = set_frame_annotation(a, 0, h, w, [], [5,5], filter_ob=True, star_os_pix=pix)
 
     assert(len(b['data']['objects']) == 0)
+
+
+def _f32(x):
+    return float(np.float32(x))
+
+
+def _star_pix(size, rr, cc, mv, **fields):
+    pix = {
+        'h': size,
+        'w': size,
+        'h_pad': 0,
+        'w_pad': 0,
+        'rr': rr,
+        'cc': cc,
+        'pe': [100.0] * len(rr),
+        'mv': mv,
+        'ra': [0.0] * len(rr),
+        'dec': [0.0] * len(rr),
+        'seg_id': None,
+        't_start': 0.0,
+        't_end': 1.0,
+        'rot': 0.0,
+        'tran': [0.0, 0.0],
+        'min_mv': 15,
+    }
+    pix.update(fields)
+    return pix
+
+
+def _star_objects(pix):
+    size = pix['h']
+    a = init_annotation('./', 0, size, size, 2., 3.)
+    return set_frame_annotation(a, 0, size, size, [], filter_ob=True, star_os_pix=pix)['data']['objects']
+
+
+def _expected_star(size, rows, cols, magnitude, pe_per_sec, seg_id, ra, dec, **fields):
+    ys = [(r + 0.5) / size for r in rows]
+    xs = [(c + 0.5) / size for c in cols]
+    star = {
+        'class_name': 'Star',
+        'class_id': 2,
+        'y_min': min(ys),
+        'x_min': min(xs),
+        'y_max': max(ys),
+        'x_max': max(xs),
+        'y_center': (min(ys) + max(ys)) / 2,
+        'x_center': (min(xs) + max(xs)) / 2,
+        'bbox_height': max(ys) - min(ys),
+        'bbox_width': max(xs) - min(xs),
+        'source': 'satsim',
+        'magnitude': magnitude,
+        'pe_per_sec': pe_per_sec,
+        'y_start': ys[0],
+        'x_start': xs[0],
+        'y_mid': ys[1],
+        'x_mid': xs[1],
+        'y_end': ys[2],
+        'x_end': xs[2],
+        'seg_id': seg_id,
+        'object_name': '',
+        'object_id': '',
+        'ra': ra,
+        'dec': dec,
+        'variable': False,
+    }
+    star.update(fields)
+    return star
+
+
+def _types(obj):
+    return {k: type(v) for k, v in obj.items()}
+
+
+@pytest.mark.parametrize('seg_id, expected_seg_ids', [
+    (None, [-1, -1]),
+    ([7, 8, 9, 10, 11, 3], [7, 3]),
+], ids=['default_seg_id', 'explicit_seg_id'])
+def test_annotation_star_filters_and_keeps_order(seg_id, expected_seg_ids):
+
+    nan = float('nan')
+    pix = _star_pix(
+        16,
+        rr=[3.5, 5.5, nan, -4.5, 7.5, 11.5],
+        cc=[7.5, 5.5, 5.5, 7.5, 23.5, 1.5],
+        mv=[9.0, 16.0, 9.0, 9.0, 9.0, 15.0],
+        pe=[100.1, 1.0, 1.0, 1.0, 1.0, 250.0],
+        ra=[0.1, 1.0, 1.0, 1.0, 1.0, 359.5],
+        dec=[-0.1, 1.0, 1.0, 1.0, 1.0, 89.75],
+        seg_id=seg_id,
+    )
+
+    objs = _star_objects(pix)
+
+    expected = [
+        _expected_star(16, [3.5] * 3, [7.5] * 3, 9.0, _f32(100.1), expected_seg_ids[0], _f32(0.1), _f32(-0.1)),
+        _expected_star(16, [11.5] * 3, [1.5] * 3, 15.0, 250.0, expected_seg_ids[1], 359.5, 89.75),
+    ]
+    assert objs == expected
+    assert [_types(o) for o in objs] == [_types(o) for o in expected]
+
+
+@pytest.mark.parametrize('rr, cc, mv', [
+    ([], [], []),
+    ([3.5, -4.5, float('nan')], [7.5, 7.5, 5.5], [16.0, 9.0, 9.0]),
+], ids=['empty', 'all_filtered'])
+def test_annotation_star_none_annotated(rr, cc, mv):
+
+    pix = _star_pix(
+        16,
+        rr=rr,
+        cc=cc,
+        mv=mv,
+        seg_id=[1] * len(rr),
+        variable=[True] * len(rr),
+        snr_aperture=[5.0] * len(rr),
+        cloud_transmission=np.ones((4, 4), dtype=np.float32),
+    )
+
+    assert _star_objects(pix) == []
+
+
+def test_annotation_star_positions_keep_float64_sky():
+
+    pix = _star_pix(
+        16,
+        rr=[3.5],
+        cc=[7.5],
+        mv=[9.0],
+        ra=[0.1],
+        dec=[-0.1],
+        annotation_positions=([[3.5] * 3], [[7.5] * 3]),
+    )
+
+    objs = _star_objects(pix)
+
+    expected = [_expected_star(16, [3.5] * 3, [7.5] * 3, 9.0, 100.0, -1, 0.1, -0.1)]
+    assert objs == expected
+    assert [_types(o) for o in objs] == [_types(o) for o in expected]
+
+
+def test_annotation_star_optional_fields():
+
+    cloud_transmission = np.arange(16, dtype=np.float32).reshape(4, 4) / 16
+    pix = _star_pix(
+        16,
+        rr=[3.5, 5.5, 11.5, 13.5],
+        cc=[7.5, 5.5, 1.5, 13.5],
+        mv=[9.0, 16.0, 10.0, 11.0],
+        seg_id=[1, 2, 3, 4],
+        variable=[True, True, False, True],
+        snr_aperture=[5.25, 99.0, None, 6.5],
+        cloud_transmission=cloud_transmission,
+    )
+
+    objs = _star_objects(pix)
+
+    def expected(row, col, magnitude, seg_id, variable, snr_aperture, cloud_row, cloud_col):
+        return _expected_star(
+            16, [row] * 3, [col] * 3, magnitude, 100.0, seg_id, 0.0, 0.0,
+            variable=variable,
+            snr_aperture=snr_aperture,
+            cloud_sample_row=cloud_row,
+            cloud_sample_col=cloud_col,
+            cloud_transmission=(4 * cloud_row + cloud_col) / 16,
+        )
+
+    expected_objs = [
+        expected(3.5, 7.5, 9.0, 1, True, 5.25, 0.5, 1.5),
+        expected(11.5, 1.5, 10.0, 3, False, None, 2.5, 0.0),
+        expected(13.5, 13.5, 11.0, 4, True, 6.5, 3.0, 3.0),
+    ]
+    assert objs == expected_objs
+    assert [_types(o) for o in objs] == [_types(o) for o in expected_objs]
+    assert list(objs[0])[-7:] == ['ra', 'dec', 'variable', 'snr_aperture', 'cloud_sample_row', 'cloud_sample_col', 'cloud_transmission']
