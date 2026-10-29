@@ -472,11 +472,17 @@ def test_graph_render_accepts_lut_with_dynamic_kernel_size():
 
 
 @pytest.mark.parametrize(
-    'rotation, translation',
-    [(0.0, [0.0, 0.0]), (-0.0, [-0.0, 0.0]), (tf.constant(0.0), [tf.constant(0.0), tf.constant(0.0)])],
+    'rotation, translation, tensor_inputs',
+    [(0.0, [0.0, 0.0], False), (-0.0, [-0.0, 0.0], False), (0.0, [0.0, 0.0], True)],
     ids=['static', 'negative-zero', 'static-tensors'],
 )
-def test_exact_zero_motion_renders_identically_for_any_t_osf(rotation, translation):
+def test_exact_zero_motion_renders_identically_for_any_t_osf(rotation, translation, tensor_inputs):
+    # Collection must leave TensorFlow uninitialized so CLI tests can select
+    # their GPU before the first render on hosts with multiple devices.
+    if tensor_inputs:
+        rotation = tf.constant(rotation)
+        translation = [tf.constant(value) for value in translation]
+
     def render(t_osf):
         return transform_and_add_epsf(
             tf.zeros([8, 8]), [12.3, 7.6], [11.7, 15.2], [10.0, 3.0], 0.0, 1.0, t_osf, rotation, translation,
