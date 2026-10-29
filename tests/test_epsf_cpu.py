@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import tensorflow as tf
 
+import satsim.image.epsf as epsf
 from satsim.image.epsf import _choose_star_accumulator, build_epsf_lut, transform_and_add_epsf
 from satsim.image.render import render_epsf
 from satsim.util import configure_eager
@@ -172,3 +173,43 @@ def test_cpu_scope_on_gpu_host_matches_gpu_render():
 
     assert 'GPU' in expected.device
     assert_equivalent(actual.numpy(), expected.numpy().astype(np.float64), 9400.)
+
+
+@requires_gpu
+@pytest.mark.parametrize('cpu_batches', [0, 1], ids=['first-batch', 'later-batch'])
+def test_gpu_position_transform_outputs_never_reach_cpu_kernel(monkeypatch, cpu_batches):
+    kernel_batches = []
+    add_stamps = epsf.add_epsf_stamps
+
+    def counted_add_stamps(*args):
+        kernel_batches.append(len(args[1]))
+        add_stamps(*args)
+
+    monkeypatch.setattr(epsf, 'add_epsf_stamps', counted_add_stamps)
+
+    def render(accumulator):
+        calls = []
+
+        def position_transform(rows, cols):
+            calls.append(int(tf.size(rows)))
+            rows, cols = _warp(rows, cols)
+            if len(calls) <= cpu_batches:
+                return rows, cols
+            with tf.device('/GPU:0'):
+                return tf.identity(rows), tf.identity(cols)
+
+        with tf.device('/CPU:0'):
+            image = transform_and_add_epsf(
+                tf.zeros([12, 12]), ROWS, COLS, COUNTS, 0., 1., 4, 0.002, [0.3, -0.2], _lut(True), 3,
+                batch_size_cap=2, position_transform=position_transform, accumulator=accumulator)
+        return image, calls
+
+    expected, expected_calls = render('tensorflow')
+    actual, auto_calls = render('auto')
+
+    assert len(kernel_batches) == cpu_batches
+    assert auto_calls == expected_calls
+    assert_equivalent(actual.numpy(), expected.numpy().astype(np.float64), sum(COUNTS))
+    with pytest.raises(ValueError, match='position_transform outputs on the CPU'):
+        render('cpu')
+    assert len(kernel_batches) == 2 * cpu_batches

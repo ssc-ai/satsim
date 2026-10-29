@@ -719,8 +719,9 @@ def transform_and_add_epsf(
     anything. ``'auto'`` uses ``'cpu'`` when those conditions hold and
     ``'tensorflow'`` otherwise. Both give the same samples, phases, weights and
     tiers; only the summation order and precision differ. On the CPU path a
-    ``position_transform`` runs under the image's device scope, and its outputs
-    are not checked for placement.
+    ``position_transform`` runs under the image's device scope. If a batch of
+    its outputs is not on the CPU, ``'cpu'`` raises ``ValueError`` and
+    ``'auto'`` deposits that batch and the rest of the render with TensorFlow.
     """
     fpa = tf.convert_to_tensor(fpa)
     if batch_size_cap is None and batch_size is not None:
@@ -911,7 +912,7 @@ def _deposit_stars(fpa, stars, accumulator):
         stars.time_grid, stars.rotation, stars.translation, stars.frame_extent_os, stars.s_osf,
         [(group.lut, group.rows, group.cols, group.counts) for group in stars.groups])
     if _choose_star_accumulator(accumulator, tf.executing_eagerly(), devices, fpa.dtype) == 'cpu':
-        return _accumulate_stars_cpu(fpa, stars)
+        return _accumulate_stars_cpu(fpa, stars, accumulator)
     return _accumulate_stars_tf(fpa, stars)
 
 
@@ -933,7 +934,7 @@ def _choose_star_accumulator(requested, executing_eagerly, devices, image_dtype)
         requirement = 'eager execution'
     elif image_dtype not in (tf.float32, tf.float64):
         requirement = 'a float32 or float64 image'
-    elif not all(tf.DeviceSpec.from_string(device).device_type == 'CPU' for device in devices):
+    elif not _on_cpu(devices):
         requirement = 'every render tensor on the CPU'
     else:
         return 'cpu'
@@ -942,63 +943,112 @@ def _choose_star_accumulator(requested, executing_eagerly, devices, image_dtype)
     return 'tensorflow'
 
 
-def _accumulate_stars_tf(fpa, stars):
-    """Deposit ``stars`` with TensorFlow ops; graph-safe on any device."""
-    for group in stars.groups:
+def _on_cpu(devices):
+    return all(tf.DeviceSpec.from_string(device).device_type == 'CPU' for device in devices)
+
+
+@dataclass(frozen=True)
+class _PendingBatch:
+    """A transformed sample batch the CPU accumulator handed to TensorFlow.
+
+    ``rows``, ``cols`` and ``values`` are ``_star_sample_batch`` output for
+    sources ``start:end`` of ``groups[group_index]``; ``end`` is where the
+    rest of that group resumes.
+    """
+    group_index: int
+    end: tf.Tensor
+    rows: tf.Tensor
+    cols: tf.Tensor
+    values: tf.Tensor
+
+
+def _accumulate_stars_tf(fpa, stars, pending=None):
+    """Deposit ``stars`` with TensorFlow ops; graph-safe on any device.
+
+    With a ``_PendingBatch``, deposit it, then the rest of its group and every
+    later group; earlier sources are already in ``fpa``.
+    """
+    groups = stars.groups
+    if pending is not None:
+        group = groups[pending.group_index]
+        fpa = _add_star_samples(fpa, stars, group, pending.rows, pending.cols, pending.values)
+        fpa = _deposit_star_group(fpa, stars, group, start=pending.end)
+        groups = groups[pending.group_index + 1:]
+    for group in groups:
         fpa = _deposit_star_group(fpa, stars, group)
     return fpa
 
 
-def _deposit_star_group(fpa, stars, group):
+def _deposit_star_group(fpa, stars, group, start=0):
     n = tf.shape(group.rows)[0]
-    row_offset_os, col_offset_os = stars.offset_os
 
     def cond(start, image):
         return tf.less(start, n)
 
     def body(start, image):
         end, rr, cc, vv = _star_sample_batch(stars, group, start)
-        image = add_epsf_counts(
-            image,
-            rr,
-            cc,
-            vv,
-            group.lut,
-            stars.s_osf,
-            r_offset_os=row_offset_os,
-            c_offset_os=col_offset_os,
-            point_rendering=stars.point_rendering,
-            batch_element_budget=stars.batch_element_budget,
-            batch_size_cap=stars.batch_size_cap,
-        )
-        return end, image
+        return end, _add_star_samples(image, stars, group, rr, cc, vv)
 
-    _, fpa = tf.while_loop(cond, body, (tf.constant(0, tf.int32), fpa))
+    _, fpa = tf.while_loop(cond, body, (tf.convert_to_tensor(start, tf.int32), fpa))
     return fpa
 
 
-def _accumulate_stars_cpu(fpa, stars):
+def _add_star_samples(image, stars, group, rr, cc, vv):
+    row_offset_os, col_offset_os = stars.offset_os
+    return add_epsf_counts(
+        image,
+        rr,
+        cc,
+        vv,
+        group.lut,
+        stars.s_osf,
+        r_offset_os=row_offset_os,
+        c_offset_os=col_offset_os,
+        point_rendering=stars.point_rendering,
+        batch_element_budget=stars.batch_element_budget,
+        batch_size_cap=stars.batch_size_cap,
+    )
+
+
+def _accumulate_stars_cpu(fpa, stars, requested):
     """Deposit ``stars`` with the compiled float64 kernel; return an image of ``fpa.dtype``.
 
     Computes the same sample positions, phases, bilinear weights and
     dtype-cast LUT values as ``_accumulate_stars_tf``; only the sum differs.
     Callers must have routed here with ``_choose_star_accumulator``, so every
-    tensor is already on the CPU.
+    input tensor is already on the CPU. ``position_transform`` outputs are
+    placed only when it runs, so each batch is checked here: off the CPU,
+    ``'auto'`` hands that batch and the partial sum to ``_accumulate_stars_tf``
+    without transforming it again, and ``'cpu'`` raises ``ValueError``.
     """
-    row_offset_os, col_offset_os = stars.offset_os
     with tf.device(fpa.device):
-        image = np.array(fpa.numpy(), dtype=np.float64)
-        for group in stars.groups:
-            lut = tf.cast(group.lut, fpa.dtype)
-            lut_values = lut.numpy()
-            n = tf.shape(group.rows)[0]
-            start = 0
-            while start < n:
-                start, rr, cc, vv = _star_sample_batch(stars, group, start)
-                coords = _epsf_lookup_coords(
-                    rr, cc, vv, row_offset_os, col_offset_os, stars.point_rendering, fpa.dtype, stars.s_osf, lut)
-                add_epsf_stamps(image, *(coord.numpy() for coord in coords), lut_values)
-        return tf.constant(image.astype(fpa.dtype.as_numpy_dtype))
+        image, pending = _sum_stars_on_cpu(fpa, stars, requested)
+        partial = tf.constant(image.astype(fpa.dtype.as_numpy_dtype))
+    if pending is None:
+        return partial
+    return _accumulate_stars_tf(partial, stars, pending)
+
+
+def _sum_stars_on_cpu(fpa, stars, requested):
+    """Return the float64 image sum and the first ``_PendingBatch`` not on the CPU, or ``None``."""
+    row_offset_os, col_offset_os = stars.offset_os
+    image = np.array(fpa.numpy(), dtype=np.float64)
+    for group_index, group in enumerate(stars.groups):
+        lut = tf.cast(group.lut, fpa.dtype)
+        lut_values = lut.numpy()
+        n = tf.shape(group.rows)[0]
+        start = 0
+        while start < n:
+            end, rr, cc, vv = _star_sample_batch(stars, group, start)
+            if not _on_cpu(_input_devices(rr, cc)):
+                if requested == 'cpu':
+                    raise ValueError('the cpu ePSF star accumulator requires position_transform outputs on the CPU')
+                return image, _PendingBatch(group_index, end, rr, cc, vv)
+            coords = _epsf_lookup_coords(
+                rr, cc, vv, row_offset_os, col_offset_os, stars.point_rendering, fpa.dtype, stars.s_osf, lut)
+            add_epsf_stamps(image, *(coord.numpy() for coord in coords), lut_values)
+            start = end
+    return image, None
 
 
 def _star_sample_batch(stars, group, start):

@@ -104,9 +104,9 @@ def routed(accumulator):
     runs = []
     accumulate = epsf._accumulate_stars_cpu
 
-    def spy(fpa, stars):
+    def spy(fpa, *args):
         runs.append(fpa.device)
-        return accumulate(fpa, stars)
+        return accumulate(fpa, *args)
 
     epsf._accumulate_stars_cpu = spy
     try:
