@@ -1,6 +1,14 @@
 History
 =======
 
+0.27.2 (unreleased)
+---------------------
+
+* **BEHAVIORAL CHANGE:** Render native ePSF `streak` stars like `transform`: each star deposits its optical ePSF at every exposure-bin midpoint. This fixes clipped one-sided trails, field-rotation shape and phase carry. Stars whose ePSF wings reach the frame are now kept, so dense fields deposit slightly more stars. `epsf.crop` tier counts count the deposited stars, and frame metadata no longer includes `trail_det`. (#63)
+* Accelerate eager CPU ePSF star deposition with a compiled float64 kernel. It runs only when every render tensor, including `position_transform` output, is on the CPU; GPU, mixed-device and graph renders keep TensorFlow. Pixels can differ from TensorFlow at rounding level. (#63)
+* Skip unused PSF generation for native ePSF `streak` frames with a warm LUT cache, and keep FFT temporal sampling and per-source star transforms when `fallback_to_fft_for_models` applies. (#63)
+* **API CHANGE:** Deprecate the trailed ePSF path. `render_epsf` `phase_oversample` and `epsf_normalize`, and `resolve_epsf_tiers` `trail_det`, are ignored with a `DeprecationWarning`. `filter_epsf_sources_in_bounds` without `kernel_size` warns and applies the previous center-only rule. `build_trailed_epsf_lut`, `transform_and_add_trailed_epsf` and `add_epsf_counts_tiered` raise `NotImplementedError` naming their replacement. (#63)
+
 0.27.1
 ---------------------
 
@@ -9,10 +17,6 @@ History
 * Accelerate star annotation generation by converting masked TensorFlow columns to NumPy once before iterating over stars, preserving annotation values, types, ordering and optional fields. (#62)
 * **BEHAVIORAL CHANGE:** Standardize FITS `DATE-OBS` as the start of each simulated exposure. Previously, tracked output without distortion wrote the exposure midpoint, while distortion-WCS output wrote exposure start; untracked output could use file-generation time. Add `DATE-BEG`, arithmetic-midpoint `DATE-AVG`, `DATE-END`, and `TIMESYS='UTC'`; synchronize time-of-day, shutter, exposure-duration and UTC MJD fields, and serialize dates to six fractional digits without timezone suffixes. Astrometric midpoint quantities and the validated WCS reference epoch (`WCSMJD`, TT) are preserved. Consumers that treated affected legacy `DATE-OBS` as a midpoint should use `DATE-AVG` for new output or derive midpoint from exposure start and duration; do not add half an exposure to `DATE-AVG` again. Historical files are not modified; do not apply a blanket half-exposure correction because older output paths differ. Record the code revision in dataset provenance. (#58)
 * Preserve zero-duration FITS writes at fractional-second epochs by canonicalizing validated start, midpoint and end timestamps to the same instant; apply the documented timing tolerance consistently. (#58)
-* **BEHAVIORAL CHANGE:** Render native ePSF `streak` stars like `transform`: each star deposits its optical ePSF at every exposure-bin midpoint. This fixes clipped one-sided trails, field-rotation shape and phase carry. Stars whose ePSF wings reach the frame are now kept, so dense fields deposit slightly more stars. `epsf.crop` tier counts count the deposited stars, and frame metadata no longer includes `trail_det`. (#63)
-* Accelerate eager CPU ePSF star deposition with a compiled float64 kernel. It runs only when every render tensor, including `position_transform` output, is on the CPU; GPU, mixed-device and graph renders keep TensorFlow. Pixels can differ from TensorFlow at rounding level. (#63)
-* Skip unused PSF generation for native ePSF `streak` frames with a warm LUT cache, and keep FFT temporal sampling and per-source star transforms when `fallback_to_fft_for_models` applies. (#63)
-* **API CHANGE:** Deprecate the trailed ePSF path. `render_epsf` `phase_oversample` and `epsf_normalize`, and `resolve_epsf_tiers` `trail_det`, are ignored with a `DeprecationWarning`. `filter_epsf_sources_in_bounds` without `kernel_size` warns and applies the previous center-only rule. `build_trailed_epsf_lut`, `transform_and_add_trailed_epsf` and `add_epsf_counts_tiered` raise `NotImplementedError` naming their replacement. (#63)
 
 0.27.0
 ---------------------
