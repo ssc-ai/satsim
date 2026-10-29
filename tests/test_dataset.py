@@ -92,6 +92,9 @@ def test_dataset_augment():
         # values across integer boundaries. Check the injected signal rather
         # than requiring a bit-identical reduction of the large bias plane.
         bias_dn = ssp['fpa']['a2d']['bias'] * img.size
+        # A positive noiseless scene must not acquire below-bias background
+        # pixels when small FFT residuals pass through ADC flooring.
+        assert np.all(img >= ssp['fpa']['a2d']['bias'])
         injected_dn = np.sum(img, dtype=np.float64) - bias_dn
         np.testing.assert_allclose(injected_dn, 108.0, rtol=0, atol=2.0)
         box_pad = 10.0 / ssp['fpa']['width']

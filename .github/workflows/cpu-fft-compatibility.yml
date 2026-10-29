@@ -1,0 +1,55 @@
+name: CPU FFT Compatibility
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fft-compatibility:
+    name: TensorFlow ${{ matrix.tensorflow }} CPU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tensorflow: "2.13.1"
+            numpy: "1.24.3"
+          - tensorflow: "2.19.0"
+            numpy: "1.26.4"
+          - tensorflow: "2.20.0"
+            numpy: "1.26.4"
+    env:
+      CUDA_VISIBLE_DEVICES: ""
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      NUMBA_NUM_THREADS: "1"
+      TF_NUM_INTRAOP_THREADS: "1"
+      TF_NUM_INTEROP_THREADS: "1"
+      TF_CPP_MIN_LOG_LEVEL: "2"
+      SATSIM_SKYFIELD_LOAD_DIR: ${{ github.workspace }}/.skyfield
+      SATSIM_TEST_TF_VERSION: ${{ matrix.tensorflow }}
+      SATSIM_TEST_NUMPY_VERSION: ${{ matrix.numpy }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: setup.py
+      - name: Install a consistent runtime and the package
+        run: |
+          python -m pip install --upgrade pip "setuptools<81" wheel
+          python -m pip install . "tensorflow==$SATSIM_TEST_TF_VERSION" "numpy==$SATSIM_TEST_NUMPY_VERSION" "protobuf<6" "pytest==7.2.1" "jsonschema>=4.23,<5"
+          python -c 'import os, tensorflow as tf, numpy as np; assert tf.__version__ == os.environ["SATSIM_TEST_TF_VERSION"]; assert np.__version__ == os.environ["SATSIM_TEST_NUMPY_VERSION"]'
+      - name: Download the ephemeris
+        run: |
+          mkdir -p "$SATSIM_SKYFIELD_LOAD_DIR"
+          curl --fail --location --retry 3 --output "$SATSIM_SKYFIELD_LOAD_DIR/de421.bsp" https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp
+      - name: Check FFT accuracy, registration, photometry and ADC background
+        run: |
+          python -m pytest -q tests/test_fft_precision.py tests/test_fft_registration.py tests/test_deterministic_render_validation.py tests/test_render.py tests/test_dataset.py tests/test_satsim.py::test_default_point_rendering_matches_bilinear_no_noise_photometry_and_centroid

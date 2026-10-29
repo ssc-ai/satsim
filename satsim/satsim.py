@@ -2050,8 +2050,9 @@ def _epsf_lut_cache_param(ssp, height_os, width_os, y_ifov, x_ifov, s_osf):
     return {
         '$cache': cache_path,
         'cache_type': 'epsf_lut',
-        # Version 1 LUTs may contain the odd-width real-FFT registration bias.
-        'cache_version': 2,
+        # Older LUTs may contain registration or legacy CPU FFT errors. Rebuild
+        # for every device: a CPU-generated table can also be loaded on a GPU.
+        'cache_version': 3,
         'render_mode': 'epsf',
         's_osf': int(s_osf),
         'psf_generation_shape_os': [int(height_os), int(width_os)],

@@ -157,15 +157,22 @@ def test_rendered_stars_and_target_match_pixel_truth(device, tmp_path, mode, wid
         assert image.min() >= -image.max() * 5e-6
 
 
-def test_obsolete_epsf_cache_does_not_reuse_biased_lut(device, tmp_path):
+@pytest.mark.parametrize('cache_version', [1, 2], ids=['old-registration', 'old-cpu-precision'])
+def test_obsolete_epsf_cache_does_not_reuse_biased_lut(device, tmp_path, cache_version):
     config = _scene(tmp_path, 'epsf', 41, 1)
-    config['sim']['epsf']['normalize'] = True
+    config['sim']['epsf']['normalize'] = cache_version == 1
+    # With normalization off, use a well-sampled Gaussian whose discrete
+    # integral is one, rather than the original subpixel-width fixture.
+    config['fpa']['psf']['eod'] = 0.15
     config['sim']['epsf']['$cache'] = str(tmp_path / 'cache')
     h, w = _gen_psf_shape(config, 57, 57, 1)
     current = _epsf_lut_cache_param(config, h, w, 1 / 41, 1 / 41, 1)
-    legacy = dict(current, cache_version=1)
+    legacy = dict(current, cache_version=cache_version)
     obsolete = np.zeros((1, 1, 31, 31), np.float32)
-    obsolete[0, 0, 15, 16] = 1.  # A unit-flux LUT with an obsolete column bias.
+    if cache_version == 1:
+        obsolete[0, 0, 15, 16] = 1.  # An obsolete column bias.
+    else:
+        obsolete[0, 0, 15, 15] = 1.001  # Legacy CPU FFT photometric error.
     _save_epsf_lut_cache(legacy, obsolete)
     with tf.device(device):
         frame = next(image_generator(config, output_dir=str(tmp_path), with_meta=True, num_sets=1))
