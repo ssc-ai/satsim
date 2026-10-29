@@ -94,7 +94,6 @@ def fftconv2p(x, y, pad=32, dtype=tf.float32, cache_last_y=True):
     the fast Fourier transform method. The result is an approximate for the
     convolution. If more numeric precision is required, use `fftconv2` which
     pads the array to N + L - 1. NOTE: `x` and `y` must have the same shape.
-    NOTE: x and y dimensions should be a multiple of 2.
 
     Args:
         x: `Tensor`, 2D input tensor.
@@ -127,9 +126,14 @@ def fftconv2p(x, y, pad=32, dtype=tf.float32, cache_last_y=True):
     # the convolution theorem states that under suitable conditions the Fourier
     # transform of a convolution of two signals is the pointwise product of
     # their Fourier transforms
-    fftfull = tf.math.real(
-        tf_ifft_func(
-            tf.multiply(x_complex,y_complex)))
+    product = tf.multiply(x_complex,y_complex)
+    if tf_ifft_func is tf.signal.irfft2d:
+        # The packed spectrum does not distinguish odd and even input widths.
+        # Without the original length, irfft2d assumes an even width and
+        # reconstructs an odd-width input on a grid with one fewer column.
+        fftfull = tf_ifft_func(product, fft_length=[sx + 2 * pad, sy + 2 * pad])
+    else:
+        fftfull = tf.math.real(tf_ifft_func(product))
 
     # shift and crop the array and return 'same' sized array
     return tf.slice(fftshift(fftfull), [pad - 1, pad - 1], [sx, sy])

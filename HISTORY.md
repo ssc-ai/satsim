@@ -4,6 +4,7 @@ History
 0.27.2 (unreleased)
 ---------------------
 
+* **BEHAVIORAL CHANGE:** Preserve the original padded grid size in real inverse FFT convolution. Fix column shifts and ringing in odd-width FFT renders and ePSF lookup-table generation. Previously cached ePSF LUTs are automatically rebuilt to remove the baked-in bias; affected seeded images can change. (#64)
 * **BEHAVIORAL CHANGE:** Render native ePSF `streak` stars like `transform`: each star deposits its optical ePSF at every exposure-bin midpoint. This fixes clipped one-sided trails, field-rotation shape and phase carry. Stars whose ePSF wings reach the frame are now kept, so dense fields deposit slightly more stars. `epsf.crop` tier counts count the deposited stars, and frame metadata no longer includes `trail_det`. (#63)
 * Accelerate eager CPU ePSF star deposition with a compiled float64 kernel. It runs only when every render tensor, including `position_transform` output, is on the CPU; GPU, mixed-device and graph renders keep TensorFlow. Pixels can differ from TensorFlow at rounding level. (#63)
 * Skip unused PSF generation for native ePSF `streak` frames with a warm LUT cache, and keep FFT temporal sampling and per-source star transforms when `fallback_to_fft_for_models` applies. (#63)
