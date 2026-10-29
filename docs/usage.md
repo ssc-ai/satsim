@@ -342,7 +342,14 @@ image-plane target:
   native LUT cache renders without regenerating the optical PSF for either
   `star_render_mode`; `fallback_to_fft_for_models` and `augment.fpa.psf`
   configurations still generate it. Version 0.27.2 rebuilds older ePSF LUT cache
-  entries automatically to remove the odd-width FFT registration bias.
+  entries automatically to remove odd-width FFT registration bias and errors
+  from older CPU FFT implementations. Tables are rebuilt on every device
+  because a table generated on an affected CPU can later be loaded on a GPU.
+  TensorFlow versions before 2.15 use double-precision CPU FFT arithmetic
+  internally while keeping the requested output dtype. This fixes flux errors
+  and below-bias pixels in noiseless positive scenes, with additional CPU FFT
+  workspace and execution cost. GPU and TensorFlow 2.15+ CPU FFT precision are
+  unchanged.
   `normalize` defaults to `false` so finite ePSF kernels do not boost
   photometry when energy falls outside the stamp; set it to `true` only when
   each cropped stamp should be forced to unit flux. `batch_element_budget`
