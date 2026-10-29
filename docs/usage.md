@@ -348,8 +348,9 @@ image-plane target:
   TensorFlow versions before 2.15 use double-precision CPU FFT arithmetic
   internally while keeping the requested output dtype. This fixes flux errors
   and below-bias pixels in noiseless positive scenes, with additional CPU FFT
-  workspace and execution cost. GPU and TensorFlow 2.15+ CPU FFT precision are
-  unchanged.
+  workspace and execution cost. Default single-precision GPU and TensorFlow
+  2.15+ CPU FFT arithmetic are unchanged. Explicit `float64` real-FFT requests
+  now use double precision instead of being silently reduced to `float32`.
   `normalize` defaults to `false` so finite ePSF kernels do not boost
   photometry when energy falls outside the stamp; set it to `true` only when
   each cropped stamp should be forced to unit flux. `batch_element_budget`

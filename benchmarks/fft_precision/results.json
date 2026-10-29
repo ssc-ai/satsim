@@ -1,0 +1,1078 @@
+{
+  "baseline_revision": "24c3bb9bfc96de81abcc4d713f0d188d13f6a438",
+  "implementation_revision": "ed6a42af812d6eb158cc0cc2a92cd4b38805e2f0",
+  "date_utc": "2026-10-29",
+  "hardware": {
+    "cpu": "AMD Ryzen 9 5900XT 16-Core Processor",
+    "gpu": "NVIDIA GeForce RTX 3090"
+  },
+  "timing_method": "Separate sequential workers on an otherwise idle host, three warmup calls, five samples of one synchronized call including output copy; one native thread per pool. Full legacy CPU tests were suspended during timing and resumed afterwards.",
+  "benchmarks": {
+    "213-cpu": {
+      "before": {
+        "tensorflow": "2.13.1",
+        "numpy": "1.24.3",
+        "scipy": "1.14.0",
+        "python": "3.10.12",
+        "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+        "device": "CPU",
+        "source": "/workspace/git/satsim-github",
+        "results": [
+          {
+            "size": 192,
+            "graph": false,
+            "seconds": [
+              0.010927779134362936,
+              0.011459114030003548,
+              0.011546641122549772,
+              0.011554496129974723,
+              0.011131667997688055
+            ],
+            "median_seconds": 0.011459114030003548,
+            "flux": 1000.015024408805,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 0.00011783465743242516,
+            "sha256": "7a9a2c86b6badd98137438cb3e87fc0b61bc884c732bb20eb4896d086cba2a80",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 192,
+            "graph": true,
+            "seconds": [
+              0.01550098299048841,
+              0.015676226932555437,
+              0.015261356020346284,
+              0.015245326096192002,
+              0.01553113991394639
+            ],
+            "median_seconds": 0.01550098299048841,
+            "flux": 1000.015024408805,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 0.00011783465743242516,
+            "sha256": "7a9a2c86b6badd98137438cb3e87fc0b61bc884c732bb20eb4896d086cba2a80",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": false,
+            "seconds": [
+              0.12261349987238646,
+              0.12494455999694765,
+              0.1246152629610151,
+              0.12516662711277604,
+              0.12667937600053847
+            ],
+            "median_seconds": 0.12494455999694765,
+            "flux": 999.9519232812802,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 0.0003647245466709137,
+            "sha256": "6cf618b7f515d217b821fbdf46aca2d2e6eab399cf5ed111b3dd4e5d2ddbdc0b",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": true,
+            "seconds": [
+              0.18993223179131746,
+              0.19168756413273513,
+              0.1925838568713516,
+              0.19202684215269983,
+              0.19246252486482263
+            ],
+            "median_seconds": 0.19202684215269983,
+            "flux": 999.9519232812802,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 0.0003647245466709137,
+            "sha256": "6cf618b7f515d217b821fbdf46aca2d2e6eab399cf5ed111b3dd4e5d2ddbdc0b",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": false,
+            "seconds": [
+              2.5646031140349805,
+              2.587008544942364,
+              2.572743778117001,
+              2.580509082879871,
+              2.586893716128543
+            ],
+            "median_seconds": 2.580509082879871,
+            "flux": 999.7095871751044,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 0.0022921003401270568,
+            "sha256": "2f9960773bc95e92d1b073298e9fe1280566cd5bd5bb2e0b952b778b3a68377d",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": true,
+            "seconds": [
+              4.075275490060449,
+              4.100196695886552,
+              4.116482675075531,
+              4.055245887953788,
+              4.065426712157205
+            ],
+            "median_seconds": 4.075275490060449,
+            "flux": 999.7095871751044,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 0.0022921003401270568,
+            "sha256": "2f9960773bc95e92d1b073298e9fe1280566cd5bd5bb2e0b952b778b3a68377d",
+            "output_dtype": "float32"
+          }
+        ]
+      },
+      "after": {
+        "tensorflow": "2.13.1",
+        "numpy": "1.24.3",
+        "scipy": "1.14.0",
+        "python": "3.10.12",
+        "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+        "device": "CPU",
+        "source": "/tmp/satsim-cpu-fft-accuracy",
+        "results": [
+          {
+            "size": 192,
+            "graph": false,
+            "seconds": [
+              0.010607058880850673,
+              0.010360234882682562,
+              0.010368410963565111,
+              0.01017650286667049,
+              0.01032599015161395
+            ],
+            "median_seconds": 0.010360234882682562,
+            "flux": 999.9999955312977,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 2.3096799850463867e-07,
+            "sha256": "f56bc9362f0d24b1bd052430a5531b703853d433cb46fa6f62d3823b4a847b4a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 192,
+            "graph": true,
+            "seconds": [
+              0.013771482976153493,
+              0.014069845201447606,
+              0.013742457143962383,
+              0.013803014066070318,
+              0.013875182019546628
+            ],
+            "median_seconds": 0.013803014066070318,
+            "flux": 999.9999955312977,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 2.3096799850463867e-07,
+            "sha256": "f56bc9362f0d24b1bd052430a5531b703853d433cb46fa6f62d3823b4a847b4a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": false,
+            "seconds": [
+              0.11453695991076529,
+              0.1127263312228024,
+              0.11345662083476782,
+              0.11533702304586768,
+              0.11411175690591335
+            ],
+            "median_seconds": 0.11411175690591335,
+            "flux": 999.9999955303983,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 2.309680002809955e-07,
+            "sha256": "baafe96b94e46e65889fc3ee84aef5e5165fe5b9c218403fc2d98f523a2abe9c",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": true,
+            "seconds": [
+              0.17408055695705116,
+              0.17249353602528572,
+              0.17436372907832265,
+              0.17413162486627698,
+              0.17370785400271416
+            ],
+            "median_seconds": 0.17408055695705116,
+            "flux": 999.9999955303983,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 2.309680002809955e-07,
+            "sha256": "baafe96b94e46e65889fc3ee84aef5e5165fe5b9c218403fc2d98f523a2abe9c",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": false,
+            "seconds": [
+              2.647049803985283,
+              2.6641153818927705,
+              2.636338141048327,
+              2.6478087441064417,
+              2.742046401137486
+            ],
+            "median_seconds": 2.6478087441064417,
+            "flux": 999.9999955301237,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 2.3096799850463867e-07,
+            "sha256": "2e35e27aefb2a03bfeed9497c38d45c7e593eece6264f6fc618de67f8e1b3b1d",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": true,
+            "seconds": [
+              3.9887295321095735,
+              3.9796332409605384,
+              4.010785077000037,
+              4.009647231083363,
+              4.045119558926672
+            ],
+            "median_seconds": 4.009647231083363,
+            "flux": 999.9999955301237,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 2.3096799850463867e-07,
+            "sha256": "2e35e27aefb2a03bfeed9497c38d45c7e593eece6264f6fc618de67f8e1b3b1d",
+            "output_dtype": "float32"
+          }
+        ]
+      },
+      "source_sha256": {
+        "before": {
+          "satsim/math/fft.py": "e1592917dfd3559eb94a1217cb0d971c69d64cb3221e5109043c3a569fa0241f",
+          "satsim/satsim.py": "545f0112e96d4e114b3b4b40130225e240826e7bed3a39fd39ea9a4e59492c5b"
+        },
+        "after": {
+          "satsim/math/fft.py": "140dad21d97e720be7359b61b1b03556dc2bed081f5c2a22b1abf77ee2e01512",
+          "satsim/satsim.py": "a64bd1c5802ff0930bc80dcfee396c75290dd67f19baf5f8f8be39d5badbb488"
+        }
+      },
+      "iterations_per_sample": 1
+    },
+    "219-cpu": {
+      "before": {
+        "tensorflow": "2.19.0",
+        "numpy": "1.26.4",
+        "scipy": "1.14.0",
+        "python": "3.10.12",
+        "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+        "device": "CPU",
+        "source": "/workspace/git/satsim-github",
+        "results": [
+          {
+            "size": 192,
+            "graph": false,
+            "seconds": [
+              0.0018975390121340752,
+              0.0018589019309729338,
+              0.0018524390179663897,
+              0.001815857132896781,
+              0.0017874499317258596
+            ],
+            "median_seconds": 0.0018524390179663897,
+            "flux": 999.9998792337681,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "25d5cb4351694421e09731b914827af8561a2ebeb872a536c9f44462218a8cff",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 192,
+            "graph": true,
+            "seconds": [
+              0.0011429789010435343,
+              0.0013107131235301495,
+              0.0012483189348131418,
+              0.0011634200345724821,
+              0.0010094840545207262
+            ],
+            "median_seconds": 0.0011634200345724821,
+            "flux": 999.9998792337681,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "25d5cb4351694421e09731b914827af8561a2ebeb872a536c9f44462218a8cff",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": false,
+            "seconds": [
+              0.0031200170051306486,
+              0.0030635041184723377,
+              0.003017252776771784,
+              0.003624127944931388,
+              0.003112492151558399
+            ],
+            "median_seconds": 0.003112492151558399,
+            "flux": 999.9999495053104,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 7.227063179016113e-07,
+            "sha256": "fb72630830f164e7f1200a9dc1d3defe9a69095abe434bd9e7e22284c8f3a28a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": true,
+            "seconds": [
+              0.002896443009376526,
+              0.002601758111268282,
+              0.0027014450170099735,
+              0.0023881529923528433,
+              0.002779219998046756
+            ],
+            "median_seconds": 0.0027014450170099735,
+            "flux": 999.9999495053104,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 7.227063179016113e-07,
+            "sha256": "fb72630830f164e7f1200a9dc1d3defe9a69095abe434bd9e7e22284c8f3a28a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": false,
+            "seconds": [
+              0.09401753102429211,
+              0.08910605683922768,
+              0.09216204495169222,
+              0.10339183290489018,
+              0.0858366668689996
+            ],
+            "median_seconds": 0.09216204495169222,
+            "flux": 1000.0001466718126,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 1.4007091522216797e-06,
+            "sha256": "7d31a1f147439f605b22657698c83403101025c813e048115a17650a31db7569",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": true,
+            "seconds": [
+              0.10253179189749062,
+              0.1046469178982079,
+              0.10329864709638059,
+              0.102381109027192,
+              0.10538334492594004
+            ],
+            "median_seconds": 0.10329864709638059,
+            "flux": 1000.0001466718126,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 1.4007091522216797e-06,
+            "sha256": "7d31a1f147439f605b22657698c83403101025c813e048115a17650a31db7569",
+            "output_dtype": "float32"
+          }
+        ]
+      },
+      "after": {
+        "tensorflow": "2.19.0",
+        "numpy": "1.26.4",
+        "scipy": "1.14.0",
+        "python": "3.10.12",
+        "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+        "device": "CPU",
+        "source": "/tmp/satsim-cpu-fft-accuracy",
+        "results": [
+          {
+            "size": 192,
+            "graph": false,
+            "seconds": [
+              0.0018402489367872477,
+              0.001877969829365611,
+              0.002005812944844365,
+              0.0018443979788571596,
+              0.0018712880555540323
+            ],
+            "median_seconds": 0.0018712880555540323,
+            "flux": 999.9998792337681,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "25d5cb4351694421e09731b914827af8561a2ebeb872a536c9f44462218a8cff",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 192,
+            "graph": true,
+            "seconds": [
+              0.0013504140079021454,
+              0.0011419591028243303,
+              0.001041108975186944,
+              0.0010962430387735367,
+              0.0010965131223201752
+            ],
+            "median_seconds": 0.0010965131223201752,
+            "flux": 999.9998792337681,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "25d5cb4351694421e09731b914827af8561a2ebeb872a536c9f44462218a8cff",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": false,
+            "seconds": [
+              0.0038270459044724703,
+              0.0034936261363327503,
+              0.003679926972836256,
+              0.0030515999533236027,
+              0.003105812007561326
+            ],
+            "median_seconds": 0.0034936261363327503,
+            "flux": 999.9999495053104,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 7.227063179016113e-07,
+            "sha256": "fb72630830f164e7f1200a9dc1d3defe9a69095abe434bd9e7e22284c8f3a28a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": true,
+            "seconds": [
+              0.002424923935905099,
+              0.003100031055510044,
+              0.002835130086168647,
+              0.0024711820296943188,
+              0.0033085369504988194
+            ],
+            "median_seconds": 0.002835130086168647,
+            "flux": 999.9999495053104,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 7.227063179016113e-07,
+            "sha256": "fb72630830f164e7f1200a9dc1d3defe9a69095abe434bd9e7e22284c8f3a28a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": false,
+            "seconds": [
+              0.09348617680370808,
+              0.0956915661226958,
+              0.08498748880811036,
+              0.07758982083760202,
+              0.10953820706345141
+            ],
+            "median_seconds": 0.09348617680370808,
+            "flux": 1000.0001466718126,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 1.4007091522216797e-06,
+            "sha256": "7d31a1f147439f605b22657698c83403101025c813e048115a17650a31db7569",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": true,
+            "seconds": [
+              0.10818232293240726,
+              0.10326689016073942,
+              0.12875197501853108,
+              0.12178825912997127,
+              0.11720631504431367
+            ],
+            "median_seconds": 0.11720631504431367,
+            "flux": 1000.0001466718126,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 1.4007091522216797e-06,
+            "sha256": "7d31a1f147439f605b22657698c83403101025c813e048115a17650a31db7569",
+            "output_dtype": "float32"
+          }
+        ]
+      },
+      "source_sha256": {
+        "before": {
+          "satsim/math/fft.py": "e1592917dfd3559eb94a1217cb0d971c69d64cb3221e5109043c3a569fa0241f",
+          "satsim/satsim.py": "545f0112e96d4e114b3b4b40130225e240826e7bed3a39fd39ea9a4e59492c5b"
+        },
+        "after": {
+          "satsim/math/fft.py": "140dad21d97e720be7359b61b1b03556dc2bed081f5c2a22b1abf77ee2e01512",
+          "satsim/satsim.py": "a64bd1c5802ff0930bc80dcfee396c75290dd67f19baf5f8f8be39d5badbb488"
+        }
+      },
+      "iterations_per_sample": 1
+    },
+    "220-cpu": {
+      "before": {
+        "tensorflow": "2.20.0",
+        "numpy": "1.26.4",
+        "scipy": "1.14.0",
+        "python": "3.10.12",
+        "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+        "device": "CPU",
+        "source": "/workspace/git/satsim-github",
+        "results": [
+          {
+            "size": 192,
+            "graph": false,
+            "seconds": [
+              0.0019051569979637861,
+              0.001925705000758171,
+              0.0018587710801512003,
+              0.0018500338774174452,
+              0.0018356670625507832
+            ],
+            "median_seconds": 0.0018587710801512003,
+            "flux": 999.9998792337681,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "25d5cb4351694421e09731b914827af8561a2ebeb872a536c9f44462218a8cff",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 192,
+            "graph": true,
+            "seconds": [
+              0.0010699930135160685,
+              0.001054924912750721,
+              0.0009803660213947296,
+              0.001378652174025774,
+              0.0012797960080206394
+            ],
+            "median_seconds": 0.0010699930135160685,
+            "flux": 999.9998792337681,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "25d5cb4351694421e09731b914827af8561a2ebeb872a536c9f44462218a8cff",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": false,
+            "seconds": [
+              0.003056504065170884,
+              0.003400397952646017,
+              0.003131113015115261,
+              0.003233334980905056,
+              0.003101556794717908
+            ],
+            "median_seconds": 0.003131113015115261,
+            "flux": 999.9999495053104,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 7.227063179016113e-07,
+            "sha256": "fb72630830f164e7f1200a9dc1d3defe9a69095abe434bd9e7e22284c8f3a28a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": true,
+            "seconds": [
+              0.00360177387483418,
+              0.002672614064067602,
+              0.00293909409083426,
+              0.002686810912564397,
+              0.003345103934407234
+            ],
+            "median_seconds": 0.00293909409083426,
+            "flux": 999.9999495053104,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 7.227063179016113e-07,
+            "sha256": "fb72630830f164e7f1200a9dc1d3defe9a69095abe434bd9e7e22284c8f3a28a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": false,
+            "seconds": [
+              0.09434764599427581,
+              0.11088228598237038,
+              0.08727639401331544,
+              0.10613516694866121,
+              0.07935407990589738
+            ],
+            "median_seconds": 0.09434764599427581,
+            "flux": 1000.0001466718126,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 1.4007091522216797e-06,
+            "sha256": "7d31a1f147439f605b22657698c83403101025c813e048115a17650a31db7569",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": true,
+            "seconds": [
+              0.1116887170355767,
+              0.10806531296111643,
+              0.10307108890265226,
+              0.10601876094006002,
+              0.10847077006474137
+            ],
+            "median_seconds": 0.10806531296111643,
+            "flux": 1000.0001466718126,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 1.4007091522216797e-06,
+            "sha256": "7d31a1f147439f605b22657698c83403101025c813e048115a17650a31db7569",
+            "output_dtype": "float32"
+          }
+        ]
+      },
+      "after": {
+        "tensorflow": "2.20.0",
+        "numpy": "1.26.4",
+        "scipy": "1.14.0",
+        "python": "3.10.12",
+        "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+        "device": "CPU",
+        "source": "/tmp/satsim-cpu-fft-accuracy",
+        "results": [
+          {
+            "size": 192,
+            "graph": false,
+            "seconds": [
+              0.0019801619928330183,
+              0.001999808009713888,
+              0.0020922499243170023,
+              0.002022259868681431,
+              0.0020866498816758394
+            ],
+            "median_seconds": 0.002022259868681431,
+            "flux": 999.9998792337681,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "25d5cb4351694421e09731b914827af8561a2ebeb872a536c9f44462218a8cff",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 192,
+            "graph": true,
+            "seconds": [
+              0.0013597731012851,
+              0.001213188050314784,
+              0.0012038808781653643,
+              0.0012298100627958775,
+              0.0011794050224125385
+            ],
+            "median_seconds": 0.001213188050314784,
+            "flux": 999.9998792337681,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "25d5cb4351694421e09731b914827af8561a2ebeb872a536c9f44462218a8cff",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": false,
+            "seconds": [
+              0.0031343011651188135,
+              0.0033387041185051203,
+              0.0031037540175020695,
+              0.003136835992336273,
+              0.003237835131585598
+            ],
+            "median_seconds": 0.003136835992336273,
+            "flux": 999.9999495053104,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 7.227063179016113e-07,
+            "sha256": "fb72630830f164e7f1200a9dc1d3defe9a69095abe434bd9e7e22284c8f3a28a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": true,
+            "seconds": [
+              0.0023481810931116343,
+              0.0023761740885674953,
+              0.0022927478421479464,
+              0.002359854057431221,
+              0.0023803620133548975
+            ],
+            "median_seconds": 0.002359854057431221,
+            "flux": 999.9999495053104,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 7.227063179016113e-07,
+            "sha256": "fb72630830f164e7f1200a9dc1d3defe9a69095abe434bd9e7e22284c8f3a28a",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": false,
+            "seconds": [
+              0.09123978018760681,
+              0.08675225893966854,
+              0.1185654429718852,
+              0.08565619797445834,
+              0.0827821739949286
+            ],
+            "median_seconds": 0.08675225893966854,
+            "flux": 1000.0001466718126,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 1.4007091522216797e-06,
+            "sha256": "7d31a1f147439f605b22657698c83403101025c813e048115a17650a31db7569",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": true,
+            "seconds": [
+              0.10870118602178991,
+              0.10547428112477064,
+              0.11008985294029117,
+              0.12016578600741923,
+              0.12098379200324416
+            ],
+            "median_seconds": 0.11008985294029117,
+            "flux": 1000.0001466718126,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 1.4007091522216797e-06,
+            "sha256": "7d31a1f147439f605b22657698c83403101025c813e048115a17650a31db7569",
+            "output_dtype": "float32"
+          }
+        ]
+      },
+      "source_sha256": {
+        "before": {
+          "satsim/math/fft.py": "e1592917dfd3559eb94a1217cb0d971c69d64cb3221e5109043c3a569fa0241f",
+          "satsim/satsim.py": "545f0112e96d4e114b3b4b40130225e240826e7bed3a39fd39ea9a4e59492c5b"
+        },
+        "after": {
+          "satsim/math/fft.py": "140dad21d97e720be7359b61b1b03556dc2bed081f5c2a22b1abf77ee2e01512",
+          "satsim/satsim.py": "a64bd1c5802ff0930bc80dcfee396c75290dd67f19baf5f8f8be39d5badbb488"
+        }
+      },
+      "iterations_per_sample": 1
+    },
+    "213-gpu": {
+      "before": {
+        "tensorflow": "2.13.1",
+        "numpy": "1.26.4",
+        "scipy": "1.14.0",
+        "python": "3.10.12",
+        "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+        "device": "GPU",
+        "source": "/workspace/git/satsim-github",
+        "results": [
+          {
+            "size": 192,
+            "graph": false,
+            "seconds": [
+              0.0025250620674341917,
+              0.0024758700747042894,
+              0.002472572959959507,
+              0.002593690063804388,
+              0.0024708400014787912
+            ],
+            "median_seconds": 0.0024758700747042894,
+            "flux": 999.9999654100397,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 2.6300549507141113e-06,
+            "sha256": "1dff3a617e4c854908eabecd6cde416062ced5bd623a4ce56f1a469681f82557",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 192,
+            "graph": true,
+            "seconds": [
+              0.0013875940348953009,
+              0.001022151205688715,
+              0.0010196969378739595,
+              0.00088527612388134,
+              0.0009212640579789877
+            ],
+            "median_seconds": 0.0010196969378739595,
+            "flux": 999.9999654100397,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 2.6300549507141113e-06,
+            "sha256": "1dff3a617e4c854908eabecd6cde416062ced5bd623a4ce56f1a469681f82557",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": false,
+            "seconds": [
+              0.004291173070669174,
+              0.003977498039603233,
+              0.004091239999979734,
+              0.003950997954234481,
+              0.004654131829738617
+            ],
+            "median_seconds": 0.004091239999979734,
+            "flux": 1000.0000364320958,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "828512a19bea5b3321b0629e70a462fb662c7580f63452654c33a404745138eb",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": true,
+            "seconds": [
+              0.0022662170231342316,
+              0.0013824559282511473,
+              0.0014964670408517122,
+              0.0015049839857965708,
+              0.0014809390995651484
+            ],
+            "median_seconds": 0.0014964670408517122,
+            "flux": 1000.0000364320958,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "828512a19bea5b3321b0629e70a462fb662c7580f63452654c33a404745138eb",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": false,
+            "seconds": [
+              0.021097598830237985,
+              0.017455628840252757,
+              0.011253712931647897,
+              0.014207686996087432,
+              0.01205160515382886
+            ],
+            "median_seconds": 0.014207686996087432,
+            "flux": 1000.0001405345545,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 3.5837292671203613e-06,
+            "sha256": "3cbe12715512305b418f78b3145aadc43f156c8bb7d70439a9fb2d538d565779",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": true,
+            "seconds": [
+              0.009950356092303991,
+              0.020237701013684273,
+              0.017669609049335122,
+              0.010248483158648014,
+              0.018265553982928395
+            ],
+            "median_seconds": 0.017669609049335122,
+            "flux": 1000.0001405345545,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 3.5837292671203613e-06,
+            "sha256": "3cbe12715512305b418f78b3145aadc43f156c8bb7d70439a9fb2d538d565779",
+            "output_dtype": "float32"
+          }
+        ]
+      },
+      "after": {
+        "tensorflow": "2.13.1",
+        "numpy": "1.26.4",
+        "scipy": "1.14.0",
+        "python": "3.10.12",
+        "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+        "device": "GPU",
+        "source": "/tmp/satsim-cpu-fft-accuracy",
+        "results": [
+          {
+            "size": 192,
+            "graph": false,
+            "seconds": [
+              0.002878297818824649,
+              0.002766649005934596,
+              0.002563171088695526,
+              0.002613147022202611,
+              0.002517753979191184
+            ],
+            "median_seconds": 0.002613147022202611,
+            "flux": 999.9999654100397,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 2.6300549507141113e-06,
+            "sha256": "1dff3a617e4c854908eabecd6cde416062ced5bd623a4ce56f1a469681f82557",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 192,
+            "graph": true,
+            "seconds": [
+              0.0011189961805939674,
+              0.001085870899260044,
+              0.001048640115186572,
+              0.0010985869448632002,
+              0.0013008168898522854
+            ],
+            "median_seconds": 0.0010985869448632002,
+            "flux": 999.9999654100397,
+            "expected_flux": 999.9999996910029,
+            "max_absolute_error": 2.6300549507141113e-06,
+            "sha256": "1dff3a617e4c854908eabecd6cde416062ced5bd623a4ce56f1a469681f82557",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": false,
+            "seconds": [
+              0.0029526951257139444,
+              0.002937065903097391,
+              0.003276191186159849,
+              0.0030187729280442,
+              0.003166449023410678
+            ],
+            "median_seconds": 0.0030187729280442,
+            "flux": 1000.0000364320958,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "828512a19bea5b3321b0629e70a462fb662c7580f63452654c33a404745138eb",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 520,
+            "graph": true,
+            "seconds": [
+              0.0025976081378757954,
+              0.0016935288440436125,
+              0.0017221230082213879,
+              0.0017412598244845867,
+              0.002774640219286084
+            ],
+            "median_seconds": 0.0017412598244845867,
+            "flux": 1000.0000364320958,
+            "expected_flux": 999.999999691003,
+            "max_absolute_error": 1.6763806343078613e-06,
+            "sha256": "828512a19bea5b3321b0629e70a462fb662c7580f63452654c33a404745138eb",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": false,
+            "seconds": [
+              0.01161694503389299,
+              0.016038258094340563,
+              0.01300335000269115,
+              0.013873075833544135,
+              0.011996545130386949
+            ],
+            "median_seconds": 0.01300335000269115,
+            "flux": 1000.0001405345545,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 3.5837292671203613e-06,
+            "sha256": "3cbe12715512305b418f78b3145aadc43f156c8bb7d70439a9fb2d538d565779",
+            "output_dtype": "float32"
+          },
+          {
+            "size": 2136,
+            "graph": true,
+            "seconds": [
+              0.01840981491841376,
+              0.01747645903378725,
+              0.010429142974317074,
+              0.016620656941086054,
+              0.01018487592227757
+            ],
+            "median_seconds": 0.016620656941086054,
+            "flux": 1000.0001405345545,
+            "expected_flux": 999.9999996910028,
+            "max_absolute_error": 3.5837292671203613e-06,
+            "sha256": "3cbe12715512305b418f78b3145aadc43f156c8bb7d70439a9fb2d538d565779",
+            "output_dtype": "float32"
+          }
+        ]
+      },
+      "source_sha256": {
+        "before": {
+          "satsim/math/fft.py": "e1592917dfd3559eb94a1217cb0d971c69d64cb3221e5109043c3a569fa0241f",
+          "satsim/satsim.py": "545f0112e96d4e114b3b4b40130225e240826e7bed3a39fd39ea9a4e59492c5b"
+        },
+        "after": {
+          "satsim/math/fft.py": "140dad21d97e720be7359b61b1b03556dc2bed081f5c2a22b1abf77ee2e01512",
+          "satsim/satsim.py": "a64bd1c5802ff0930bc80dcfee396c75290dd67f19baf5f8f8be39d5badbb488"
+        }
+      },
+      "iterations_per_sample": 1
+    }
+  },
+  "qualification": {
+    "cpu_2.19.0": {
+      "tests": 1487,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 96,
+      "passed": 1391
+    },
+    "cpu_2.20.0": {
+      "tests": 1487,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 96,
+      "passed": 1391
+    },
+    "gpu_2.13.1": {
+      "tests": 1487,
+      "passed": 1485,
+      "skipped": 2,
+      "failures": 0,
+      "errors": 0
+    },
+    "combined_pr67_gpu_2.13.1": {
+      "tests": 230,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 3,
+      "passed": 227
+    },
+    "combined_pr67_cpu_2.13.1": {
+      "tests": 230,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 137,
+      "passed": 93
+    },
+    "coverage": {
+      "covered_lines": 11464,
+      "num_statements": 12003,
+      "percent_covered": 95.509455969341,
+      "percent_covered_display": "96",
+      "missing_lines": 539,
+      "excluded_lines": 31
+    },
+    "ci_url": "https://github.com/ssc-ai/satsim/actions/runs/40958925698",
+    "ci_focused": {
+      "cpu_2.13.1": {
+        "passed": 127,
+        "skipped": 81,
+        "failures": 0
+      },
+      "cpu_2.19.0": {
+        "passed": 128,
+        "skipped": 80,
+        "failures": 0
+      },
+      "cpu_2.20.0": {
+        "passed": 128,
+        "skipped": 80,
+        "failures": 0
+      }
+    },
+    "source_sha256": {
+      "satsim/math/fft.py": "140dad21d97e720be7359b61b1b03556dc2bed081f5c2a22b1abf77ee2e01512",
+      "satsim/satsim.py": "a64bd1c5802ff0930bc80dcfee396c75290dd67f19baf5f8f8be39d5badbb488",
+      "tests/test_fft_precision.py": "ac9851b1085260317703aaab7dcf9a15fa6c2305c9007be1e35138ced4aaa996",
+      "tests/test_fft_registration.py": "eaae4b4c16d05122aa8ec3f9bf3cde9795810964e49a3e83244ff55295c00ab0",
+      "tests/test_dataset.py": "fc9d9a6fb312efc3422fc762a963a65dc31ed14f5c61075e19d7bdc85bb7a242"
+    },
+    "cpu_2.13.1": {
+      "tests": 1487,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 97,
+      "passed": 1390
+    },
+    "cpu_2.13.1_skip_reasons": {
+      "GPU required": 96,
+      "The legacy CPU calculation intentionally changes": 1
+    }
+  },
+  "dataset_adc": {
+    "test": "tests/test_dataset.py::test_dataset_augment",
+    "tensorflow": "2.13.1",
+    "numpy": "1.24.3",
+    "expected_injected_dn": 108.0,
+    "absolute_tolerance_dn": 2.0,
+    "before": {
+      "gain": 1.5,
+      "bias": 1000.0,
+      "signal_sum": 184.67632418728246,
+      "signal_min": -0.00044515333138406277,
+      "negative_signal_pixels": 130285,
+      "digital_sum_above_bias": -150.0,
+      "positive_digital_counts": 106.0,
+      "negative_digital_counts": -256.0,
+      "pixels_below_bias": 256
+    },
+    "after": {
+      "gain": 1.5,
+      "bias": 1000.0,
+      "signal_sum": 184.72257202120215,
+      "signal_min": -9.983002922583917e-13,
+      "negative_signal_pixels": 130884,
+      "digital_sum_above_bias": 106.0,
+      "positive_digital_counts": 106.0,
+      "negative_digital_counts": 0.0,
+      "pixels_below_bias": 0
+    }
+  }
+}

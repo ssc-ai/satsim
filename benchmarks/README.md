@@ -3,6 +3,7 @@
 | Study | Runner | Recorded report | Raw results |
 | --- | --- | --- | --- |
 | Observable performance | [observable_performance.py](observable_performance.py) | [Report](observable_performance_report.txt) | [JSON](observable_performance_results.json) |
+| Legacy CPU FFT accuracy and compatibility | [fft_precision/benchmark.py](fft_precision/benchmark.py) | [Report](fft_precision/report.md) | [JSON](fft_precision/results.json) |
 | Direct pixel-polynomial distortion | [distortion/benchmark.py](distortion/benchmark.py) | [Report](distortion/report.txt) | [JSON](distortion/results.json), [test results](distortion/test_results.json) |
 | Cloud transmission variation | [clouds/compare.py](clouds/compare.py) | [Report and visuals](clouds/README.md) | [JSON](clouds/results.json) |
 | ePSF GPU performance and fidelity | [epsf_gpu/benchmark.py](epsf_gpu/benchmark.py) | [Report](epsf_gpu/report.md) | [JSON](epsf_gpu/results.json) |
