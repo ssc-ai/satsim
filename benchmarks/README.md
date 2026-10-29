@@ -6,6 +6,7 @@
 | Direct pixel-polynomial distortion | [distortion/benchmark.py](distortion/benchmark.py) | [Report](distortion/report.txt) | [JSON](distortion/results.json), [test results](distortion/test_results.json) |
 | Cloud transmission variation | [clouds/compare.py](clouds/compare.py) | [Report and visuals](clouds/README.md) | [JSON](clouds/results.json) |
 | ePSF GPU performance and fidelity | [epsf_gpu/benchmark.py](epsf_gpu/benchmark.py) | [Report](epsf_gpu/report.md) | [JSON](epsf_gpu/results.json) |
+| ePSF GPU graph deposition (#65) | [epsf_gpu/benchmark.py](epsf_gpu/benchmark.py) | [Report](epsf_gpu/graph_deposition/report.md) | [JSON](epsf_gpu/graph_deposition/results.json) |
 
 ## Run the current distortion benchmark
 
