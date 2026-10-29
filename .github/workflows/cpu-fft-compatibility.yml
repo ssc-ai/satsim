@@ -31,7 +31,7 @@ jobs:
       TF_NUM_INTRAOP_THREADS: "1"
       TF_NUM_INTEROP_THREADS: "1"
       TF_CPP_MIN_LOG_LEVEL: "2"
-      SATSIM_SKYFIELD_LOAD_DIR: ${{ runner.temp }}/skyfield
+      SATSIM_SKYFIELD_LOAD_DIR: ${{ github.workspace }}/.skyfield
       SATSIM_TEST_TF_VERSION: ${{ matrix.tensorflow }}
       SATSIM_TEST_NUMPY_VERSION: ${{ matrix.numpy }}
     steps:
@@ -46,7 +46,7 @@ jobs:
           python -m pip install --upgrade pip "setuptools<81" wheel
           python -m pip install . "tensorflow==$SATSIM_TEST_TF_VERSION" "numpy==$SATSIM_TEST_NUMPY_VERSION" "protobuf<6" "pytest==7.2.1" "jsonschema>=4.23,<5"
           python -c 'import os, tensorflow as tf, numpy as np; assert tf.__version__ == os.environ["SATSIM_TEST_TF_VERSION"]; assert np.__version__ == os.environ["SATSIM_TEST_NUMPY_VERSION"]'
-      - name: Cache the ephemeris
+      - name: Download the ephemeris
         run: |
           mkdir -p "$SATSIM_SKYFIELD_LOAD_DIR"
           curl --fail --location --retry 3 --output "$SATSIM_SKYFIELD_LOAD_DIR/de421.bsp" https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp
