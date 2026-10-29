@@ -1,6 +1,7 @@
 from __future__ import division, print_function, absolute_import
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
@@ -195,12 +196,15 @@ def _crop_size(core_size, full_size):
     return _validate_crop_size(crop_size, full_size)
 
 
-def resolve_epsf_tiers(epsf_lut, crop_config=None):
+def resolve_epsf_tiers(epsf_lut, crop_config=None, trail_det=None):
     """Resolve an ePSF crop config into sorted flux tiers.
 
     Each tier has an inclusive ``flux_max`` in total source photoelectrons and
     a centered detector-space ``kernel_size``. ``None`` means tiering is off.
+    ``trail_det`` is deprecated and ignored.
     """
+    if trail_det is not None:
+        _warn_deprecated('resolve_epsf_tiers trail_det is ignored; stars no longer deposit a trailed LUT')
     if not crop_config or crop_config.get('mode', 'off') == 'off':
         return None
 
@@ -329,7 +333,7 @@ def _tier_mask(cnt, min_exclusive, max_inclusive):
 
 
 def filter_epsf_sources_in_bounds(
-        fpa, r_os, c_os, cnt, t_start, t_end, rotation, translation, s_osf, kernel_size,
+        fpa, r_os, c_os, cnt, t_start, t_end, rotation, translation, s_osf, kernel_size=None,
         position_offset_os=0.0):
     """Drop sources whose ePSF stamps cannot reach ``fpa`` during the exposure.
 
@@ -351,7 +355,13 @@ def filter_epsf_sources_in_bounds(
     within ``rho * (rotation * (t_end - t_start))**2 / 8`` of the straight
     line between its endpoint positions, and a source is dropped when both
     endpoints lie beyond the halo plus that distance on the same side.
+
+    Omitting ``kernel_size`` is deprecated; it uses no halo, which keeps every
+    source the previous center-only filter kept.
     """
+    if kernel_size is None:
+        _warn_deprecated('filter_epsf_sources_in_bounds without kernel_size drops sources whose ePSF wings '
+                         'reach the frame; pass the LUT kernel_size')
     s_osf = tf.cast(s_osf, tf.int32)
     shape = tf.shape(fpa)
     h_os = tf.cast(shape[0] * s_osf, tf.float32)
@@ -359,7 +369,10 @@ def filter_epsf_sources_in_bounds(
     h_minus_1 = h_os - 1.0
     w_minus_1 = w_os - 1.0
     s_osf_f = tf.cast(s_osf, tf.float32)
-    halo = tf.cast((tf.cast(kernel_size, tf.int32) // 2 + 1) * s_osf, tf.float32)
+    if kernel_size is None:
+        halo = 0.0
+    else:
+        halo = tf.cast((tf.cast(kernel_size, tf.int32) // 2 + 1) * s_osf, tf.float32)
 
     r = tf.reshape(tf.cast(r_os, tf.float32), [-1])
     c = tf.reshape(tf.cast(c_os, tf.float32), [-1])
@@ -1073,3 +1086,24 @@ def _star_sample_batch(stars, group, start):
     if stars.position_transform is not None:
         rr, cc = stars.position_transform(rr, cc)
     return end, rr, cc, vv
+
+
+def _warn_deprecated(message):
+    warnings.warn(message, DeprecationWarning, stacklevel=3)
+
+
+def build_trailed_epsf_lut(*args, **kwargs):
+    """Removed; ``streak`` stars deposit ``build_epsf_lut`` stamps at exposure-bin midpoints."""
+    raise NotImplementedError(
+        'build_trailed_epsf_lut was removed; build the optical LUT with build_epsf_lut and deposit '
+        'moving stars with transform_and_add_epsf')
+
+
+def transform_and_add_trailed_epsf(*args, **kwargs):
+    """Removed; use ``transform_and_add_epsf``."""
+    raise NotImplementedError('transform_and_add_trailed_epsf was removed; use transform_and_add_epsf')
+
+
+def add_epsf_counts_tiered(*args, **kwargs):
+    """Removed; use ``transform_and_add_epsf`` with ``epsf_tiers``."""
+    raise NotImplementedError('add_epsf_counts_tiered was removed; use transform_and_add_epsf with epsf_tiers')

@@ -2,6 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 import math
 import logging
+import warnings
 
 import tensorflow as tf
 import numpy as np
@@ -292,8 +293,8 @@ def render_epsf(
         render_separate=True, obs_model=None, star_render_mode='transform',
         point_rendering='bilinear', batch_size=None,
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-        batch_size_cap=None,
-        fallback_to_fft_for_models=False, psf_os=None,
+        batch_size_cap=None, phase_oversample=None,
+        fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=None,
         epsf_crop=None, epsf_metadata=None, psf_support_shape=None, star_position_transform=None,
         star_accumulator='auto'):
     """Render directly in detector space using an ePSF lookup table.
@@ -313,7 +314,14 @@ def render_epsf(
     ``psf_support_shape`` ``(height, width)`` when the array itself is
     unavailable (warm LUT cache), so source registration can account for odd
     versus even PSF support. If both are omitted, even support is assumed.
+
+    ``phase_oversample`` and ``epsf_normalize`` are deprecated and ignored;
+    they configured the removed trailed LUT.
     """
+    for name, value in (('phase_oversample', phase_oversample), ('epsf_normalize', epsf_normalize)):
+        if value is not None:
+            warnings.warn('render_epsf {} is ignored; stars no longer deposit a trailed LUT'.format(name),
+                          DeprecationWarning, stacklevel=2)
     point_rendering = str(point_rendering).lower()
     if point_rendering not in ('floor', 'bilinear', 'phase_nearest'):
         raise ValueError("point_rendering must be 'floor', 'bilinear', or 'phase_nearest'")

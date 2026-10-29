@@ -973,3 +973,18 @@ def test_render_piecewise():
 
     np.testing.assert_allclose(img[0].numpy(), img2[0].numpy(), rtol=30.0, atol=0.001)
     np.testing.assert_allclose(fimg[0].numpy(), fimg2[0].numpy(), rtol=8.0, atol=0.002)
+
+
+@pytest.mark.parametrize(
+    'deprecated', [{'phase_oversample': 2}, {'epsf_normalize': True}], ids=['phase_oversample', 'epsf_normalize'])
+def test_render_epsf_trailed_lut_arguments_warn_and_are_ignored(deprecated):
+    lut = build_epsf_lut(None, 3, 7)
+
+    def render(**kwargs):
+        return render_epsf(
+            72, 96, 96, 120, 12, 12, 3, lut, [], [], [],
+            tf.constant([30.2, 61.7]), tf.constant([38.9, 70.25]), tf.constant([400., 9000.]),
+            0., 3., 9, 0.004, [0.4, -0.7], star_render_mode='streak', **kwargs)[0].numpy()
+
+    with pytest.warns(DeprecationWarning, match=next(iter(deprecated))):
+        assert_renders_match(lambda: (render(**deprecated), render()), 9400.0)

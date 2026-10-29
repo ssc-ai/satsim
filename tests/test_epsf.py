@@ -8,7 +8,9 @@ import tensorflow as tf
 
 from satsim.image.epsf import (
     add_epsf_counts,
+    add_epsf_counts_tiered,
     build_epsf_lut,
+    build_trailed_epsf_lut,
     crop_epsf_lut,
     effective_epsf_batch_size,
     epsf_wing_profile,
@@ -18,6 +20,7 @@ from satsim.image.epsf import (
     resolve_phase_oversample,
     summarize_epsf_tiers,
     transform_and_add_epsf,
+    transform_and_add_trailed_epsf,
 )
 from satsim.image.psf import gen_gaussian
 from satsim.util import configure_eager
@@ -714,3 +717,33 @@ def test_auto_crop_dense_dim_field_reduces_stamp_elements_by_more_than_4x():
 
     assert(summary['source_count'] == 154000)
     assert(summary['stamp_elements'] * 4 <= summary['full_stamp_elements'])
+
+
+@pytest.mark.parametrize(
+    'removed', [build_trailed_epsf_lut, transform_and_add_trailed_epsf, add_epsf_counts_tiered],
+    ids=['build_trailed_epsf_lut', 'transform_and_add_trailed_epsf', 'add_epsf_counts_tiered'])
+def test_removed_trailed_helpers_name_their_replacement(removed):
+    with pytest.raises(NotImplementedError, match='transform_and_add_epsf'):
+        removed(tf.zeros([4, 4]), [1.0], [1.0], [1.0])
+
+
+def test_resolve_epsf_tiers_trail_det_warns_and_is_ignored():
+    lut = tf.ones([1, 1, 5, 5], tf.float32)
+    crop = {'mode': 'manual', 'threshold_pe': 10.0, 'kernel_size': 3}
+
+    with pytest.warns(DeprecationWarning, match='trail_det'):
+        tiers = resolve_epsf_tiers(lut, crop, trail_det=4)
+
+    assert tiers == resolve_epsf_tiers(lut, crop)
+
+
+def test_filter_without_kernel_size_warns_and_keeps_center_only_rule():
+    rows = np.array([-8.5, 18.0, 44.5], np.float32)
+
+    with pytest.warns(DeprecationWarning, match='kernel_size'):
+        kept, _, _ = filter_epsf_sources_in_bounds(
+            tf.zeros([12, 12]), rows, np.full(3, 18.0, np.float32), np.ones(3, np.float32),
+            0.0, 1.0, 0.0, [0.0, 0.0], 3,
+        )
+
+    np.testing.assert_array_equal(kept.numpy(), [18.0])
