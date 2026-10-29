@@ -33,6 +33,7 @@ from satsim.satsim import (
 from satsim.util import configure_eager
 from satsim.util.system import is_tensorflow_running_on_cpu
 from satsim.util import MultithreadedTaskQueue
+from tests.epsf_helpers import assert_renders_match, deterministic_ops
 
 
 def test_star_brightness():
@@ -1266,41 +1267,43 @@ def test_epsf_native_stars_land_on_catalog_with_fftconv2p_flux_runtime(tmp_path,
     )
     fft_frame = _load_debug_frame(dirname_fft, 'fpa_conv_star')
 
-    epsf_frames = {}
-    for star_render_mode in ('transform', 'streak'):
-        ssp_epsf = copy.deepcopy(ssp_fft)
-        ssp_epsf['sim']['mode'] = 'epsf'
-        ssp_epsf['sim']['star_render_mode'] = star_render_mode
-        ssp_epsf['sim']['render_size'] = [41, 41]
-        ssp_epsf['sim']['epsf'] = {
-            'kernel_size': 31,
-            'psf_generation_size': 57,
-            'fallback_to_fft_for_models': fallback_to_fft_for_models,
-            'crop': {
-                'mode': 'off',
-            },
-        }
+    def render_epsf_frames():
+        frames = {}
+        for star_render_mode in ('transform', 'streak'):
+            ssp_epsf = copy.deepcopy(ssp_fft)
+            ssp_epsf['sim']['mode'] = 'epsf'
+            ssp_epsf['sim']['star_render_mode'] = star_render_mode
+            ssp_epsf['sim']['render_size'] = [41, 41]
+            ssp_epsf['sim']['epsf'] = {
+                'kernel_size': 31,
+                'psf_generation_size': 57,
+                'fallback_to_fft_for_models': fallback_to_fft_for_models,
+                'crop': {
+                    'mode': 'off',
+                },
+            }
 
-        dirname_epsf = gen_images(
-            ssp_epsf,
-            eager=True,
-            output_dir='./.images',
-            output_debug=True,
-            set_name=_gen_name('test_epsf_native_star_' + star_render_mode),
-        )
-        epsf_frames[star_render_mode] = _load_debug_frame(dirname_epsf, 'fpa_conv_star')
+            dirname_epsf = gen_images(
+                ssp_epsf,
+                eager=True,
+                output_dir='./.images',
+                output_debug=True,
+                set_name=_gen_name('test_epsf_native_star_' + star_render_mode),
+            )
+            frames[star_render_mode] = _load_debug_frame(dirname_epsf, 'fpa_conv_star')
+        return frames['streak'], frames['transform']
 
-    r_stars_os, c_stars_os = _load_debug_frame(dirname_epsf, 'stars_os')[:2]
+    _, frame = assert_renders_match(render_epsf_frames, float(np.sum(fft_frame)))
+
+    r_stars_os, c_stars_os = _load_debug_frame(dirname_fft, 'stars_os')[:2]
     t_mid = ssp_fft['fpa']['time']['exposure'] / 2
     expected_rc = np.stack([r_stars_os, c_stars_os], axis=1) - ssp_fft['sim']['padding'] + np.multiply(
         ssp_fft['geometry']['stars']['motion']['translation'], t_mid)
-    frame = epsf_frames['transform']
     centroids = []
     for r, c in np.rint(expected_rc).astype(int):
         window = frame[r - 5:r + 6, c - 5:c + 6]
         centroids.append(np.add(scipy.ndimage.center_of_mass(window), [r - 5, c - 5]))
 
-    np.testing.assert_array_equal(epsf_frames['streak'], epsf_frames['transform'])
     # The ePSF LUT is built with fftconv2p, which centers it about 0.025 px right of the PSF.
     np.testing.assert_allclose(centroids, expected_rc, atol=0.05)
     np.testing.assert_allclose(np.sum(frame), np.sum(fft_frame), rtol=5e-3)
@@ -1400,13 +1403,18 @@ def test_epsf_modeled_target_fallback_keeps_fft_sampling_and_per_source_stars():
     control['sim']['mode'] = 'fftconv2p'
     control['sim']['star_render_mode'] = 'transform'
 
-    np.random.seed(42)
-    expected = next(image_generator(control, with_meta=True))
-    np.random.seed(42)
-    actual = next(image_generator(ssp, with_meta=True))
+    def render(sim):
+        np.random.seed(42)
+        return next(image_generator(sim, with_meta=True))
 
-    assert(np.sum(expected[4]) > 0)
+    with deterministic_ops():
+        expected, actual = render(control), render(ssp)
     np.testing.assert_allclose(actual[4], expected[4], rtol=1e-5, atol=1e-5)
+    expected, actual = render(control), render(ssp)
+    assert(np.sum(expected[4]) > 0)
+    # GPU scatter order and the FFT spread float32 rounding of the brightest pixels across the frame.
+    peak = np.max(np.abs(expected[4]))
+    np.testing.assert_allclose(actual[4], expected[4], rtol=1e-5, atol=4 * np.spacing(np.float32(peak)))
     np.testing.assert_array_equal(actual[5], expected[5])
 
 

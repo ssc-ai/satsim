@@ -21,7 +21,7 @@ from satsim.image.epsf import (
 )
 from satsim.image.psf import gen_gaussian
 from satsim.util import configure_eager
-from tests.epsf_helpers import assert_equivalent, float64_midpoint_bilinear_reference
+from tests.epsf_helpers import assert_equivalent, assert_renders_match, float64_midpoint_bilinear_reference
 
 
 configure_eager()
@@ -413,7 +413,7 @@ def test_default_filter_keeps_every_contributing_source(t_start, t_end, rotation
     kept, _, _ = filter_epsf_sources_in_bounds(
         fpa, r_os, c_os, cnt, t_start, t_end, rotation, translation, s_osf, kernel_size)
     assert 0 < kept.shape[0] < r_os.shape[0]
-    np.testing.assert_array_equal(render(True), render(False))
+    assert_renders_match(lambda: (render(True), render(False)), float(np.sum(cnt)))
 
 
 @pytest.mark.parametrize('rotation', [0.0, 1e-6, -0.02], ids=['static', 'slow-rotation', 'rotation'])
@@ -452,9 +452,8 @@ def test_filter_keeps_every_contributing_source_for_any_offset(s_osf, offset, po
             point_rendering=point_rendering, position_offset_os=offset,
         ).numpy()
 
-    unfiltered = render(False)
+    _, unfiltered = assert_renders_match(lambda: (render(True), render(False)), float(rows.size))
     assert unfiltered.sum() > 0
-    np.testing.assert_array_equal(render(True), unfiltered)
 
 
 def test_graph_render_accepts_lut_with_dynamic_kernel_size():
@@ -481,7 +480,7 @@ def test_exact_zero_motion_renders_identically_for_any_t_osf(rotation, translati
             build_epsf_lut(None, 3, 3), 3,
         ).numpy()
 
-    np.testing.assert_array_equal(render(5), render(1))
+    assert_renders_match(lambda: (render(5), render(1)), 13.0)
 
 
 @pytest.mark.parametrize(

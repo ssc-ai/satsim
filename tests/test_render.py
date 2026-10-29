@@ -10,7 +10,7 @@ from satsim.image.render import render_full, render_piecewise, render_epsf
 from satsim.image.epsf import build_epsf_lut
 from satsim.image.psf import gen_gaussian
 from satsim.image.coordinates import detector_to_oversampled
-from tests.epsf_helpers import assert_equivalent, float64_midpoint_bilinear_reference
+from tests.epsf_helpers import assert_equivalent, assert_renders_match, float64_midpoint_bilinear_reference
 
 
 def _centroid(image):
@@ -818,28 +818,29 @@ def test_render_epsf_fallback_renders_per_source_transform_stars():
         [4.0, -6.0],
     )
 
-    expected = render_full(
-        *common,
-        args[7],
-        *source_args,
-        render_separate=True,
-        obs_model=[model],
-        star_render_mode='transform',
-    )
-    actual = render_epsf(
-        *common,
-        epsf_lut,
-        *source_args,
-        render_separate=True,
-        obs_model=[model],
-        star_render_mode='streak',
-        fallback_to_fft_for_models=True,
-        psf_os=args[7],
-    )
+    def render_pair():
+        expected = render_full(
+            *common,
+            args[7],
+            *source_args,
+            render_separate=True,
+            obs_model=[model],
+            star_render_mode='transform',
+        )
+        actual = render_epsf(
+            *common,
+            epsf_lut,
+            *source_args,
+            render_separate=True,
+            obs_model=[model],
+            star_render_mode='streak',
+            fallback_to_fft_for_models=True,
+            psf_os=args[7],
+        )
+        return [np.concatenate([image[0].numpy(), image[1].numpy()]) for image in (actual, expected)]
 
-    assert np.sum(expected[0].numpy()) > 0
-    np.testing.assert_array_equal(actual[0].numpy(), expected[0].numpy())
-    np.testing.assert_array_equal(actual[1].numpy(), expected[1].numpy())
+    _, expected = assert_renders_match(render_pair, 1250.0)
+    assert np.sum(expected[:expected.shape[0] // 2]) > 0
 
 
 def test_render_epsf_fallback_obs_model_matches_render_full():

@@ -4,6 +4,9 @@ import contextlib
 import numpy as np
 import tensorflow as tf
 
+from tensorflow.python.eager import context
+from tensorflow.python.framework import config as tf_config
+
 import satsim.image.epsf as epsf
 
 
@@ -115,3 +118,37 @@ def routed(accumulator):
     finally:
         epsf._accumulate_stars_cpu = accumulate
     assert bool(runs) == (accumulator == 'cpu'), runs
+
+
+@contextlib.contextmanager
+def deterministic_ops(seed=42):
+    """Run the block with TensorFlow op determinism and a global seed, then restore both.
+
+    GPU scatter-adds sum in an unspecified order, so two renders of one scene
+    match bitwise only under op determinism, which also rejects unseeded
+    random ops.
+    """
+    was_enabled = tf_config.is_op_determinism_enabled()
+    previous_seed = context.global_seed()
+    tf_config.enable_op_determinism()
+    tf.random.set_seed(seed)
+    try:
+        yield
+    finally:
+        tf.random.set_seed(previous_seed)
+        if not was_enabled:
+            tf_config.disable_op_determinism()
+
+
+def assert_renders_match(render_pair, source_flux):
+    """Check that ``render_pair()`` returns two renders of one scene that agree.
+
+    They must be bitwise equal under ``deterministic_ops`` and pass
+    ``assert_equivalent`` under default execution. Returns the default pair.
+    """
+    with deterministic_ops():
+        first, second = render_pair()
+    np.testing.assert_array_equal(first, second)
+    first, second = render_pair()
+    assert_equivalent(first, np.asarray(second, np.float64), source_flux)
+    return first, second

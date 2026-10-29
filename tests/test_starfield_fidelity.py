@@ -14,7 +14,8 @@ import tensorflow as tf
 
 from satsim.image.epsf import add_epsf_counts, build_epsf_lut, transform_and_add_epsf
 from satsim.image.render import render_epsf
-from tests.epsf_helpers import assert_equivalent, float64_midpoint_bilinear_reference, quadratic_warp, routed
+from tests.epsf_helpers import (
+    assert_equivalent, assert_renders_match, float64_midpoint_bilinear_reference, quadratic_warp, routed)
 
 
 OSF = 3
@@ -138,11 +139,14 @@ def test_rotating_arc_enters_frame_between_outside_endpoints(optics, star_mode, 
 def test_warm_cache_support_shape_registers_like_psf(optics, star_mode, accumulator, parity):
     psf, lut = optics[parity]
     scene = dict(velocity=(-1.1, 0.7), start=2, end=5)
-    cold, _ = _render(psf, lut, [55.23, 41.6], [60.77, 32.1], [2000, 50], star_mode, accumulator, **scene)
-    warm, _ = _render(None, lut, [55.23, 41.6], [60.77, 32.1], [2000, 50], star_mode, accumulator,
-                      psf_support_shape=tuple(psf.shape), **scene)
 
-    np.testing.assert_array_equal(warm, cold)
+    def render_pair():
+        cold, _ = _render(psf, lut, [55.23, 41.6], [60.77, 32.1], [2000, 50], star_mode, accumulator, **scene)
+        warm, _ = _render(None, lut, [55.23, 41.6], [60.77, 32.1], [2000, 50], star_mode, accumulator,
+                          psf_support_shape=tuple(psf.shape), **scene)
+        return warm, cold
+
+    assert_renders_match(render_pair, 2050.0)
 
 
 @pytest.mark.parametrize('parity', ['odd', 'even'], ids=['odd-support', 'even-support'])
@@ -150,10 +154,13 @@ def test_target_pixels_are_bitwise_independent_of_star_mode(optics, accumulator,
     psf, lut = optics[parity]
     scene = dict(targets=([14.2, 39.7, 70.9], [20.8, 42.1, 61.4], [0.1, 2e3, 4e5]),
                  velocity=(-1.1, 0.7), start=2, end=5)
-    _, transform_targets = _render(psf, lut, [55.23], [60.77], [2000], 'transform', accumulator, **scene)
-    _, streak_targets = _render(psf, lut, [55.23], [60.77], [2000], 'streak', accumulator, **scene)
 
-    np.testing.assert_array_equal(streak_targets, transform_targets)
+    def render_pair():
+        _, transform_targets = _render(psf, lut, [55.23], [60.77], [2000], 'transform', accumulator, **scene)
+        _, streak_targets = _render(psf, lut, [55.23], [60.77], [2000], 'streak', accumulator, **scene)
+        return streak_targets, transform_targets
+
+    assert_renders_match(render_pair, float(np.sum(scene['targets'][2])))
 
 
 def test_graph_rendering_uses_tensorflow(optics, star_mode):
