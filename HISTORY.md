@@ -1,6 +1,14 @@
 History
 =======
 
+0.27.2 (unreleased)
+---------------------
+
+* **BEHAVIORAL CHANGE:** Render native ePSF `streak` stars like `transform`: each star deposits its optical ePSF at every exposure-bin midpoint. This fixes clipped one-sided trails, field-rotation shape and phase carry. Stars whose ePSF wings reach the frame are now kept, so dense fields deposit slightly more stars. `epsf.crop` tier counts count the deposited stars, and frame metadata no longer includes `trail_det`. (#63)
+* Accelerate eager CPU ePSF star deposition with a compiled float64 kernel. It runs only when every render tensor, including `position_transform` output, is on the CPU; GPU, mixed-device and graph renders keep TensorFlow. Pixels can differ from TensorFlow at rounding level. (#63)
+* Skip unused PSF generation for native ePSF `streak` frames with a warm LUT cache, and keep FFT temporal sampling and per-source star transforms when `fallback_to_fft_for_models` applies. (#63)
+* **API CHANGE:** Deprecate the trailed ePSF path. `render_epsf` `phase_oversample` and `epsf_normalize`, and `resolve_epsf_tiers` `trail_det`, are ignored with a `DeprecationWarning`. `filter_epsf_sources_in_bounds` without `kernel_size` warns and applies the previous center-only rule. `build_trailed_epsf_lut`, `transform_and_add_trailed_epsf` and `add_epsf_counts_tiered` raise `NotImplementedError` naming their replacement. (#63)
+
 0.27.1
 ---------------------
 

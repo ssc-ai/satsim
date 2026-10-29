@@ -165,7 +165,6 @@ def _epsf_image(kind, row, col, pe, psf=True, point_rendering='bilinear', phase_
         [0.0, 0.0],
         render_separate=True,
         point_rendering=point_rendering,
-        phase_oversample=phase_oversample,
         epsf_crop={'mode': 'off'},
     )
     return result[1 if kind == 'target' else 0].numpy()

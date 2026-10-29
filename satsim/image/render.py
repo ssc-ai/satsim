@@ -2,6 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 import math
 import logging
+import warnings
 
 import tensorflow as tf
 import numpy as np
@@ -10,13 +11,11 @@ from satsim.math import fftconv2p
 from satsim.image.fpa import downsample, crop, add_counts, transform_and_add_counts, transform_and_fft
 from satsim.image.epsf import (
     add_epsf_counts,
-    build_trailed_epsf_lut,
     EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
     filter_epsf_sources_in_bounds,
     resolve_epsf_tiers,
     summarize_epsf_tiers,
     transform_and_add_epsf,
-    transform_and_add_trailed_epsf,
 )
 
 logger = logging.getLogger(__name__)
@@ -294,25 +293,42 @@ def render_epsf(
         render_separate=True, obs_model=None, star_render_mode='transform',
         point_rendering='bilinear', batch_size=None,
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-        batch_size_cap=None, phase_oversample=1,
-        fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=False,
-        epsf_crop=None, epsf_metadata=None, psf_support_shape=None, star_position_transform=None):
+        batch_size_cap=None, phase_oversample=None,
+        fallback_to_fft_for_models=False, psf_os=None, epsf_normalize=None,
+        epsf_crop=None, epsf_metadata=None, psf_support_shape=None, star_position_transform=None,
+        star_accumulator='auto'):
     """Render directly in detector space using an ePSF lookup table.
+
+    Both ``star_render_mode`` values render stars natively the same way: each
+    star deposits its optical ePSF at every exposure-bin midpoint sample, as
+    ``transform_and_add_epsf`` describes. Frames with ``obs_model`` targets
+    and ``fallback_to_fft_for_models`` render through ``render_full`` instead,
+    with per-source star transforms whatever ``star_render_mode`` says.
+
+    ``star_accumulator`` is passed to ``transform_and_add_epsf`` as its
+    ``accumulator``: ``'auto'`` sums stars with the compiled CPU kernel when
+    the render is eager and every star tensor is on the CPU. Targets always
+    deposit through TensorFlow.
 
     Pass the ``psf_os`` used to build ``epsf_lut``, or its known
     ``psf_support_shape`` ``(height, width)`` when the array itself is
     unavailable (warm LUT cache), so source registration can account for odd
     versus even PSF support. If both are omitted, even support is assumed.
+
+    ``phase_oversample`` and ``epsf_normalize`` are deprecated and ignored;
+    they configured the removed trailed LUT.
     """
+    for name, value in (('phase_oversample', phase_oversample), ('epsf_normalize', epsf_normalize)):
+        if value is not None:
+            warnings.warn('render_epsf {} is ignored; stars no longer deposit a trailed LUT'.format(name),
+                          DeprecationWarning, stacklevel=2)
     point_rendering = str(point_rendering).lower()
     if point_rendering not in ('floor', 'bilinear', 'phase_nearest'):
         raise ValueError("point_rendering must be 'floor', 'bilinear', or 'phase_nearest'")
     if batch_size_cap is None and batch_size is not None:
         batch_size_cap = batch_size
 
-    star_render_mode = normalize_star_render_mode(star_render_mode)
-    if star_position_transform is not None:
-        star_render_mode = 'transform'
+    normalize_star_render_mode(star_render_mode)
     unsupported_model = obs_model is not None and len(obs_model) > 0
     if unsupported_model:
         if fallback_to_fft_for_models:
@@ -340,7 +356,7 @@ def render_epsf(
                 star_tran_os,
                 render_separate=render_separate,
                 obs_model=obs_model,
-                star_render_mode=star_render_mode,
+                star_render_mode='transform',
                 point_rendering=point_rendering,
                 star_position_transform=star_position_transform,
             )
@@ -378,48 +394,9 @@ def render_epsf(
         w_pad_det_div2 = w_pad_os_div2_i // s_osf_i
 
     fpa_star = tf.zeros([h_pad_det, w_pad_det], tf.float32)
-    if star_render_mode == 'streak':
-        base_kernel_size = epsf_lut.shape.as_list()[2]
-        if base_kernel_size is None:
-            base_kernel_size = int(tf.shape(epsf_lut)[2].numpy())
-        trailed_epsf_lut, _, trailed_info = build_trailed_epsf_lut(
-            psf_os,
-            s_osf,
-            base_kernel_size,
-            t_start_star,
-            t_end_star,
-            t_osf,
-            star_rot_rate,
-            star_tran_os,
-            normalize=epsf_normalize,
-            point_rendering=point_rendering,
-            dtype=tf.float32,
-            max_kernel_size=tf.minimum(h_pad_det, w_pad_det),
-            return_info=True,
-            phase_oversample=phase_oversample,
-        )
-        epsf_tiers = resolve_epsf_tiers(
-            trailed_epsf_lut,
-            epsf_crop,
-            trail_det=trailed_info.get('trail_det', 0),
-        )
-        if epsf_metadata is not None and epsf_tiers is not None and star_position_transform is None:
-            _, _, visible_pe_stars_os = filter_epsf_sources_in_bounds(
-                fpa_star,
-                r_stars_os,
-                c_stars_os,
-                pe_stars_os,
-                t_start_star,
-                t_end_star,
-                star_rot_rate,
-                star_tran_os,
-                s_osf,
-            )
-            epsf_metadata.update(summarize_epsf_tiers(epsf_tiers, visible_pe_stars_os))
-            epsf_metadata['mode'] = epsf_crop.get('mode')
-            epsf_metadata['sigma_pix'] = epsf_crop.get('sigma_pix')
-            epsf_metadata['trail_det'] = trailed_info.get('trail_det', 0)
-        fpa_star = transform_and_add_trailed_epsf(
+    star_tiers = resolve_epsf_tiers(epsf_lut, epsf_crop)
+    if epsf_metadata is not None and star_tiers is not None and star_position_transform is None:
+        _, _, pe_deposited = filter_epsf_sources_in_bounds(
             fpa_star,
             r_stars_os,
             c_stars_os,
@@ -428,53 +405,34 @@ def render_epsf(
             t_end_star,
             star_rot_rate,
             star_tran_os,
-            trailed_epsf_lut,
             s_osf,
-            batch_size=batch_size,
-            point_rendering=point_rendering,
-            epsf_tiers=epsf_tiers,
-            batch_element_budget=batch_element_budget,
-            batch_size_cap=batch_size_cap,
+            tf.shape(epsf_lut)[2],
             position_offset_os=(row_offset, col_offset),
         )
-    else:
-        epsf_tiers = resolve_epsf_tiers(epsf_lut, epsf_crop)
-        if epsf_metadata is not None and epsf_tiers is not None and star_position_transform is None:
-            _, _, visible_pe_stars_os = filter_epsf_sources_in_bounds(
-                fpa_star,
-                r_stars_os,
-                c_stars_os,
-                pe_stars_os,
-                t_start_star,
-                t_end_star,
-                star_rot_rate,
-                star_tran_os,
-                s_osf,
-            )
-            epsf_metadata.update(summarize_epsf_tiers(epsf_tiers, visible_pe_stars_os))
-            epsf_metadata['mode'] = epsf_crop.get('mode')
-            epsf_metadata['sigma_pix'] = epsf_crop.get('sigma_pix')
-            epsf_metadata['trail_det'] = 0
-        fpa_star = transform_and_add_epsf(
-            fpa_star,
-            r_stars_os,
-            c_stars_os,
-            pe_stars_os,
-            t_start_star,
-            t_end_star,
-            t_osf,
-            star_rot_rate,
-            star_tran_os,
-            epsf_lut,
-            s_osf,
-            batch_size=batch_size,
-            point_rendering=point_rendering,
-            epsf_tiers=epsf_tiers,
-            batch_element_budget=batch_element_budget,
-            batch_size_cap=batch_size_cap,
-            position_offset_os=(row_offset, col_offset),
-            position_transform=star_position_transform,
-        )
+        epsf_metadata.update(summarize_epsf_tiers(star_tiers, pe_deposited))
+        epsf_metadata['mode'] = epsf_crop.get('mode')
+        epsf_metadata['sigma_pix'] = epsf_crop.get('sigma_pix')
+    # The deposit filters the caller's own star tensors so routing sees their placement.
+    fpa_star = transform_and_add_epsf(
+        fpa_star,
+        r_stars_os,
+        c_stars_os,
+        pe_stars_os,
+        t_start_star,
+        t_end_star,
+        t_osf,
+        star_rot_rate,
+        star_tran_os,
+        epsf_lut,
+        s_osf,
+        point_rendering=point_rendering,
+        epsf_tiers=star_tiers,
+        batch_element_budget=batch_element_budget,
+        batch_size_cap=batch_size_cap,
+        position_offset_os=(row_offset, col_offset),
+        position_transform=star_position_transform,
+        accumulator=star_accumulator,
+    )
 
     fpa_targ = tf.zeros([h_pad_det, w_pad_det], tf.float32)
     fpa_targ = add_epsf_counts(

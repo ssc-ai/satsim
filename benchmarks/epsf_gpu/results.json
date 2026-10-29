@@ -1,0 +1,5407 @@
+{
+  "summary": {
+    "commits": {
+      "baseline": "8d32165042647d8e598ea6e9c12013700267698e",
+      "candidate": "7996c8ee1ec1c48f178b75de627eff37f6822075"
+    },
+    "setup": {
+      "baseline": {
+        "ready": true,
+        "version": "0.27.1",
+        "source": "$BASELINE/satsim/__init__.py",
+        "import_seconds": 2.9694071719422936,
+        "gpu_setup_seconds": 0.519019166007638,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "tf_version": "2.13.1",
+        "numpy_version": "1.26.4",
+        "tf_build": {
+          "cpu_compiler": "/usr/lib/llvm-16/bin/clang",
+          "cuda_compute_capabilities": [
+            "sm_35",
+            "sm_50",
+            "sm_60",
+            "sm_70",
+            "sm_75",
+            "compute_80"
+          ],
+          "cuda_version": "11.8",
+          "cudnn_version": "8",
+          "is_cuda_build": true,
+          "is_rocm_build": false,
+          "is_tensorrt_build": true
+        },
+        "deterministic": "0"
+      },
+      "candidate": {
+        "ready": true,
+        "version": "0.27.2",
+        "source": "$CANDIDATE/satsim/__init__.py",
+        "import_seconds": 3.0278090089559555,
+        "gpu_setup_seconds": 0.5170598409604281,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "tf_version": "2.13.1",
+        "numpy_version": "1.26.4",
+        "tf_build": {
+          "cpu_compiler": "/usr/lib/llvm-16/bin/clang",
+          "cuda_compute_capabilities": [
+            "sm_35",
+            "sm_50",
+            "sm_60",
+            "sm_70",
+            "sm_75",
+            "compute_80"
+          ],
+          "cuda_version": "11.8",
+          "cudnn_version": "8",
+          "is_cuda_build": true,
+          "is_rocm_build": false,
+          "is_tensorrt_build": true
+        },
+        "deterministic": "0"
+      }
+    },
+    "timing": [
+      {
+        "kind": "stage",
+        "case": "sparse_static",
+        "baseline": {
+          "median": 0.4609474828466773,
+          "minimum": 0.4081561148632318,
+          "maximum": 0.48085196618922055,
+          "peak_mib": 514.4833984375
+        },
+        "candidate": {
+          "median": 0.1887720029335469,
+          "minimum": 0.18346916208975017,
+          "maximum": 0.1989442789927125,
+          "peak_mib": 150.18017578125
+        },
+        "speedup": 2.4418212218098034
+      },
+      {
+        "kind": "stage",
+        "case": "sparse_moving",
+        "baseline": {
+          "median": 0.4314312238711864,
+          "minimum": 0.414065521908924,
+          "maximum": 0.5020468907896429,
+          "peak_mib": 514.48681640625
+        },
+        "candidate": {
+          "median": 0.42305317311547697,
+          "minimum": 0.4150620470754802,
+          "maximum": 0.5423879320733249,
+          "peak_mib": 514.488525390625
+        },
+        "speedup": 1.0198037771328157
+      },
+      {
+        "kind": "stage",
+        "case": "dense_static",
+        "baseline": {
+          "median": 2.8597500789910555,
+          "minimum": 2.804346357937902,
+          "maximum": 3.0746629489585757,
+          "peak_mib": 688.254638671875
+        },
+        "candidate": {
+          "median": 0.23123848112300038,
+          "minimum": 0.2281104640569538,
+          "maximum": 0.23922136495821178,
+          "peak_mib": 196.756591796875
+        },
+        "speedup": 12.367102850281642
+      },
+      {
+        "kind": "stage",
+        "case": "dense_moving",
+        "baseline": {
+          "median": 2.9248996009118855,
+          "minimum": 2.780289606191218,
+          "maximum": 3.1159139790106565,
+          "peak_mib": 702.82080078125
+        },
+        "candidate": {
+          "median": 2.8677797759883106,
+          "minimum": 2.750515670981258,
+          "maximum": 3.1030223979614675,
+          "peak_mib": 702.513671875
+        },
+        "speedup": 1.0199177863662456
+      },
+      {
+        "kind": "collect",
+        "case": "sparse_static",
+        "baseline": {
+          "median": 1.275692243827507,
+          "minimum": 1.2532685759942979,
+          "maximum": 1.385748788015917,
+          "peak_mib": 330.571533203125
+        },
+        "candidate": {
+          "median": 1.2788278041407466,
+          "minimum": 1.1292118339333683,
+          "maximum": 1.3515107620041817,
+          "peak_mib": 330.594970703125
+        },
+        "speedup": 0.9975480981074333
+      },
+      {
+        "kind": "collect",
+        "case": "sparse_moving",
+        "baseline": {
+          "median": 1.3007011960726231,
+          "minimum": 1.2430191088933498,
+          "maximum": 1.344555368181318,
+          "peak_mib": 352.685302734375
+        },
+        "candidate": {
+          "median": 1.3289131941273808,
+          "minimum": 1.2463917559944093,
+          "maximum": 1.3771189849358052,
+          "peak_mib": 330.386962890625
+        },
+        "speedup": 0.9787706238605879
+      },
+      {
+        "kind": "collect",
+        "case": "dense_static",
+        "baseline": {
+          "median": 3.3058275829534978,
+          "minimum": 2.891178658930585,
+          "maximum": 3.3958823659922928,
+          "peak_mib": 603.446044921875
+        },
+        "candidate": {
+          "median": 2.0846536341123283,
+          "minimum": 1.8983333660289645,
+          "maximum": 2.145006291102618,
+          "peak_mib": 330.654296875
+        },
+        "speedup": 1.585792252899202
+      },
+      {
+        "kind": "collect",
+        "case": "dense_moving",
+        "baseline": {
+          "median": 3.083491028053686,
+          "minimum": 3.0403658328577876,
+          "maximum": 3.2081516899634153,
+          "peak_mib": 599.201416015625
+        },
+        "candidate": {
+          "median": 3.0031150858849287,
+          "minimum": 2.947871485957876,
+          "maximum": 3.294048971030861,
+          "peak_mib": 597.9970703125
+        },
+        "speedup": 1.02676418980629
+      }
+    ],
+    "fidelity": {
+      "normal": {
+        "images": 64,
+        "targets_bitwise": true,
+        "maxima": {
+          "l2": 1.4842817614336675e-06,
+          "flux": 3.738842504461974e-08,
+          "centroid_px": 1.2977753462516943e-05,
+          "moment": 9.75716552517421e-08,
+          "aperture_tolerance_ratio": 0.18549298924636937
+        }
+      },
+      "deterministic": {
+        "images": 32,
+        "targets_bitwise": true,
+        "maxima": {
+          "l2": 1.038759139542509e-06,
+          "flux": 4.0997729966396834e-08,
+          "centroid_px": 7.549218236717368e-06,
+          "moment": 9.832555715761411e-08,
+          "aperture_tolerance_ratio": 0.1538613364836222
+        }
+      }
+    },
+    "exports": {
+      "normal": {
+        "paired_frames": 72,
+        "annotation_objects_compared": 148392,
+        "maximum_adu_difference": 1,
+        "differing_pixels": 620,
+        "header_exclusions": [
+          "SWCREATE"
+        ],
+        "metadata_exclusions": [
+          "epsf.crop.trail_det"
+        ]
+      },
+      "deterministic": {
+        "paired_frames": 12,
+        "annotation_objects_compared": 24732,
+        "maximum_adu_difference": 1,
+        "differing_pixels": 46,
+        "header_exclusions": [
+          "SWCREATE"
+        ],
+        "metadata_exclusions": [
+          "epsf.crop.trail_det"
+        ]
+      }
+    },
+    "legacy_streak": {
+      "stage": {
+        "baseline": {
+          "median": 0.48807326797395945,
+          "minimum": 0.4684281339868903,
+          "maximum": 0.5015797747764736
+        },
+        "candidate": {
+          "median": 2.9307600299362093,
+          "minimum": 2.882613484049216,
+          "maximum": 3.0453685489483178
+        },
+        "runtime_ratio": 6.004754249504557,
+        "star_image_differences": [
+          {
+            "l2": 0.1183188528926618,
+            "flux": 5.120067527356488e-06,
+            "centroid_px": 0.013504853181282422,
+            "moment": 0.0001691948530611684
+          }
+        ]
+      },
+      "collect": {
+        "baseline": {
+          "median": 2.89191748900339,
+          "minimum": 2.8309474519919604,
+          "maximum": 3.030615912983194
+        },
+        "candidate": {
+          "median": 3.1047606950160116,
+          "minimum": 2.8965091810096055,
+          "maximum": 3.4385147020220757
+        },
+        "runtime_ratio": 1.0735993356732911,
+        "star_image_differences": [
+          {
+            "l2": 0.2555024316287808,
+            "flux": 1.9028898392124334e-06,
+            "centroid_px": 0.01379540701213545,
+            "moment": 0.00016914522628011291
+          },
+          {
+            "l2": 0.2551513787079681,
+            "flux": 1.9080663194846306e-06,
+            "centroid_px": 0.013785573068578498,
+            "moment": 0.00016914030743063046
+          },
+          {
+            "l2": 0.2551078673524806,
+            "flux": 1.9005180198895054e-06,
+            "centroid_px": 0.013773258051437925,
+            "moment": 0.00016912437525254422
+          }
+        ]
+      }
+    },
+    "profiles": {
+      "baseline": {
+        "stage": {
+          "counts": [
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 4,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 22548,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 110460,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 110724,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 201960,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 1,
+              "count": 33
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 4,
+              "count": 63
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 16,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 3600,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 15376,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 22548,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 90192,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 110460,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 110724,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 201960,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 441840,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 442896,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 807840,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 26065488,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 65435040,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 127691760,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 127996944,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 1,
+              "count": 33
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 4,
+              "count": 76
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 16,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 32,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 216,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 496,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 15376,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 22548,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 90192,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 110460,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 110724,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 180384,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 201960,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 441840,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 442896,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 807840,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 883680,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 885792,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 1533264,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 1615680,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 7270560,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 7511280,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 7529232,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 26065488,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 65435040,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 127691760,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 127996944,
+              "count": 3
+            }
+          ],
+          "totals": {
+            "MemcpyD2D": 3110416,
+            "MemcpyD2H": 1475792061,
+            "MemcpyH2D": 845493073
+          },
+          "exported_device_timeline_events": 0
+        },
+        "collect": {
+          "counts": [
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 4,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 83808,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 693792,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 1,
+              "count": 57
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 4,
+              "count": 147
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 16,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 3600,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 14400,
+              "count": 37
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 15376,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 83808,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 96100,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 335232,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 693792,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 2775168,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 15273720,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 27153792,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 69379200,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 1,
+              "count": 57
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 4,
+              "count": 180
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 8,
+              "count": 9
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 16,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 32,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 216,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 496,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 14400,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 15376,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 28800,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 83808,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 96100,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 335232,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 670464,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 693792,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 2775168,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 3017088,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 5550336,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 13875840,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 27153792,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 69379200,
+              "count": 3
+            }
+          ],
+          "totals": {
+            "MemcpyD2D": 9331248,
+            "MemcpyD2H": 713595865,
+            "MemcpyH2D": 456825781
+          },
+          "exported_device_timeline_events": 0
+        }
+      },
+      "candidate": {
+        "stage": {
+          "counts": [
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 4,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 22548,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 110460,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 110724,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 201960,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 1,
+              "count": 37
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 4,
+              "count": 63
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 16,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 15376,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 22548,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 90192,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 110460,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 110724,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 201960,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 441840,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 442896,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 807840,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 26065488,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 65435040,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 127691760,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 127996944,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 1,
+              "count": 33
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 4,
+              "count": 73
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 16,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 32,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 216,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 496,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 15376,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 22548,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 90192,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 110460,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 110724,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 180384,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 201960,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 441840,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 442896,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 807840,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 883680,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 885792,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 1533264,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 1615680,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 7270560,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 7511280,
+              "count": 4
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 7529232,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 26065488,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 65435040,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 127691760,
+              "count": 2
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 127996944,
+              "count": 3
+            }
+          ],
+          "totals": {
+            "MemcpyD2D": 3110416,
+            "MemcpyD2H": 1475777665,
+            "MemcpyH2D": 845492845
+          },
+          "exported_device_timeline_events": 0
+        },
+        "collect": {
+          "counts": [
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 4,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 83808,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2D",
+              "bytes": 693792,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 1,
+              "count": 66
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 4,
+              "count": 147
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 16,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 3600,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 14400,
+              "count": 37
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 15376,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 83808,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 96100,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 335232,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 693792,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 2775168,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 15273720,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 27153792,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyD2H",
+              "bytes": 69379200,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 1,
+              "count": 57
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 4,
+              "count": 174
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 8,
+              "count": 9
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 16,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 32,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 216,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 496,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 14400,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 15376,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 28800,
+              "count": 8
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 83808,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 96100,
+              "count": 1
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 335232,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 670464,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 693792,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 2775168,
+              "count": 12
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 3017088,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 5550336,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 13875840,
+              "count": 6
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 27153792,
+              "count": 3
+            },
+            {
+              "kind": "MemcpyH2D",
+              "bytes": 69379200,
+              "count": 3
+            }
+          ],
+          "totals": {
+            "MemcpyD2D": 9331248,
+            "MemcpyD2H": 713563474,
+            "MemcpyH2D": 456825109
+          },
+          "exported_device_timeline_events": 0
+        }
+      }
+    },
+    "dispatch": {
+      "auto": 2.9249837091192603,
+      "tensorflow": 2.983041611034423
+    },
+    "source_sha256": {
+      "baseline": {
+        "satsim/image/epsf.py": "a4e309f299fa748736006b69cb86324078520a6b80ad3ab78d98aab81490d78e",
+        "satsim/image/render.py": "b506e6cd5f6b0e3b440440e7d53f3cea1510f4e4c2a64cb875a7a1a83240c58e",
+        "satsim/satsim.py": "27fede1386377ef909c178e88768cbb0899db265d7b9ca7399e7c5e566342507"
+      },
+      "candidate": {
+        "satsim/image/epsf.py": "226335df991ec893c2ee36a4e056ef696c1881b7974c47b17f868a2fe0e6819c",
+        "satsim/image/render.py": "43e27377e3a6c599a2edca11e8e97132ab7365a1cddc7516351450e2cd8061e3",
+        "satsim/satsim.py": "58c768fa927bcd3f15092803ba0c24dfbc09c353fd5bccabf8ff9798ec03d0b4"
+      }
+    }
+  },
+  "normal": {
+    "arguments": {
+      "baseline": "$BASELINE",
+      "candidate": "$CANDIDATE",
+      "output": "$ARTIFACTS/qualified",
+      "gpu": 0,
+      "rounds": 5,
+      "deterministic": false,
+      "profile": true,
+      "worker": false,
+      "tree": null,
+      "label": null
+    },
+    "hardware": "0, NVIDIA GeForce RTX 3090, 617.14, 24576 MiB\n1, NVIDIA GeForce RTX 3090, 617.14, 24576 MiB\n",
+    "commits": {
+      "baseline": "8d32165042647d8e598ea6e9c12013700267698e",
+      "candidate": "7996c8ee1ec1c48f178b75de627eff37f6822075"
+    },
+    "setup": {
+      "baseline": {
+        "ready": true,
+        "version": "0.27.1",
+        "source": "$BASELINE/satsim/__init__.py",
+        "import_seconds": 2.9694071719422936,
+        "gpu_setup_seconds": 0.519019166007638,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "tf_version": "2.13.1",
+        "numpy_version": "1.26.4",
+        "tf_build": {
+          "cpu_compiler": "/usr/lib/llvm-16/bin/clang",
+          "cuda_compute_capabilities": [
+            "sm_35",
+            "sm_50",
+            "sm_60",
+            "sm_70",
+            "sm_75",
+            "compute_80"
+          ],
+          "cuda_version": "11.8",
+          "cudnn_version": "8",
+          "is_cuda_build": true,
+          "is_rocm_build": false,
+          "is_tensorrt_build": true
+        },
+        "deterministic": "0"
+      },
+      "candidate": {
+        "ready": true,
+        "version": "0.27.2",
+        "source": "$CANDIDATE/satsim/__init__.py",
+        "import_seconds": 3.0278090089559555,
+        "gpu_setup_seconds": 0.5170598409604281,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "tf_version": "2.13.1",
+        "numpy_version": "1.26.4",
+        "tf_build": {
+          "cpu_compiler": "/usr/lib/llvm-16/bin/clang",
+          "cuda_compute_capabilities": [
+            "sm_35",
+            "sm_50",
+            "sm_60",
+            "sm_70",
+            "sm_75",
+            "compute_80"
+          ],
+          "cuda_version": "11.8",
+          "cudnn_version": "8",
+          "is_cuda_build": true,
+          "is_rocm_build": false,
+          "is_tensorrt_build": true
+        },
+        "deterministic": "0"
+      }
+    },
+    "cold": {
+      "stage_sparse_static": [
+        {
+          "seconds": 0.7029458659235388,
+          "memory_before": 1082880,
+          "memory": {
+            "current": 33137664,
+            "peak": 505848832
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.8212890625,
+            0.6337890625,
+            0.390625
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/cold_stage_sparse_static",
+          "kind": "stage",
+          "case": "sparse_static",
+          "tag": "cold_stage_sparse_static",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 0.2370860669761896,
+          "memory_before": 1082880,
+          "memory": {
+            "current": 33138176,
+            "peak": 102888704
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.8212890625,
+            0.6337890625,
+            0.390625
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/cold_stage_sparse_static",
+          "kind": "stage",
+          "case": "sparse_static",
+          "tag": "cold_stage_sparse_static",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "stage_sparse_moving": [
+        {
+          "seconds": 0.41601953585632145,
+          "memory_before": 68195584,
+          "memory": {
+            "current": 67731200,
+            "peak": 541046016
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.75537109375,
+            0.623046875,
+            0.38818359375
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/cold_stage_sparse_moving",
+          "kind": "stage",
+          "case": "sparse_moving",
+          "tag": "cold_stage_sparse_moving",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 0.5487391538918018,
+          "memory_before": 65189120,
+          "memory": {
+            "current": 68131840,
+            "peak": 539415040
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.75537109375,
+            0.623046875,
+            0.38818359375
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/cold_stage_sparse_moving",
+          "kind": "stage",
+          "case": "sparse_moving",
+          "tag": "cold_stage_sparse_moving",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "stage_dense_static": [
+        {
+          "seconds": 2.940148328896612,
+          "memory_before": 68197120,
+          "memory": {
+            "current": 67731456,
+            "peak": 721687296
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.775390625,
+            0.62939453125,
+            0.3916015625
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/cold_stage_dense_static",
+          "kind": "stage",
+          "case": "dense_static",
+          "tag": "cold_stage_dense_static",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 0.22270029899664223,
+          "memory_before": 64724224,
+          "memory": {
+            "current": 68663040,
+            "peak": 206314240
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.87353515625,
+            0.65234375,
+            0.400390625
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/cold_stage_dense_static",
+          "kind": "stage",
+          "case": "dense_static",
+          "tag": "cold_stage_dense_static",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "stage_dense_moving": [
+        {
+          "seconds": 3.0404120520688593,
+          "memory_before": 67731456,
+          "memory": {
+            "current": 67731456,
+            "peak": 721687296
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.90234375,
+            0.669921875,
+            0.41064453125
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/cold_stage_dense_moving",
+          "kind": "stage",
+          "case": "dense_moving",
+          "tag": "cold_stage_dense_moving",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 2.8150527321267873,
+          "memory_before": 66227712,
+          "memory": {
+            "current": 68197376,
+            "peak": 736638976
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.91064453125,
+            0.67578125,
+            0.4140625
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/cold_stage_dense_moving",
+          "kind": "stage",
+          "case": "dense_moving",
+          "tag": "cold_stage_dense_moving",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "collect_sparse_static": [
+        {
+          "seconds": 1.461835569003597,
+          "memory_before": 68663296,
+          "memory": {
+            "current": 168700416,
+            "peak": 346627584
+          },
+          "directory": "$ARTIFACTS/qualified/runs/baseline/cold_collect_sparse_static",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.947265625,
+            0.70849609375,
+            0.4345703125
+          ],
+          "pixel_range": [
+            15,
+            16393
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/cold_collect_sparse_static",
+          "kind": "collect",
+          "case": "sparse_static",
+          "tag": "cold_collect_sparse_static",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 1.5872327159158885,
+          "memory_before": 68663296,
+          "memory": {
+            "current": 164870400,
+            "peak": 336343552
+          },
+          "directory": "$ARTIFACTS/qualified/runs/candidate/cold_collect_sparse_static",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.87109375,
+            0.6962890625,
+            0.43212890625
+          ],
+          "pixel_range": [
+            15,
+            16393
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/cold_collect_sparse_static",
+          "kind": "collect",
+          "case": "sparse_static",
+          "tag": "cold_collect_sparse_static",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "collect_sparse_moving": [
+        {
+          "seconds": 1.5806255228817463,
+          "memory_before": 70566400,
+          "memory": {
+            "current": 170297344,
+            "peak": 346412288
+          },
+          "directory": "$ARTIFACTS/qualified/runs/baseline/cold_collect_sparse_moving",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.900390625,
+            0.7119140625,
+            0.4423828125
+          ],
+          "pixel_range": [
+            15,
+            10941
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/cold_collect_sparse_moving",
+          "kind": "collect",
+          "case": "sparse_moving",
+          "tag": "cold_collect_sparse_moving",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 1.8906474020332098,
+          "memory_before": 68955136,
+          "memory": {
+            "current": 174342656,
+            "peak": 346411008
+          },
+          "directory": "$ARTIFACTS/qualified/runs/candidate/cold_collect_sparse_moving",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.90869140625,
+            0.716796875,
+            0.44580078125
+          ],
+          "pixel_range": [
+            15,
+            10941
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/cold_collect_sparse_moving",
+          "kind": "collect",
+          "case": "sparse_moving",
+          "tag": "cold_collect_sparse_moving",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "collect_dense_static": [
+        {
+          "seconds": 3.7578721351455897,
+          "memory_before": 70575360,
+          "memory": {
+            "current": 184201472,
+            "peak": 634170368
+          },
+          "directory": "$ARTIFACTS/qualified/runs/baseline/cold_collect_dense_static",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.9970703125,
+            0.7470703125,
+            0.46044921875
+          ],
+          "pixel_range": [
+            15,
+            16393
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/cold_collect_dense_static",
+          "kind": "collect",
+          "case": "dense_static",
+          "tag": "cold_collect_dense_static",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 2.5694705948699266,
+          "memory_before": 69072640,
+          "memory": {
+            "current": 168436480,
+            "peak": 346676992
+          },
+          "directory": "$ARTIFACTS/qualified/runs/candidate/cold_collect_dense_static",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.99755859375,
+            0.75146484375,
+            0.46337890625
+          ],
+          "pixel_range": [
+            15,
+            16393
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/cold_collect_dense_static",
+          "kind": "collect",
+          "case": "dense_static",
+          "tag": "cold_collect_dense_static",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "collect_dense_moving": [
+        {
+          "seconds": 3.325919836992398,
+          "memory_before": 70792448,
+          "memory": {
+            "current": 171560960,
+            "peak": 632497152
+          },
+          "directory": "$ARTIFACTS/qualified/runs/baseline/cold_collect_dense_moving",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            1.05029296875,
+            0.79150390625,
+            0.48583984375
+          ],
+          "pixel_range": [
+            15,
+            12105
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/cold_collect_dense_moving",
+          "kind": "collect",
+          "case": "dense_moving",
+          "tag": "cold_collect_dense_moving",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 3.623267235001549,
+          "memory_before": 70793216,
+          "memory": {
+            "current": 171561728,
+            "peak": 633959168
+          },
+          "directory": "$ARTIFACTS/qualified/runs/candidate/cold_collect_dense_moving",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            1.0458984375,
+            0.79541015625,
+            0.48876953125
+          ],
+          "pixel_range": [
+            15,
+            12105
+          ],
+          "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/cold_collect_dense_moving",
+          "kind": "collect",
+          "case": "dense_moving",
+          "tag": "cold_collect_dense_moving",
+          "save": true,
+          "version": "candidate"
+        }
+      ]
+    },
+    "measurements": [
+      {
+        "seconds": 0.48085196618922055,
+        "memory_before": 33137664,
+        "memory": {
+          "current": 68195584,
+          "peak": 539474944
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8212890625,
+          0.6337890625,
+          0.390625
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/stage_sparse_static_0",
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 0,
+        "tag": "stage_sparse_static_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.18346916208975017,
+        "memory_before": 33138176,
+        "memory": {
+          "current": 65189120,
+          "peak": 139177216
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8212890625,
+          0.6337890625,
+          0.390625
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/stage_sparse_static_0",
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 0,
+        "tag": "stage_sparse_static_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.1887720029335469,
+        "memory_before": 33138176,
+        "memory": {
+          "current": 67659520,
+          "peak": 135369984
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8212890625,
+          0.6337890625,
+          0.390625
+        ],
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 1,
+        "tag": "stage_sparse_static_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.46982568805105984,
+        "memory_before": 36144640,
+        "memory": {
+          "current": 67729664,
+          "peak": 524201216
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8212890625,
+          0.6337890625,
+          0.390625
+        ],
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 1,
+        "tag": "stage_sparse_static_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.4081561148632318,
+        "memory_before": 67729664,
+        "memory": {
+          "current": 68195584,
+          "peak": 539474944
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8212890625,
+          0.6337890625,
+          0.390625
+        ],
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 2,
+        "tag": "stage_sparse_static_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.1989442789927125,
+        "memory_before": 67659520,
+        "memory": {
+          "current": 65189120,
+          "peak": 169526272
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8212890625,
+          0.6337890625,
+          0.390625
+        ],
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 2,
+        "tag": "stage_sparse_static_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.19294694904237986,
+        "memory_before": 65189120,
+        "memory": {
+          "current": 67659520,
+          "peak": 157475328
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8212890625,
+          0.6337890625,
+          0.390625
+        ],
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 3,
+        "tag": "stage_sparse_static_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.4609474828466773,
+        "memory_before": 68195584,
+        "memory": {
+          "current": 70630912,
+          "peak": 557886208
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.75537109375,
+          0.623046875,
+          0.38818359375
+        ],
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 3,
+        "tag": "stage_sparse_static_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.45225512608885765,
+        "memory_before": 70630912,
+        "memory": {
+          "current": 68195584,
+          "peak": 556317440
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.75537109375,
+          0.623046875,
+          0.38818359375
+        ],
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 4,
+        "tag": "stage_sparse_static_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.18522452609613538,
+        "memory_before": 67659520,
+        "memory": {
+          "current": 65189120,
+          "peak": 169526272
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.75537109375,
+          0.623046875,
+          0.38818359375
+        ],
+        "kind": "stage",
+        "case": "sparse_static",
+        "round": 4,
+        "tag": "stage_sparse_static_4",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.45271667395718396,
+        "memory_before": 32673280,
+        "memory": {
+          "current": 67731200,
+          "peak": 522365952
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.75537109375,
+          0.623046875,
+          0.38818359375
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/stage_sparse_moving_0",
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 0,
+        "tag": "stage_sparse_moving_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.49302214104682207,
+        "memory_before": 36080896,
+        "memory": {
+          "current": 68131840,
+          "peak": 539480320
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.75537109375,
+          0.623046875,
+          0.38818359375
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/stage_sparse_moving_0",
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 0,
+        "tag": "stage_sparse_moving_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.42305317311547697,
+        "memory_before": 33139200,
+        "memory": {
+          "current": 68197120,
+          "peak": 539415040
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.75537109375,
+          0.623046875,
+          0.38818359375
+        ],
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 1,
+        "tag": "stage_sparse_moving_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.4314312238711864,
+        "memory_before": 36146176,
+        "memory": {
+          "current": 67731200,
+          "peak": 524204800
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.75537109375,
+          0.623046875,
+          0.38818359375
+        ],
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 1,
+        "tag": "stage_sparse_moving_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.5020468907896429,
+        "memory_before": 67731200,
+        "memory": {
+          "current": 68197120,
+          "peak": 539478528
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.75537109375,
+          0.623046875,
+          0.38818359375
+        ],
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 2,
+        "tag": "stage_sparse_moving_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.4150620470754802,
+        "memory_before": 68197120,
+        "memory": {
+          "current": 64724224,
+          "peak": 539415040
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.775390625,
+          0.62939453125,
+          0.3916015625
+        ],
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 2,
+        "tag": "stage_sparse_moving_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.4150651830714196,
+        "memory_before": 64724224,
+        "memory": {
+          "current": 68663040,
+          "peak": 539480320
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.775390625,
+          0.62939453125,
+          0.3916015625
+        ],
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 3,
+        "tag": "stage_sparse_moving_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.414065521908924,
+        "memory_before": 68197120,
+        "memory": {
+          "current": 70632448,
+          "peak": 557889792
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.775390625,
+          0.62939453125,
+          0.3916015625
+        ],
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 3,
+        "tag": "stage_sparse_moving_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.42805847502313554,
+        "memory_before": 70632448,
+        "memory": {
+          "current": 68197120,
+          "peak": 556321024
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.775390625,
+          0.62939453125,
+          0.3916015625
+        ],
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 4,
+        "tag": "stage_sparse_moving_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.5423879320733249,
+        "memory_before": 68663040,
+        "memory": {
+          "current": 64724224,
+          "peak": 541049088
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.775390625,
+          0.62939453125,
+          0.3916015625
+        ],
+        "kind": "stage",
+        "case": "sparse_moving",
+        "round": 4,
+        "tag": "stage_sparse_moving_4",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9533443208783865,
+        "memory_before": 32673536,
+        "memory": {
+          "current": 67731456,
+          "peak": 686433536
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.87353515625,
+          0.65234375,
+          0.400390625
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/stage_dense_static_0",
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 0,
+        "tag": "stage_dense_static_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.23368747695349157,
+        "memory_before": 36612096,
+        "memory": {
+          "current": 68197120,
+          "peak": 193991168
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.87353515625,
+          0.65234375,
+          0.400390625
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/stage_dense_static_0",
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 0,
+        "tag": "stage_dense_static_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.2281104640569538,
+        "memory_before": 32673280,
+        "memory": {
+          "current": 68197120,
+          "peak": 181668096
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.87353515625,
+          0.65234375,
+          0.400390625
+        ],
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 1,
+        "tag": "stage_dense_static_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.0746629489585757,
+        "memory_before": 36146432,
+        "memory": {
+          "current": 68197376,
+          "peak": 721687296
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8837890625,
+          0.658203125,
+          0.40380859375
+        ],
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 1,
+        "tag": "stage_dense_static_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.850810948992148,
+        "memory_before": 68197376,
+        "memory": {
+          "current": 69595136,
+          "peak": 736961024
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8935546875,
+          0.6640625,
+          0.4072265625
+        ],
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 2,
+        "tag": "stage_dense_static_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.22848418680951,
+        "memory_before": 68197120,
+        "memory": {
+          "current": 66693632,
+          "peak": 218637312
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8935546875,
+          0.6640625,
+          0.4072265625
+        ],
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 2,
+        "tag": "stage_dense_static_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.23123848112300038,
+        "memory_before": 66693632,
+        "memory": {
+          "current": 68197120,
+          "peak": 206314240
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8935546875,
+          0.6640625,
+          0.4072265625
+        ],
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 3,
+        "tag": "stage_dense_static_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.8597500789910555,
+        "memory_before": 69595136,
+        "memory": {
+          "current": 67731456,
+          "peak": 721687296
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8935546875,
+          0.6640625,
+          0.4072265625
+        ],
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 3,
+        "tag": "stage_dense_static_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.804346357937902,
+        "memory_before": 67731456,
+        "memory": {
+          "current": 67731456,
+          "peak": 721687296
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.90234375,
+          0.669921875,
+          0.41064453125
+        ],
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 4,
+        "tag": "stage_dense_static_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.23922136495821178,
+        "memory_before": 68197120,
+        "memory": {
+          "current": 66227712,
+          "peak": 206314240
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.90234375,
+          0.669921875,
+          0.41064453125
+        ],
+        "kind": "stage",
+        "case": "dense_static",
+        "round": 4,
+        "tag": "stage_dense_static_4",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9537793179042637,
+        "memory_before": 32673536,
+        "memory": {
+          "current": 64724480,
+          "peak": 688002304
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.91796875,
+          0.681640625,
+          0.41748046875
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/stage_dense_moving_0",
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 0,
+        "tag": "stage_dense_moving_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.8677797759883106,
+        "memory_before": 36612352,
+        "memory": {
+          "current": 68663296,
+          "peak": 702953984
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.91796875,
+          0.681640625,
+          0.41748046875
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/stage_dense_moving_0",
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 0,
+        "tag": "stage_dense_moving_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9931322569027543,
+        "memory_before": 33139456,
+        "memory": {
+          "current": 65190400,
+          "peak": 685806080
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9248046875,
+          0.68701171875,
+          0.4208984375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 1,
+        "tag": "stage_dense_moving_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9248996009118855,
+        "memory_before": 33139456,
+        "memory": {
+          "current": 65190400,
+          "peak": 686128128
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9248046875,
+          0.68701171875,
+          0.4208984375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 1,
+        "tag": "stage_dense_moving_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.1159139790106565,
+        "memory_before": 65190400,
+        "memory": {
+          "current": 68663296,
+          "peak": 736961024
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.93115234375,
+          0.6923828125,
+          0.42431640625
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 2,
+        "tag": "stage_dense_moving_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.8273789789527655,
+        "memory_before": 65190400,
+        "memory": {
+          "current": 68663296,
+          "peak": 736638976
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.93701171875,
+          0.69775390625,
+          0.427734375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 2,
+        "tag": "stage_dense_moving_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.750515670981258,
+        "memory_before": 68663296,
+        "memory": {
+          "current": 65190400,
+          "peak": 736638976
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.93701171875,
+          0.69775390625,
+          0.427734375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 3,
+        "tag": "stage_dense_moving_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.890659254975617,
+        "memory_before": 68663296,
+        "memory": {
+          "current": 65190400,
+          "peak": 736961024
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9423828125,
+          0.703125,
+          0.43115234375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 3,
+        "tag": "stage_dense_moving_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.780289606191218,
+        "memory_before": 65190400,
+        "memory": {
+          "current": 68663296,
+          "peak": 736961024
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9423828125,
+          0.703125,
+          0.43115234375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 4,
+        "tag": "stage_dense_moving_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.1030223979614675,
+        "memory_before": 65190400,
+        "memory": {
+          "current": 68663296,
+          "peak": 736638976
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.947265625,
+          0.70849609375,
+          0.4345703125
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "round": 4,
+        "tag": "stage_dense_moving_4",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.3477932419627905,
+        "memory_before": 68823040,
+        "memory": {
+          "current": 169977856,
+          "peak": 346629376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_static_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.87109375,
+          0.6962890625,
+          0.43212890625
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/collect_sparse_static_0",
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 0,
+        "tag": "collect_sparse_static_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.3515107620041817,
+        "memory_before": 68955136,
+        "memory": {
+          "current": 164429312,
+          "peak": 336368384
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_static_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.87109375,
+          0.6962890625,
+          0.43212890625
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/collect_sparse_static_0",
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 0,
+        "tag": "collect_sparse_static_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.1752555661369115,
+        "memory_before": 68955136,
+        "memory": {
+          "current": 173080320,
+          "peak": 346653952
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_static_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8818359375,
+          0.70166015625,
+          0.435546875
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 1,
+        "tag": "collect_sparse_static_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.271009135991335,
+        "memory_before": 70566400,
+        "memory": {
+          "current": 170514432,
+          "peak": 346629376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_static_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8818359375,
+          0.70166015625,
+          0.435546875
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 1,
+        "tag": "collect_sparse_static_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.275692243827507,
+        "memory_before": 70566400,
+        "memory": {
+          "current": 170514432,
+          "peak": 346629376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_static_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8818359375,
+          0.70166015625,
+          0.435546875
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 2,
+        "tag": "collect_sparse_static_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.2873320300132036,
+        "memory_before": 68955136,
+        "memory": {
+          "current": 173080320,
+          "peak": 346653952
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_static_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8916015625,
+          0.70703125,
+          0.43896484375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 2,
+        "tag": "collect_sparse_static_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.1292118339333683,
+        "memory_before": 68955136,
+        "memory": {
+          "current": 173080320,
+          "peak": 346653952
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_static_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8916015625,
+          0.70703125,
+          0.43896484375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 3,
+        "tag": "collect_sparse_static_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.385748788015917,
+        "memory_before": 70566400,
+        "memory": {
+          "current": 170514432,
+          "peak": 346629376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_static_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8916015625,
+          0.70703125,
+          0.43896484375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 3,
+        "tag": "collect_sparse_static_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.2532685759942979,
+        "memory_before": 70566400,
+        "memory": {
+          "current": 170514432,
+          "peak": 346629376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_static_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8916015625,
+          0.70703125,
+          0.43896484375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 4,
+        "tag": "collect_sparse_static_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.2788278041407466,
+        "memory_before": 68955136,
+        "memory": {
+          "current": 173080320,
+          "peak": 346653952
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_static_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.900390625,
+          0.7119140625,
+          0.4423828125
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "sparse_static",
+        "round": 4,
+        "tag": "collect_sparse_static_4",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.3029588682111353,
+        "memory_before": 68605952,
+        "memory": {
+          "current": 164855040,
+          "peak": 334336512
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_moving_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.90869140625,
+          0.716796875,
+          0.44580078125
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/collect_sparse_moving_0",
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 0,
+        "tag": "collect_sparse_moving_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.3771189849358052,
+        "memory_before": 74608896,
+        "memory": {
+          "current": 182745088,
+          "peak": 357891072
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_moving_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.90869140625,
+          0.716796875,
+          0.44580078125
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/collect_sparse_moving_0",
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 0,
+        "tag": "collect_sparse_moving_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.3289198661223054,
+        "memory_before": 69072640,
+        "memory": {
+          "current": 168508928,
+          "peak": 346435840
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_moving_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.99609375,
+          0.73828125,
+          0.45458984375
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 1,
+        "tag": "collect_sparse_moving_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.3007011960726231,
+        "memory_before": 70575360,
+        "memory": {
+          "current": 197711360,
+          "peak": 369817344
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_moving_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.99609375,
+          0.73828125,
+          0.45458984375
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 1,
+        "tag": "collect_sparse_moving_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.344555368181318,
+        "memory_before": 70575360,
+        "memory": {
+          "current": 197711360,
+          "peak": 369817344
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_moving_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.99609375,
+          0.73828125,
+          0.45458984375
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 2,
+        "tag": "collect_sparse_moving_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.3289131941273808,
+        "memory_before": 69072640,
+        "memory": {
+          "current": 168508928,
+          "peak": 346435840
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_moving_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.99658203125,
+          0.74267578125,
+          0.45751953125
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 2,
+        "tag": "collect_sparse_moving_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.2463917559944093,
+        "memory_before": 69072640,
+        "memory": {
+          "current": 168508928,
+          "peak": 346435840
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_moving_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.99658203125,
+          0.74267578125,
+          0.45751953125
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 3,
+        "tag": "collect_sparse_moving_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 1.2908442949410528,
+        "memory_before": 70575360,
+        "memory": {
+          "current": 197711360,
+          "peak": 369817344
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_moving_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.99658203125,
+          0.74267578125,
+          0.45751953125
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 3,
+        "tag": "collect_sparse_moving_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.2430191088933498,
+        "memory_before": 70575360,
+        "memory": {
+          "current": 197711360,
+          "peak": 369817344
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_sparse_moving_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.99658203125,
+          0.74267578125,
+          0.45751953125
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 4,
+        "tag": "collect_sparse_moving_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.3204070408828557,
+        "memory_before": 69072640,
+        "memory": {
+          "current": 168508928,
+          "peak": 346435840
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_sparse_moving_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9970703125,
+          0.7470703125,
+          0.46044921875
+        ],
+        "pixel_range": [
+          15,
+          10941
+        ],
+        "kind": "collect",
+        "case": "sparse_moving",
+        "round": 4,
+        "tag": "collect_sparse_moving_4",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.261041763005778,
+        "memory_before": 67785472,
+        "memory": {
+          "current": 165072128,
+          "peak": 616317952
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_static_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.998046875,
+          0.755859375,
+          0.46630859375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/collect_dense_static_0",
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 0,
+        "tag": "collect_dense_static_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.0846536341123283,
+        "memory_before": 68823808,
+        "memory": {
+          "current": 169964800,
+          "peak": 346716160
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_static_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.998046875,
+          0.755859375,
+          0.46630859375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/collect_dense_static_0",
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 0,
+        "tag": "collect_dense_static_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.145006291102618,
+        "memory_before": 70793216,
+        "memory": {
+          "current": 169964800,
+          "peak": 346716160
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_static_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.07861328125,
+          0.77685546875,
+          0.474609375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 1,
+        "tag": "collect_dense_static_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.3058275829534978,
+        "memory_before": 70792448,
+        "memory": {
+          "current": 171778048,
+          "peak": 632759040
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_static_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.072265625,
+          0.78076171875,
+          0.4775390625
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 1,
+        "tag": "collect_dense_static_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.891178658930585,
+        "memory_before": 70792448,
+        "memory": {
+          "current": 171778048,
+          "peak": 632759040
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_static_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.072265625,
+          0.78076171875,
+          0.4775390625
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 2,
+        "tag": "collect_dense_static_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 1.8983333660289645,
+        "memory_before": 70793216,
+        "memory": {
+          "current": 169964800,
+          "peak": 346716160
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_static_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.14697265625,
+          0.80126953125,
+          0.48583984375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 2,
+        "tag": "collect_dense_static_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.072415752802044,
+        "memory_before": 70793216,
+        "memory": {
+          "current": 169964800,
+          "peak": 346716160
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_static_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.14697265625,
+          0.80126953125,
+          0.48583984375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 3,
+        "tag": "collect_dense_static_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.3958823659922928,
+        "memory_before": 70792448,
+        "memory": {
+          "current": 171778048,
+          "peak": 632759040
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_static_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.0546875,
+          0.78759765625,
+          0.48291015625
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 3,
+        "tag": "collect_dense_static_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.376771084032953,
+        "memory_before": 70792448,
+        "memory": {
+          "current": 171778048,
+          "peak": 632759040
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_static_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.0546875,
+          0.78759765625,
+          0.48291015625
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 4,
+        "tag": "collect_dense_static_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.140137408860028,
+        "memory_before": 70793216,
+        "memory": {
+          "current": 169964800,
+          "peak": 346716160
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_static_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05029296875,
+          0.79150390625,
+          0.48583984375
+        ],
+        "pixel_range": [
+          15,
+          16393
+        ],
+        "kind": "collect",
+        "case": "dense_static",
+        "round": 4,
+        "tag": "collect_dense_static_4",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.083491028053686,
+        "memory_before": 74740224,
+        "memory": {
+          "current": 173530368,
+          "peak": 618466560
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_moving_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.0419921875,
+          0.798828125,
+          0.49169921875
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/collect_dense_moving_0",
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 0,
+        "tag": "collect_dense_moving_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.294048971030861,
+        "memory_before": 74740992,
+        "memory": {
+          "current": 173555968,
+          "peak": 617549824
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_moving_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.95849609375,
+          0.78515625,
+          0.48876953125
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/collect_dense_moving_0",
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 0,
+        "tag": "collect_dense_moving_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9880861761048436,
+        "memory_before": 68606720,
+        "memory": {
+          "current": 163605248,
+          "peak": 627045376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_moving_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9619140625,
+          0.7890625,
+          0.49169921875
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 1,
+        "tag": "collect_dense_moving_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.072274388046935,
+        "memory_before": 68605952,
+        "memory": {
+          "current": 163579648,
+          "peak": 628308224
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_moving_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9619140625,
+          0.7890625,
+          0.49169921875
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 1,
+        "tag": "collect_dense_moving_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.2081516899634153,
+        "memory_before": 68605952,
+        "memory": {
+          "current": 163579648,
+          "peak": 628308224
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_moving_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.96533203125,
+          0.79296875,
+          0.49462890625
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 2,
+        "tag": "collect_dense_moving_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.947871485957876,
+        "memory_before": 68606720,
+        "memory": {
+          "current": 163605248,
+          "peak": 627045376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_moving_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.96533203125,
+          0.79296875,
+          0.49462890625
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 2,
+        "tag": "collect_dense_moving_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.2183083861600608,
+        "memory_before": 68606720,
+        "memory": {
+          "current": 163605248,
+          "peak": 627045376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_moving_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.96826171875,
+          0.796875,
+          0.49755859375
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 3,
+        "tag": "collect_dense_moving_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.1400314408820122,
+        "memory_before": 68605952,
+        "memory": {
+          "current": 163579648,
+          "peak": 628308224
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_moving_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05126953125,
+          0.81689453125,
+          0.505859375
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 3,
+        "tag": "collect_dense_moving_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.0403658328577876,
+        "memory_before": 68605952,
+        "memory": {
+          "current": 163579648,
+          "peak": 628308224
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/collect_dense_moving_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05126953125,
+          0.81689453125,
+          0.505859375
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 4,
+        "tag": "collect_dense_moving_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.0031150858849287,
+        "memory_before": 68606720,
+        "memory": {
+          "current": 163605248,
+          "peak": 627045376
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/collect_dense_moving_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.966796875,
+          0.80322265625,
+          0.5029296875
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "round": 4,
+        "tag": "collect_dense_moving_4",
+        "save": false,
+        "version": "candidate"
+      }
+    ],
+    "dispatch": [
+      {
+        "seconds": 3.1356795919127762,
+        "memory_before": 68606720,
+        "memory": {
+          "current": 65133824,
+          "peak": 742895872
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9697265625,
+          0.806640625,
+          0.505859375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": false,
+        "tag": "dispatch_0_False",
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.1824765589553863,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9697265625,
+          0.806640625,
+          0.505859375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": true,
+        "tag": "dispatch_0_True",
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.1196908820420504,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05224609375,
+          0.82666015625,
+          0.51416015625
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": true,
+        "tag": "dispatch_1_True",
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9380884701386094,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05224609375,
+          0.82666015625,
+          0.51416015625
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": false,
+        "tag": "dispatch_1_False",
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9215662800706923,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9677734375,
+          0.8125,
+          0.51123046875
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": false,
+        "tag": "dispatch_2_False",
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.983041611034423,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.970703125,
+          0.81591796875,
+          0.51416015625
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": true,
+        "tag": "dispatch_2_True",
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.877210574923083,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.970703125,
+          0.81591796875,
+          0.51416015625
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": true,
+        "tag": "dispatch_3_True",
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9249837091192603,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.97314453125,
+          0.8193359375,
+          0.51708984375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": false,
+        "tag": "dispatch_3_False",
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.780798900872469,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.97314453125,
+          0.8193359375,
+          0.51708984375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": false,
+        "tag": "dispatch_4_False",
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.827017267001793,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.0556640625,
+          0.83935546875,
+          0.525390625
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "force_tf": true,
+        "tag": "dispatch_4_True",
+        "version": "candidate"
+      }
+    ],
+    "streak": [
+      {
+        "seconds": 0.48807326797395945,
+        "memory_before": 68605952,
+        "memory": {
+          "current": 65287168,
+          "peak": 270789888
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.0556640625,
+          0.83935546875,
+          0.525390625
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/baseline/streak_0",
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.0453685489483178,
+        "memory_before": 65133824,
+        "memory": {
+          "current": 65133824,
+          "peak": 728505856
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05078125,
+          0.84228515625,
+          0.5283203125
+        ],
+        "array_prefix": "$ARTIFACTS/qualified/arrays/candidate/streak_0",
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.915303563931957,
+        "memory_before": 33548800,
+        "memory": {
+          "current": 65599744,
+          "peak": 685720576
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05078125,
+          0.84228515625,
+          0.5283203125
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.498210130026564,
+        "memory_before": 33702144,
+        "memory": {
+          "current": 65846272,
+          "peak": 240261632
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05078125,
+          0.84228515625,
+          0.5283203125
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.4684281339868903,
+        "memory_before": 65846272,
+        "memory": {
+          "current": 67350528,
+          "peak": 246500096
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.05078125,
+          0.84228515625,
+          0.5283203125
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.000564780086279,
+        "memory_before": 65599744,
+        "memory": {
+          "current": 69072640,
+          "peak": 736553472
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.04638671875,
+          0.84521484375,
+          0.53125
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9307600299362093,
+        "memory_before": 69072640,
+        "memory": {
+          "current": 65599744,
+          "peak": 736553472
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.04248046875,
+          0.84814453125,
+          0.5341796875
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 0.5015797747764736,
+        "memory_before": 67350528,
+        "memory": {
+          "current": 65381888,
+          "peak": 255610880
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.04248046875,
+          0.84814453125,
+          0.5341796875
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 0.48557717609219253,
+        "memory_before": 65381888,
+        "memory": {
+          "current": 68855552,
+          "peak": 246501632
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.04248046875,
+          0.84814453125,
+          0.5341796875
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.882613484049216,
+        "memory_before": 65599744,
+        "memory": {
+          "current": 69072640,
+          "peak": 736553472
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.04248046875,
+          0.84814453125,
+          0.5341796875
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_4",
+        "save": false,
+        "version": "candidate"
+      }
+    ],
+    "profiles": [
+      {
+        "seconds": 2.8825997239910066,
+        "memory_before": 68855552,
+        "memory": {
+          "current": 65382656,
+          "peak": 722222848
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.958984375,
+          0.833984375,
+          0.53125
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "tag": "profile_stage",
+        "trace": "$ARTIFACTS/qualified/profiles/baseline/stage",
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.9642495450098068,
+        "memory_before": 69072640,
+        "memory": {
+          "current": 65599744,
+          "peak": 736553472
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8818359375,
+          0.81982421875,
+          0.5283203125
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "tag": "profile_stage",
+        "trace": "$ARTIFACTS/qualified/profiles/candidate/stage",
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.9691613980103284,
+        "memory_before": 65382656,
+        "memory": {
+          "current": 170772992,
+          "peak": 632845312
+        },
+        "directory": "$ARTIFACTS/qualified/runs/baseline/profile_collect",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.8818359375,
+          0.81982421875,
+          0.5283203125
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "tag": "profile_collect",
+        "trace": "$ARTIFACTS/qualified/profiles/baseline/collect",
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.1485254489816725,
+        "memory_before": 65599744,
+        "memory": {
+          "current": 171586560,
+          "peak": 633993216
+        },
+        "directory": "$ARTIFACTS/qualified/runs/candidate/profile_collect",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9716796875,
+          0.83984375,
+          0.53662109375
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "tag": "profile_collect",
+        "trace": "$ARTIFACTS/qualified/profiles/candidate/collect",
+        "version": "candidate"
+      }
+    ]
+  },
+  "extra": {
+    "arguments": {
+      "baseline": "$BASELINE",
+      "candidate": "$CANDIDATE",
+      "output": "$ARTIFACTS/extras",
+      "gpu": 0,
+      "rounds": 5,
+      "deterministic": false,
+      "profile": true,
+      "cupti_libdir": "/tmp/pr63-cupti/nvidia/cuda_cupti/lib",
+      "extra_only": true,
+      "streak_collect": true,
+      "worker": false,
+      "tree": null,
+      "label": null
+    },
+    "hardware": "0, NVIDIA GeForce RTX 3090, 617.14, 24576 MiB\n1, NVIDIA GeForce RTX 3090, 617.14, 24576 MiB\n",
+    "commits": {
+      "baseline": "8d32165042647d8e598ea6e9c12013700267698e",
+      "candidate": "7996c8ee1ec1c48f178b75de627eff37f6822075"
+    },
+    "setup": {
+      "baseline": {
+        "ready": true,
+        "version": "0.27.1",
+        "source": "$BASELINE/satsim/__init__.py",
+        "import_seconds": 2.9406058420427144,
+        "gpu_setup_seconds": 0.5088032619096339,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "tf_version": "2.13.1",
+        "numpy_version": "1.26.4",
+        "tf_build": {
+          "cpu_compiler": "/usr/lib/llvm-16/bin/clang",
+          "cuda_compute_capabilities": [
+            "sm_35",
+            "sm_50",
+            "sm_60",
+            "sm_70",
+            "sm_75",
+            "compute_80"
+          ],
+          "cuda_version": "11.8",
+          "cudnn_version": "8",
+          "is_cuda_build": true,
+          "is_rocm_build": false,
+          "is_tensorrt_build": true
+        },
+        "deterministic": "0"
+      },
+      "candidate": {
+        "ready": true,
+        "version": "0.27.2",
+        "source": "$CANDIDATE/satsim/__init__.py",
+        "import_seconds": 3.216934991069138,
+        "gpu_setup_seconds": 0.4919574570376426,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "tf_version": "2.13.1",
+        "numpy_version": "1.26.4",
+        "tf_build": {
+          "cpu_compiler": "/usr/lib/llvm-16/bin/clang",
+          "cuda_compute_capabilities": [
+            "sm_35",
+            "sm_50",
+            "sm_60",
+            "sm_70",
+            "sm_75",
+            "compute_80"
+          ],
+          "cuda_version": "11.8",
+          "cudnn_version": "8",
+          "is_cuda_build": true,
+          "is_rocm_build": false,
+          "is_tensorrt_build": true
+        },
+        "deterministic": "0"
+      }
+    },
+    "cold": {
+      "streak_collect": [
+        {
+          "seconds": 3.097991018090397,
+          "memory_before": 1082880,
+          "memory": {
+            "current": 111994880,
+            "peak": 287997952
+          },
+          "directory": "$ARTIFACTS/extras/runs/baseline/cold_streak_collect",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.8671875,
+            0.82421875,
+            0.5419921875
+          ],
+          "pixel_range": [
+            15,
+            10772
+          ],
+          "array_prefix": "$ARTIFACTS/extras/arrays/baseline/cold_streak_collect",
+          "kind": "collect",
+          "case": "dense_moving",
+          "mode": "streak",
+          "tag": "cold_streak_collect",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 3.658926277188584,
+          "memory_before": 1082880,
+          "memory": {
+            "current": 106760192,
+            "peak": 605233920
+          },
+          "directory": "$ARTIFACTS/extras/runs/candidate/cold_streak_collect",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.9580078125,
+            0.84375,
+            0.55029296875
+          ],
+          "pixel_range": [
+            15,
+            12105
+          ],
+          "array_prefix": "$ARTIFACTS/extras/arrays/candidate/cold_streak_collect",
+          "kind": "collect",
+          "case": "dense_moving",
+          "mode": "streak",
+          "tag": "cold_streak_collect",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "profile_warmup": [
+        {
+          "seconds": 3.047149843070656,
+          "memory_before": 32205824,
+          "memory": {
+            "current": 64257536,
+            "peak": 687169536
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            1.13427734375,
+            0.9091796875,
+            0.58349609375
+          ],
+          "kind": "stage",
+          "case": "dense_moving",
+          "tag": "warm_profile_stage",
+          "version": "baseline"
+        },
+        {
+          "seconds": 2.772972048027441,
+          "memory_before": 32037632,
+          "memory": {
+            "current": 64089344,
+            "peak": 687438080
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            1.123046875,
+            0.9111328125,
+            0.5859375
+          ],
+          "kind": "stage",
+          "case": "dense_moving",
+          "tag": "warm_profile_stage",
+          "version": "candidate"
+        },
+        {
+          "seconds": 2.868554227054119,
+          "memory_before": 66798592,
+          "memory": {
+            "current": 176009728,
+            "peak": 667460864
+          },
+          "directory": "$ARTIFACTS/extras/runs/baseline/warm_profile_collect",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            1.03271484375,
+            0.89599609375,
+            0.58251953125
+          ],
+          "pixel_range": [
+            15,
+            12105
+          ],
+          "kind": "collect",
+          "case": "dense_moving",
+          "tag": "warm_profile_collect",
+          "version": "baseline"
+        },
+        {
+          "seconds": 3.094753566896543,
+          "memory_before": 75651328,
+          "memory": {
+            "current": 182709760,
+            "peak": 688549120
+          },
+          "directory": "$ARTIFACTS/extras/runs/candidate/warm_profile_collect",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            1.02978515625,
+            0.89794921875,
+            0.5849609375
+          ],
+          "pixel_range": [
+            15,
+            12105
+          ],
+          "kind": "collect",
+          "case": "dense_moving",
+          "tag": "warm_profile_collect",
+          "version": "candidate"
+        }
+      ]
+    },
+    "measurements": [],
+    "dispatch": [],
+    "streak": [],
+    "streak_collect": [
+      {
+        "seconds": 2.89191748900339,
+        "memory_before": 43286272,
+        "memory": {
+          "current": 141952000,
+          "peak": 330943488
+        },
+        "directory": "$ARTIFACTS/extras/runs/baseline/streak_collect_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.9580078125,
+          0.84375,
+          0.55029296875
+        ],
+        "pixel_range": [
+          15,
+          10772
+        ],
+        "array_prefix": "$ARTIFACTS/extras/arrays/baseline/streak_collect_0",
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_0",
+        "save": true,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.4385147020220757,
+        "memory_before": 32037632,
+        "memory": {
+          "current": 135850240,
+          "peak": 620975872
+        },
+        "directory": "$ARTIFACTS/extras/runs/candidate/streak_collect_0",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          0.96142578125,
+          0.8466796875,
+          0.552734375
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "array_prefix": "$ARTIFACTS/extras/arrays/candidate/streak_collect_0",
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_0",
+        "save": true,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.8965091810096055,
+        "memory_before": 32037632,
+        "memory": {
+          "current": 125325824,
+          "peak": 630664448
+        },
+        "directory": "$ARTIFACTS/extras/runs/candidate/streak_collect_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.205078125,
+          0.8994140625,
+          0.5712890625
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_1",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.8509227139875293,
+        "memory_before": 32672512,
+        "memory": {
+          "current": 128455424,
+          "peak": 315145216
+        },
+        "directory": "$ARTIFACTS/extras/runs/baseline/streak_collect_1",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.205078125,
+          0.8994140625,
+          0.5712890625
+        ],
+        "pixel_range": [
+          15,
+          10772
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_1",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.9325819071382284,
+        "memory_before": 32202240,
+        "memory": {
+          "current": 134468608,
+          "peak": 303878656
+        },
+        "directory": "$ARTIFACTS/extras/runs/baseline/streak_collect_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.1884765625,
+          0.9013671875,
+          0.57373046875
+        ],
+        "pixel_range": [
+          15,
+          10772
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_2",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.075224880827591,
+        "memory_before": 32037632,
+        "memory": {
+          "current": 125325824,
+          "peak": 630664448
+        },
+        "directory": "$ARTIFACTS/extras/runs/candidate/streak_collect_2",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.17333984375,
+          0.9033203125,
+          0.576171875
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_2",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.1047606950160116,
+        "memory_before": 32037632,
+        "memory": {
+          "current": 125325824,
+          "peak": 630664448
+        },
+        "directory": "$ARTIFACTS/extras/runs/candidate/streak_collect_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.17333984375,
+          0.9033203125,
+          0.576171875
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_3",
+        "save": false,
+        "version": "candidate"
+      },
+      {
+        "seconds": 2.8309474519919604,
+        "memory_before": 32203776,
+        "memory": {
+          "current": 134469888,
+          "peak": 304276992
+        },
+        "directory": "$ARTIFACTS/extras/runs/baseline/streak_collect_3",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.1591796875,
+          0.9052734375,
+          0.57861328125
+        ],
+        "pixel_range": [
+          15,
+          10772
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_3",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.030615912983194,
+        "memory_before": 32205056,
+        "memory": {
+          "current": 134470656,
+          "peak": 304277760
+        },
+        "directory": "$ARTIFACTS/extras/runs/baseline/streak_collect_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.14599609375,
+          0.9072265625,
+          0.5810546875
+        ],
+        "pixel_range": [
+          15,
+          10772
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_4",
+        "save": false,
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.2533813409972936,
+        "memory_before": 32037632,
+        "memory": {
+          "current": 125325824,
+          "peak": 630664448
+        },
+        "directory": "$ARTIFACTS/extras/runs/candidate/streak_collect_4",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.14599609375,
+          0.9072265625,
+          0.5810546875
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "mode": "streak",
+        "tag": "streak_collect_4",
+        "save": false,
+        "version": "candidate"
+      }
+    ],
+    "profiles": [
+      {
+        "seconds": 2.85715450393036,
+        "memory_before": 64257536,
+        "memory": {
+          "current": 66798592,
+          "peak": 720854528
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.13427734375,
+          0.9091796875,
+          0.58349609375
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "tag": "profile_stage",
+        "trace": "$ARTIFACTS/extras/profiles/baseline/stage",
+        "version": "baseline"
+      },
+      {
+        "seconds": 2.877384603023529,
+        "memory_before": 64089344,
+        "memory": {
+          "current": 75651328,
+          "peak": 728552960
+        },
+        "directory": null,
+        "frames": 1,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.03271484375,
+          0.89599609375,
+          0.58251953125
+        ],
+        "kind": "stage",
+        "case": "dense_moving",
+        "tag": "profile_stage",
+        "trace": "$ARTIFACTS/extras/profiles/candidate/stage",
+        "version": "candidate"
+      },
+      {
+        "seconds": 3.022838770179078,
+        "memory_before": 66799104,
+        "memory": {
+          "current": 176009728,
+          "peak": 667460864
+        },
+        "directory": "$ARTIFACTS/extras/runs/baseline/profile_collect",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.02978515625,
+          0.89794921875,
+          0.5849609375
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "tag": "profile_collect",
+        "trace": "$ARTIFACTS/extras/profiles/baseline/collect",
+        "version": "baseline"
+      },
+      {
+        "seconds": 3.1886214870028198,
+        "memory_before": 75651328,
+        "memory": {
+          "current": 182709760,
+          "peak": 688549120
+        },
+        "directory": "$ARTIFACTS/extras/runs/candidate/profile_collect",
+        "frames": 3,
+        "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+        "cpu_accumulator_calls": 0,
+        "host_load": [
+          1.02734375,
+          0.89990234375,
+          0.58740234375
+        ],
+        "pixel_range": [
+          15,
+          12105
+        ],
+        "kind": "collect",
+        "case": "dense_moving",
+        "tag": "profile_collect",
+        "trace": "$ARTIFACTS/extras/profiles/candidate/collect",
+        "version": "candidate"
+      }
+    ]
+  },
+  "deterministic": {
+    "arguments": {
+      "baseline": "$BASELINE",
+      "candidate": "$CANDIDATE",
+      "output": "$ARTIFACTS/deterministic",
+      "gpu": 0,
+      "rounds": 0,
+      "deterministic": true,
+      "profile": false,
+      "cupti_libdir": null,
+      "extra_only": false,
+      "streak_collect": false,
+      "worker": false,
+      "tree": null,
+      "label": null
+    },
+    "hardware": "0, NVIDIA GeForce RTX 3090, 617.14, 24576 MiB\n1, NVIDIA GeForce RTX 3090, 617.14, 24576 MiB\n",
+    "commits": {
+      "baseline": "8d32165042647d8e598ea6e9c12013700267698e",
+      "candidate": "7996c8ee1ec1c48f178b75de627eff37f6822075"
+    },
+    "setup": {
+      "baseline": {
+        "ready": true,
+        "version": "0.27.1",
+        "source": "$BASELINE/satsim/__init__.py",
+        "import_seconds": 3.2806890509091318,
+        "gpu_setup_seconds": 0.5548610489349812,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "tf_version": "2.13.1",
+        "numpy_version": "1.26.4",
+        "tf_build": {
+          "cpu_compiler": "/usr/lib/llvm-16/bin/clang",
+          "cuda_compute_capabilities": [
+            "sm_35",
+            "sm_50",
+            "sm_60",
+            "sm_70",
+            "sm_75",
+            "compute_80"
+          ],
+          "cuda_version": "11.8",
+          "cudnn_version": "8",
+          "is_cuda_build": true,
+          "is_rocm_build": false,
+          "is_tensorrt_build": true
+        },
+        "deterministic": "1"
+      },
+      "candidate": {
+        "ready": true,
+        "version": "0.27.2",
+        "source": "$CANDIDATE/satsim/__init__.py",
+        "import_seconds": 2.958114956971258,
+        "gpu_setup_seconds": 0.477850265102461,
+        "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+        "tf_version": "2.13.1",
+        "numpy_version": "1.26.4",
+        "tf_build": {
+          "cpu_compiler": "/usr/lib/llvm-16/bin/clang",
+          "cuda_compute_capabilities": [
+            "sm_35",
+            "sm_50",
+            "sm_60",
+            "sm_70",
+            "sm_75",
+            "compute_80"
+          ],
+          "cuda_version": "11.8",
+          "cudnn_version": "8",
+          "is_cuda_build": true,
+          "is_rocm_build": false,
+          "is_tensorrt_build": true
+        },
+        "deterministic": "1"
+      }
+    },
+    "cold": {
+      "stage_sparse_static": [
+        {
+          "seconds": 0.7566433169413358,
+          "memory_before": 1082880,
+          "memory": {
+            "current": 33137664,
+            "peak": 829405696
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.5888671875,
+            0.76513671875,
+            0.5615234375
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/baseline/cold_stage_sparse_static",
+          "kind": "stage",
+          "case": "sparse_static",
+          "tag": "cold_stage_sparse_static",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 0.2642008368857205,
+          "memory_before": 1082880,
+          "memory": {
+            "current": 33138176,
+            "peak": 102919936
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.5888671875,
+            0.76513671875,
+            0.5615234375
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/candidate/cold_stage_sparse_static",
+          "kind": "stage",
+          "case": "sparse_static",
+          "tag": "cold_stage_sparse_static",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "stage_sparse_moving": [
+        {
+          "seconds": 0.514890125952661,
+          "memory_before": 33137664,
+          "memory": {
+            "current": 68197120,
+            "peak": 846452736
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.5888671875,
+            0.76513671875,
+            0.5615234375
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/baseline/cold_stage_sparse_moving",
+          "kind": "stage",
+          "case": "sparse_moving",
+          "tag": "cold_stage_sparse_moving",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 0.5677996119484305,
+          "memory_before": 33138176,
+          "memory": {
+            "current": 68197120,
+            "peak": 846390528
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.5888671875,
+            0.76513671875,
+            0.5615234375
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/candidate/cold_stage_sparse_moving",
+          "kind": "stage",
+          "case": "sparse_moving",
+          "tag": "cold_stage_sparse_moving",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "stage_dense_static": [
+        {
+          "seconds": 2.9639576440677047,
+          "memory_before": 36146176,
+          "memory": {
+            "current": 68197376,
+            "peak": 1450324992
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.6220703125,
+            0.76904296875,
+            0.56396484375
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/baseline/cold_stage_dense_static",
+          "kind": "stage",
+          "case": "dense_static",
+          "tag": "cold_stage_dense_static",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 0.24123378680087626,
+          "memory_before": 36146176,
+          "memory": {
+            "current": 68197120,
+            "peak": 226837760
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.6220703125,
+            0.76904296875,
+            0.56396484375
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/candidate/cold_stage_dense_static",
+          "kind": "stage",
+          "case": "dense_static",
+          "tag": "cold_stage_dense_static",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "stage_dense_moving": [
+        {
+          "seconds": 2.858694661874324,
+          "memory_before": 33139456,
+          "memory": {
+            "current": 68197376,
+            "peak": 1338064384
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.65234375,
+            0.77294921875,
+            0.56640625
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/baseline/cold_stage_dense_moving",
+          "kind": "stage",
+          "case": "dense_moving",
+          "tag": "cold_stage_dense_moving",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 2.8337795140687376,
+          "memory_before": 33139200,
+          "memory": {
+            "current": 68197376,
+            "peak": 1337584896
+          },
+          "directory": null,
+          "frames": 1,
+          "lut_sha256": "93669761167af83e669a5eaeb2e77a16c595275b4416165a35b221dc67de7ae7",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.65234375,
+            0.77294921875,
+            0.56640625
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/candidate/cold_stage_dense_moving",
+          "kind": "stage",
+          "case": "dense_moving",
+          "tag": "cold_stage_dense_moving",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "collect_sparse_static": [
+        {
+          "seconds": 1.452710276003927,
+          "memory_before": 36146432,
+          "memory": {
+            "current": 137185280,
+            "peak": 307160064
+          },
+          "directory": "$ARTIFACTS/deterministic/runs/baseline/cold_collect_sparse_static",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.6806640625,
+            0.77685546875,
+            0.56884765625
+          ],
+          "pixel_range": [
+            15,
+            16393
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/baseline/cold_collect_sparse_static",
+          "kind": "collect",
+          "case": "sparse_static",
+          "tag": "cold_collect_sparse_static",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 1.68059341609478,
+          "memory_before": 36146432,
+          "memory": {
+            "current": 132353536,
+            "peak": 312263168
+          },
+          "directory": "$ARTIFACTS/deterministic/runs/candidate/cold_collect_sparse_static",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.6806640625,
+            0.77685546875,
+            0.56884765625
+          ],
+          "pixel_range": [
+            15,
+            16393
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/candidate/cold_collect_sparse_static",
+          "kind": "collect",
+          "case": "sparse_static",
+          "tag": "cold_collect_sparse_static",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "collect_sparse_moving": [
+        {
+          "seconds": 1.6860300551634282,
+          "memory_before": 71138048,
+          "memory": {
+            "current": 167981568,
+            "peak": 352967680
+          },
+          "directory": "$ARTIFACTS/deterministic/runs/baseline/cold_collect_sparse_moving",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.6806640625,
+            0.77685546875,
+            0.56884765625
+          ],
+          "pixel_range": [
+            15,
+            10941
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/baseline/cold_collect_sparse_moving",
+          "kind": "collect",
+          "case": "sparse_moving",
+          "tag": "cold_collect_sparse_moving",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 1.834738495061174,
+          "memory_before": 68489216,
+          "memory": {
+            "current": 166514688,
+            "peak": 346411008
+          },
+          "directory": "$ARTIFACTS/deterministic/runs/candidate/cold_collect_sparse_moving",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.70654296875,
+            0.78076171875,
+            0.5712890625
+          ],
+          "pixel_range": [
+            15,
+            10941
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/candidate/cold_collect_sparse_moving",
+          "kind": "collect",
+          "case": "sparse_moving",
+          "tag": "cold_collect_sparse_moving",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "collect_dense_static": [
+        {
+          "seconds": 3.7162490361370146,
+          "memory_before": 67102464,
+          "memory": {
+            "current": 166457344,
+            "peak": 1058363392
+          },
+          "directory": "$ARTIFACTS/deterministic/runs/baseline/cold_collect_dense_static",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.73046875,
+            0.78466796875,
+            0.57373046875
+          ],
+          "pixel_range": [
+            15,
+            16393
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/baseline/cold_collect_dense_static",
+          "kind": "collect",
+          "case": "dense_static",
+          "tag": "cold_collect_dense_static",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 2.5822799608577043,
+          "memory_before": 68606720,
+          "memory": {
+            "current": 163939328,
+            "peak": 331403264
+          },
+          "directory": "$ARTIFACTS/deterministic/runs/candidate/cold_collect_dense_static",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.73046875,
+            0.78466796875,
+            0.57373046875
+          ],
+          "pixel_range": [
+            15,
+            16393
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/candidate/cold_collect_dense_static",
+          "kind": "collect",
+          "case": "dense_static",
+          "tag": "cold_collect_dense_static",
+          "save": true,
+          "version": "candidate"
+        }
+      ],
+      "collect_dense_moving": [
+        {
+          "seconds": 3.9351627139840275,
+          "memory_before": 67319552,
+          "memory": {
+            "current": 175308800,
+            "peak": 1058765312
+          },
+          "directory": "$ARTIFACTS/deterministic/runs/baseline/cold_collect_dense_moving",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.75244140625,
+            0.78857421875,
+            0.576171875
+          ],
+          "pixel_range": [
+            15,
+            12105
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/baseline/cold_collect_dense_moving",
+          "kind": "collect",
+          "case": "dense_moving",
+          "tag": "cold_collect_dense_moving",
+          "save": true,
+          "version": "baseline"
+        },
+        {
+          "seconds": 3.643003486795351,
+          "memory_before": 68489984,
+          "memory": {
+            "current": 163985408,
+            "peak": 1061616128
+          },
+          "directory": "$ARTIFACTS/deterministic/runs/candidate/cold_collect_dense_moving",
+          "frames": 3,
+          "lut_sha256": "04d702944d5f9bf29cc2ae1005478221198d5d536f3299b93d3b5bfc5e660a15",
+          "cpu_accumulator_calls": 0,
+          "host_load": [
+            0.7724609375,
+            0.79248046875,
+            0.57861328125
+          ],
+          "pixel_range": [
+            15,
+            12105
+          ],
+          "array_prefix": "$ARTIFACTS/deterministic/arrays/candidate/cold_collect_dense_moving",
+          "kind": "collect",
+          "case": "dense_moving",
+          "tag": "cold_collect_dense_moving",
+          "save": true,
+          "version": "candidate"
+        }
+      ]
+    },
+    "measurements": [],
+    "dispatch": [],
+    "streak": []
+  },
+  "harness_sha256": "067faa1ef859c71e0c3fc1e373da68553fa54cfc3e694589eb1a9684f1778e32"
+}

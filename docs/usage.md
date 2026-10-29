@@ -307,16 +307,20 @@ image-plane target:
   list renders tiles and can reduce peak GPU memory for large images.
 - `spatial_osf`: spatial oversampling factor. `spacial_osf` is also accepted (pre v0.24.0).
 - `temporal_osf`: temporal samples used to smear motion. `"auto"` derives a
-  value from star motion. In ePSF `star_render_mode: "transform"`, auto
-  sampling uses detector-pixel trail length, and samples are placed at
-  exposure-bin centers to avoid endpoint bias.
+  value from star motion. Native ePSF star rendering uses the detector-pixel
+  trail length for both `star_render_mode` values. FFT rendering, and ePSF
+  configs that set `fallback_to_fft_for_models`, use the finer
+  oversampled-pixel rule. Native ePSF star samples are placed at exposure-bin
+  centers to avoid endpoint bias.
 - `padding`: extra real pixels around the image for off-frame sources and
   convolution.
 - `samples`: number of independent transformed configurations to generate.
-- `star_render_mode`: `transform` renders per-star motion; `streak` uses a
-  shared star streak shape. In `epsf` mode, `streak` is implemented natively
-  with a per-frame trailed ePSF LUT and is recommended for dense rate-track
-  star fields. `fft` is accepted as a legacy alias for `streak`.
+- `star_render_mode`: `transform` renders per-star motion. In FFT rendering,
+  `streak` uses a shared star streak shape. Native `epsf` rendering treats
+  both values the same: each star deposits its optical ePSF at every
+  exposure-bin midpoint sample, and stars with exactly zero rotation and
+  translation and no distortion use one sample. `fft` is accepted as a legacy
+  alias for `streak`.
 - `point_rendering`: `bilinear` is the default and preserves sub-pixel point
   centroids by distributing fractional sources over neighboring oversampled
   pixels. Use `floor` to preserve legacy integer-pixel deposition behavior.
@@ -334,7 +338,10 @@ image-plane target:
   center convention as FFT rendering.
   Set `sim.epsf.$cache` to cache the final phase-indexed ePSF LUT. FFT mode
   continues to use `fpa.psf.$cache` for single optical PSF caching; ePSF cache
-  entries are keyed separately by render mode and LUT parameters.
+  entries are keyed separately by render mode and LUT parameters. A warm
+  native LUT cache renders without regenerating the optical PSF for either
+  `star_render_mode`; `fallback_to_fft_for_models` and `augment.fpa.psf`
+  configurations still generate it.
   `normalize` defaults to `false` so finite ePSF kernels do not boost
   photometry when energy falls outside the stamp; set it to `true` only when
   each cropped stamp should be forced to unit flux. `batch_element_budget`
@@ -343,15 +350,14 @@ image-plane target:
   controls the fine phase-grid multiplier for `point_rendering:
   "phase_nearest"`; when omitted, SatSim derives it from a 0.02 detector-pixel
   worst-case centroid quantization target. `fallback_to_fft_for_models`
-  defaults to `false`. Native ePSF
-  `star_render_mode: "streak"` builds a trailed LUT in memory per frame; that
-  trailed LUT is not disk-cached. When
+  defaults to `false`. When
   `fallback_to_fft_for_models` is enabled, the optical PSF is generated at the
   full padded frame size and `psf_generation_size`/`psf_generation_padding`
   are ignored. `phase_nearest` cannot be used with FFT fallback. ePSF currently
   renders full detector-space frames; a list-valued `render_size` is used only
   as the PSF-generation reference, not for tiling. Sprite/model targets require
-  FFT fallback.
+  FFT fallback. Frames that fall back to FFT render stars with per-source
+  transforms whatever `star_render_mode` says.
   `sim.epsf.crop.mode` defaults to `auto`, rendering dim stars with centered
   crops of the full ePSF LUT. Auto mode derives total-flux thresholds from the
   active ePSF wing signal and the per-pixel noise floor using
@@ -361,12 +367,17 @@ image-plane target:
   path. Cropped tiers are applied to stars only; targets keep the full kernel.
   Per-frame tier thresholds, source counts, wing/loss candidate bounds, and
   the binding criterion are recorded in frame metadata under `epsf.crop`.
-  When CPU-only ePSF renders run in parallel or in a CPU-limited container,
-  set `TF_NUM_INTRAOP_THREADS=1` and get parallelism from separate render
-  processes. The CPU stamp scatter gives each thread a range of output pixels
-  and every thread reads all of the updates, so extra intra-op threads add CPU
-  time without making the scatter faster. TensorFlow sizes its default thread
-  pool to the host's cores, not to a container's CPU limit.
+  Eager renders whose star tensors are all on the CPU accumulate ePSF stars
+  with a compiled, single-threaded float64 kernel instead of the TensorFlow
+  scatter, and return the image in its original dtype. GPU and graph renders
+  keep TensorFlow. The first CPU render compiles the kernel and caches it on
+  disk for later processes. When CPU-only ePSF renders run in parallel or in a
+  CPU-limited container, set `TF_NUM_INTRAOP_THREADS=1` and get parallelism
+  from separate render processes; this still applies to target deposition and
+  the other TensorFlow work. The TensorFlow stamp scatter gives each thread a
+  range of output pixels and every thread reads all of the updates, so extra
+  intra-op threads add CPU time without making it faster. TensorFlow sizes its
+  default thread pool to the host's cores, not to a container's CPU limit.
 - `star_catalog_query_mode`: `frame` refreshes catalog stars every frame;
   `at_start` queries once.
 - `apply_star_wrap_around`: repeats stars as they drift through the padded

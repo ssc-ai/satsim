@@ -1,12 +1,16 @@
 from __future__ import division, print_function, absolute_import
 
 import math
+import warnings
+from dataclasses import dataclass
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
 
 from satsim.geometry.transform import rotate_and_translate
-from satsim.image.fpa import add_counts, downsample, transform_and_add_counts
+from satsim.image.epsf_cpu import add_epsf_stamps
+from satsim.image.fpa import add_counts, downsample
 from satsim.math import fftconv2p
 
 
@@ -14,6 +18,9 @@ EPSF_BATCH_ELEMENT_BUDGET_DEFAULT = 32000000
 EPSF_BATCH_MIN_DEFAULT = 1024
 EPSF_BATCH_MAX_DEFAULT = 262144
 EPSF_PHASE_ERROR_TARGET_PX = 0.02
+# Bounds the transformed coordinates handed to a position callback per batch.
+_POSITION_TRANSFORM_BATCH_SAMPLES = 65536
+_STAR_ACCUMULATORS = ('auto', 'tensorflow', 'cpu')
 
 
 def _validate_kernel_size(kernel_size):
@@ -108,31 +115,6 @@ def _to_int(value, name):
     raise ValueError('{} must be statically known when building an ePSF LUT'.format(name))
 
 
-def _to_float(value, name):
-    static_value = tf.get_static_value(value)
-    if static_value is not None:
-        return float(static_value)
-    if hasattr(value, 'numpy'):
-        return float(value.numpy())
-    try:
-        return float(value)
-    except TypeError:
-        raise ValueError('{} must be statically known when building an ePSF LUT'.format(name))
-
-
-def _image_dim_to_int(image, axis, name):
-    static_shape = image.shape.as_list()
-    if static_shape[axis] is not None:
-        return int(static_shape[axis])
-    return _to_int(tf.shape(image)[axis], name)
-
-
-def _match_detector_parity(size, reference_size):
-    if size % 2 != reference_size % 2:
-        return size + 1
-    return size
-
-
 def _make_odd(value):
     value = int(value)
     if value % 2 == 0:
@@ -164,23 +146,6 @@ def _validate_crop_size(crop_size, full_size, name='crop_size', allow_full=True)
     return crop_size
 
 
-def _pad_to_shape(image, height, width):
-    h = _image_dim_to_int(image, 0, 'image height')
-    w = _image_dim_to_int(image, 1, 'image width')
-    if h > height or w > width:
-        raise ValueError('image cannot be padded to a smaller shape')
-
-    pad_h = height - h
-    pad_w = width - w
-    return tf.pad(
-        image,
-        [
-            [pad_h // 2, pad_h - pad_h // 2],
-            [pad_w // 2, pad_w - pad_w // 2],
-        ],
-    )
-
-
 def crop_epsf_lut(epsf_lut, crop_size):
     """Return a centered crop of a phase-indexed ePSF LUT."""
     full_size = _kernel_size_from_lut(epsf_lut)
@@ -190,11 +155,7 @@ def crop_epsf_lut(epsf_lut, crop_size):
 
 
 def epsf_wing_profile(epsf_lut, sizes):
-    """Measure cropped-wing amplitude and energy loss for candidate sizes.
-
-    Values are measured on the active LUT, so the profile applies equally to
-    static and trailed ePSFs.
-    """
+    """Measure cropped-wing amplitude and energy loss for candidate sizes."""
     lut = np.asarray(_to_numpy(epsf_lut), dtype=np.float64)
     if lut.ndim != 4 or lut.shape[2] != lut.shape[3]:
         raise ValueError('epsf_lut must have shape [phase_r, phase_c, kernel_size, kernel_size]')
@@ -226,8 +187,8 @@ def epsf_wing_profile(epsf_lut, sizes):
     return profile
 
 
-def _crop_size_for_trail(core_size, trail_det, full_size):
-    crop_size = _make_odd(int(core_size) + int(trail_det))
+def _crop_size(core_size, full_size):
+    crop_size = _make_odd(core_size)
     if crop_size > full_size:
         crop_size = full_size
     if (full_size - crop_size) % 2 != 0:
@@ -235,12 +196,15 @@ def _crop_size_for_trail(core_size, trail_det, full_size):
     return _validate_crop_size(crop_size, full_size)
 
 
-def resolve_epsf_tiers(epsf_lut, crop_config=None, trail_det=0):
+def resolve_epsf_tiers(epsf_lut, crop_config=None, trail_det=None):
     """Resolve an ePSF crop config into sorted flux tiers.
 
     Each tier has an inclusive ``flux_max`` in total source photoelectrons and
     a centered detector-space ``kernel_size``. ``None`` means tiering is off.
+    ``trail_det`` is deprecated and ignored.
     """
+    if trail_det is not None:
+        _warn_deprecated('resolve_epsf_tiers trail_det is ignored; stars no longer deposit a trailed LUT')
     if not crop_config or crop_config.get('mode', 'off') == 'off':
         return None
 
@@ -250,12 +214,11 @@ def resolve_epsf_tiers(epsf_lut, crop_config=None, trail_det=0):
         raise ValueError("sim.epsf.crop.mode must be 'off', 'manual', or 'auto'")
 
     tiers = []
-    trail_det = int(trail_det)
 
     if mode == 'manual':
         threshold_pe = float(crop_config['threshold_pe'])
         core_size = int(crop_config['kernel_size'])
-        crop_size = _crop_size_for_trail(core_size, trail_det, full_size)
+        crop_size = _crop_size(core_size, full_size)
         if crop_size < full_size:
             tiers.append({
                 'kernel_size': crop_size,
@@ -274,7 +237,7 @@ def resolve_epsf_tiers(epsf_lut, crop_config=None, trail_det=0):
 
         candidates = []
         for core_size in crop_config.get('sizes', []):
-            crop_size = _crop_size_for_trail(core_size, trail_det, full_size)
+            crop_size = _crop_size(core_size, full_size)
             if crop_size < full_size:
                 candidates.append((int(core_size), crop_size))
 
@@ -369,25 +332,68 @@ def _tier_mask(cnt, min_exclusive, max_inclusive):
     return mask
 
 
-def filter_epsf_sources_in_bounds(fpa, r_os, c_os, cnt, t_start, t_end, rotation, translation, s_osf):
-    """Filter sources whose start and end positions are both outside the frame."""
+def filter_epsf_sources_in_bounds(
+        fpa, r_os, c_os, cnt, t_start, t_end, rotation, translation, s_osf, kernel_size=None,
+        position_offset_os=0.0):
+    """Drop sources whose ePSF stamps cannot reach ``fpa`` during the exposure.
+
+    A dropped source deposits exactly zero into ``fpa`` for every time in
+    ``[t_start, t_end]`` and every ``point_rendering`` when rendered with the
+    same ``position_offset_os``. Pass the full LUT ``kernel_size`` so the
+    bound holds for every crop tier.
+
+    A stamp of odd ``kernel_size`` reaches the frame only when its detector
+    base lies within ``kernel_size // 2`` pixels of it. Bilinear expansion
+    moves a base by at most one oversampled pixel, so a halo of
+    ``(kernel_size // 2 + 1) * s_osf`` oversampled pixels covers it together
+    with any offset in ``[-s_osf, s_osf - 1]``; positions are shifted by the
+    part of ``position_offset_os`` outside that range.
+
+    Rotation turns a source on a circle of radius ``rho`` about the frame
+    center while translation moves it linearly, so its acceleration is
+    ``rho * rotation**2``. At every time in the exposure it therefore lies
+    within ``rho * (rotation * (t_end - t_start))**2 / 8`` of the straight
+    line between its endpoint positions, and a source is dropped when both
+    endpoints lie beyond the halo plus that distance on the same side.
+
+    Omitting ``kernel_size`` is deprecated; it uses no halo, which keeps every
+    source the previous center-only filter kept.
+    """
+    if kernel_size is None:
+        _warn_deprecated('filter_epsf_sources_in_bounds without kernel_size drops sources whose ePSF wings '
+                         'reach the frame; pass the LUT kernel_size')
     s_osf = tf.cast(s_osf, tf.int32)
     shape = tf.shape(fpa)
     h_os = tf.cast(shape[0] * s_osf, tf.float32)
     w_os = tf.cast(shape[1] * s_osf, tf.float32)
     h_minus_1 = h_os - 1.0
     w_minus_1 = w_os - 1.0
+    s_osf_f = tf.cast(s_osf, tf.float32)
+    if kernel_size is None:
+        halo = 0.0
+    else:
+        halo = tf.cast((tf.cast(kernel_size, tf.int32) // 2 + 1) * s_osf, tf.float32)
 
-    r = tf.cast(r_os, tf.float32)
-    c = tf.cast(c_os, tf.float32)
-    cnt = tf.cast(cnt, tf.float32)
+    r = tf.reshape(tf.cast(r_os, tf.float32), [-1])
+    c = tf.reshape(tf.cast(c_os, tf.float32), [-1])
+    cnt = tf.reshape(tf.cast(cnt, tf.float32), [-1])
+
+    sweep = tf.cast(rotation, tf.float32) * (tf.cast(t_end, tf.float32) - tf.cast(t_start, tf.float32))
+    radius = tf.sqrt(tf.square(r - h_minus_1 / 2.0) + tf.square(c - w_minus_1 / 2.0))
+    margin = halo + radius * tf.square(sweep) / 8.0
+    r_shift, c_shift = [
+        tf.cast(offset, tf.float32) - tf.clip_by_value(tf.cast(offset, tf.float32), -s_osf_f, s_osf_f - 1.0)
+        for offset in _offset_pair(position_offset_os)
+    ]
 
     rr0_tmp, cc0_tmp = rotate_and_translate(h_minus_1, w_minus_1, r, c, t_start, rotation, translation)
     rr1_tmp, cc1_tmp = rotate_and_translate(h_minus_1, w_minus_1, r, c, t_end, rotation, translation)
-    rr_lt_0 = tf.math.logical_and(rr0_tmp < 0, rr1_tmp < 0)
-    rr_gt_h = tf.math.logical_and(rr0_tmp > h_os, rr1_tmp > h_os)
-    cc_lt_0 = tf.math.logical_and(cc0_tmp < 0, cc1_tmp < 0)
-    cc_gt_w = tf.math.logical_and(cc0_tmp > w_os, cc1_tmp > w_os)
+    rr0_tmp, rr1_tmp = rr0_tmp + r_shift, rr1_tmp + r_shift
+    cc0_tmp, cc1_tmp = cc0_tmp + c_shift, cc1_tmp + c_shift
+    rr_lt_0 = tf.math.logical_and(rr0_tmp < -margin, rr1_tmp < -margin)
+    rr_gt_h = tf.math.logical_and(rr0_tmp > h_os + margin, rr1_tmp > h_os + margin)
+    cc_lt_0 = tf.math.logical_and(cc0_tmp < -margin, cc1_tmp < -margin)
+    cc_gt_w = tf.math.logical_and(cc0_tmp > w_os + margin, cc1_tmp > w_os + margin)
     out_of_bounds = tf.math.logical_or(
         tf.math.logical_or(rr_lt_0, rr_gt_h),
         tf.math.logical_or(cc_lt_0, cc_gt_w),
@@ -395,6 +401,12 @@ def filter_epsf_sources_in_bounds(fpa, r_os, c_os, cnt, t_start, t_end, rotation
     in_bounds = tf.math.logical_not(out_of_bounds)
 
     return tf.boolean_mask(r, in_bounds), tf.boolean_mask(c, in_bounds), tf.boolean_mask(cnt, in_bounds)
+
+
+def _offset_pair(position_offset_os):
+    if isinstance(position_offset_os, (tuple, list)):
+        return tuple(position_offset_os)
+    return (position_offset_os, position_offset_os)
 
 
 def _delta_epsf_lut(s_osf, kernel_size, dtype):
@@ -530,134 +542,6 @@ def build_epsf_lut(psf_os, s_osf, kernel_size, normalize=False, dtype=tf.float32
         stamps_r.append(tf.stack(stamps_c, axis=0))
 
     return tf.cast(tf.stack(stamps_r, axis=0), dtype)
-
-
-def build_trailed_epsf_lut(psf_os, s_osf, kernel_size, t_start, t_end, t_osf,
-                           rotation, translation, normalize=False,
-                           point_rendering='bilinear', dtype=tf.float32,
-                           max_kernel_size=4095, return_info=False,
-                           phase_oversample=1):
-    """Build a phase-indexed ePSF LUT with shared star motion baked in.
-
-    The trail component mirrors ``transform_and_fft``: a unit point is placed
-    at the field center, transformed over the exposure, convolved with the
-    optical PSF, and then passed through the regular ePSF LUT builder.
-    """
-    s_osf = int(s_osf)
-    kernel_size = _validate_kernel_size(kernel_size)
-    point_rendering = _validate_point_rendering(point_rendering)
-    phase_oversample = resolve_phase_oversample(s_osf, phase_oversample)
-    dtype = tf.as_dtype(dtype)
-
-    t_osf = _to_int(t_osf, 't_osf')
-    if t_osf <= 0:
-        raise ValueError('t_osf must be a positive integer')
-
-    t_start_f = _to_float(t_start, 't_start')
-    t_end_f = _to_float(t_end, 't_end')
-    t_duration = t_end_f - t_start_f
-    translation_r = _to_float(translation[0], 'translation[0]')
-    translation_c = _to_float(translation[1], 'translation[1]')
-
-    trail_r_os = abs(translation_r * t_duration)
-    trail_c_os = abs(translation_c * t_duration)
-    trail_r_det = int(math.ceil(trail_r_os / float(s_osf)))
-    trail_c_det = int(math.ceil(trail_c_os / float(s_osf)))
-    trail_det = max(trail_r_det, trail_c_det)
-
-    effective_kernel = _make_odd(kernel_size + trail_det)
-    if (
-        trail_det == 0
-        and _to_float(rotation, 'rotation') == 0.0
-    ):
-        result = (
-            build_epsf_lut(
-                psf_os,
-                s_osf,
-                kernel_size,
-                normalize=normalize,
-                dtype=dtype,
-                phase_oversample=phase_oversample,
-            ),
-            effective_kernel,
-        )
-        if return_info:
-            return result + ({'trail_det': trail_det},)
-        return result
-    if max_kernel_size is not None:
-        max_kernel_size = _to_int(max_kernel_size, 'max_kernel_size')
-    if max_kernel_size is not None and effective_kernel > max_kernel_size:
-        raise ValueError(
-            'trailed ePSF effective kernel_size {} exceeds the maximum {}; '
-            'reduce exposure/rate or use sim.mode "fftconv2p"'.format(
-                effective_kernel,
-                max_kernel_size,
-            )
-        )
-
-    if psf_os is None:
-        psf_det_h = kernel_size
-        psf_det_w = kernel_size
-        padded_psf_os = None
-    else:
-        psf_os = tf.cast(psf_os, dtype)
-        psf_h_os = _image_dim_to_int(psf_os, 0, 'psf_os height')
-        psf_w_os = _image_dim_to_int(psf_os, 1, 'psf_os width')
-        if psf_h_os % s_osf != 0 or psf_w_os % s_osf != 0:
-            raise ValueError('psf_os dimensions must be divisible by s_osf')
-        psf_det_h = psf_h_os // s_osf
-        psf_det_w = psf_w_os // s_osf
-        padded_psf_os = psf_os
-
-    field_h_det = max(psf_det_h + trail_r_det + 2, effective_kernel)
-    field_w_det = max(psf_det_w + trail_c_det + 2, effective_kernel)
-    field_h_det = _match_detector_parity(field_h_det, psf_det_h)
-    field_w_det = _match_detector_parity(field_w_det, psf_det_w)
-    field_h_os = field_h_det * s_osf
-    field_w_os = field_w_det * s_osf
-
-    if padded_psf_os is not None:
-        padded_psf_os = _pad_to_shape(padded_psf_os, field_h_os, field_w_os)
-
-    h_mid = (field_h_os - 1.0) / 2.0
-    w_mid = (field_w_os - 1.0) / 2.0
-    build_point_rendering = 'bilinear' if point_rendering == 'phase_nearest' else point_rendering
-    if build_point_rendering == 'bilinear':
-        h_mid = math.floor(h_mid)
-        w_mid = math.floor(w_mid)
-
-    trail_field = transform_and_add_counts(
-        tf.zeros([field_h_os, field_w_os], dtype),
-        [h_mid],
-        [w_mid],
-        [1.0],
-        0.0,
-        t_duration,
-        t_osf,
-        rotation,
-        translation,
-        interpolation=build_point_rendering,
-    )
-
-    if padded_psf_os is None:
-        trailed_psf_os = trail_field
-    else:
-        trailed_psf_os = fftconv2p(trail_field, padded_psf_os, pad=1)
-
-    result = (
-        build_epsf_lut(
-            trailed_psf_os,
-            s_osf,
-            effective_kernel,
-            normalize=normalize,
-            dtype=dtype,
-            phase_oversample=phase_oversample,
-        ),
-        effective_kernel,
-    )
-    if return_info:
-        return result + ({'trail_det': trail_det},)
-    return result
 
 
 def _expand_oversampled_points(r_os, c_os, cnt, r_offset_os, c_offset_os, point_rendering, dtype):
@@ -824,260 +708,402 @@ def add_epsf_counts(
     return tf.slice(padded_fpa, [stamp_pad, stamp_pad], fpa_shape)
 
 
-def add_epsf_counts_tiered(
-        fpa, r_os, c_os, cnt, epsf_lut, s_osf, tiers, r_offset_os=0,
-        c_offset_os=0, batch_size=None, point_rendering='bilinear',
-        batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-        batch_size_cap=None):
-    """Deposit sources using center-cropped ePSF LUTs selected by total flux."""
-    if not tiers:
-        return add_epsf_counts(
-            fpa,
-            r_os,
-            c_os,
-            cnt,
-            epsf_lut,
-            s_osf,
-            r_offset_os=r_offset_os,
-            c_offset_os=c_offset_os,
-            batch_size=batch_size,
-            point_rendering=point_rendering,
-            batch_element_budget=batch_element_budget,
-            batch_size_cap=batch_size_cap,
-        )
-
-    r = tf.reshape(tf.cast(r_os, tf.float32), [-1])
-    c = tf.reshape(tf.cast(c_os, tf.float32), [-1])
-    cnt = tf.reshape(tf.cast(cnt, tf.float32), [-1])
-    prev = -math.inf
-    for tier in tiers:
-        mask = _tier_mask(cnt, prev, tier['flux_max'])
-        if hasattr(mask, 'numpy') and not np.any(mask.numpy()):
-            prev = float(tier['flux_max'])
-            continue
-
-        tier_lut = crop_epsf_lut(epsf_lut, tier['kernel_size'])
-        fpa = add_epsf_counts(
-            fpa,
-            tf.boolean_mask(r, mask),
-            tf.boolean_mask(c, mask),
-            tf.boolean_mask(cnt, mask),
-            tier_lut,
-            s_osf,
-            r_offset_os=r_offset_os,
-            c_offset_os=c_offset_os,
-            batch_size=batch_size,
-            point_rendering=point_rendering,
-            batch_element_budget=batch_element_budget,
-            batch_size_cap=batch_size_cap,
-        )
-        prev = float(tier['flux_max'])
-
-    return fpa
-
-
-def transform_and_add_trailed_epsf(fpa, r_os, c_os, cnt, t_start, t_end,
-                                   rotation, translation, epsf_lut, s_osf,
-                                   batch_size=None, filter_out_of_bounds=True,
-                                   point_rendering='bilinear', epsf_tiers=None,
-                                   batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-                                   batch_size_cap=None, position_offset_os=0.0):
-    """Apply FFT-style shared star motion and deposit one trailed ePSF per star."""
-    point_rendering = _validate_point_rendering(point_rendering)
-    s_osf = tf.cast(s_osf, tf.int32)
-
-    shape = tf.shape(fpa)
-    h_os = tf.cast(shape[0] * s_osf, tf.float32)
-    w_os = tf.cast(shape[1] * s_osf, tf.float32)
-    h_minus_1 = h_os - 1.0
-    w_minus_1 = w_os - 1.0
-
-    if filter_out_of_bounds:
-        r, c, cnt = filter_epsf_sources_in_bounds(
-            fpa,
-            r_os,
-            c_os,
-            cnt,
-            t_start,
-            t_end,
-            rotation,
-            translation,
-            s_osf,
-        )
-    else:
-        r = tf.cast(r_os, tf.float32)
-        c = tf.cast(c_os, tf.float32)
-        cnt = tf.cast(cnt, tf.float32)
-
-    rr, cc = rotate_and_translate(h_minus_1, w_minus_1, r, c, t_start, rotation, translation)
-    if isinstance(position_offset_os, (tuple, list)):
-        row_offset_os, col_offset_os = position_offset_os
-    else:
-        row_offset_os = col_offset_os = position_offset_os
-    if epsf_tiers:
-        return add_epsf_counts_tiered(
-            fpa,
-            rr,
-            cc,
-            cnt,
-            epsf_lut,
-            s_osf,
-            epsf_tiers,
-            r_offset_os=row_offset_os,
-            c_offset_os=col_offset_os,
-            batch_size=batch_size,
-            point_rendering=point_rendering,
-            batch_element_budget=batch_element_budget,
-            batch_size_cap=batch_size_cap,
-        )
-
-    return add_epsf_counts(
-        fpa,
-        rr,
-        cc,
-        cnt,
-        epsf_lut,
-        s_osf,
-        r_offset_os=row_offset_os,
-        c_offset_os=col_offset_os,
-        batch_size=batch_size,
-        point_rendering=point_rendering,
-        batch_element_budget=batch_element_budget,
-        batch_size_cap=batch_size_cap,
-    )
-
-
 def transform_and_add_epsf(
         fpa, r_os, c_os, cnt, t_start, t_end, t_osf, rotation, translation,
         epsf_lut, s_osf, batch_size=None, filter_out_of_bounds=True,
         point_rendering='bilinear', epsf_tiers=None,
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
-        batch_size_cap=None, position_offset_os=0.0, position_transform=None):
-    """Apply star motion and deposit transformed samples as ePSF stamps."""
-    point_rendering = _validate_point_rendering(point_rendering)
-    s_osf = tf.cast(s_osf, tf.int32)
+        batch_size_cap=None, position_offset_os=0.0, position_transform=None,
+        accumulator='auto'):
+    """Apply star motion and deposit each star's ePSF at exposure-bin midpoints.
 
-    shape = tf.shape(fpa)
-    h_os = tf.cast(shape[0] * s_osf, tf.float32)
-    w_os = tf.cast(shape[1] * s_osf, tf.float32)
-    h_minus_1 = h_os - 1.0
-    w_minus_1 = w_os - 1.0
+    Every star deposits ``cnt / t_osf`` at each of ``t_osf`` midpoint samples
+    through the LUT crop of its total-flux tier. Stars whose rotation and
+    translation are statically exactly zero, with no ``position_transform``,
+    deposit their full count once. ``filter_out_of_bounds`` drops only sources
+    whose stamps cannot reach ``fpa`` (see ``filter_epsf_sources_in_bounds``)
+    and is skipped with a ``position_transform``.
 
-    t_osf = tf.cast(t_osf, tf.int32)
-    if isinstance(position_offset_os, (tuple, list)):
-        row_offset_os, col_offset_os = position_offset_os
-    else:
-        row_offset_os = col_offset_os = position_offset_os
-
-    if filter_out_of_bounds and position_transform is None:
-        r, c, cnt_total = filter_epsf_sources_in_bounds(
-            fpa,
-            r_os,
-            c_os,
-            cnt,
-            t_start,
-            t_end,
-            rotation,
-            translation,
-            s_osf,
-        )
-    else:
-        r = tf.cast(r_os, tf.float32)
-        c = tf.cast(c_os, tf.float32)
-        cnt_total = tf.cast(cnt, tf.float32)
-
-    cnt_os = cnt_total / tf.cast(t_osf, tf.float32)
-
-    if epsf_tiers:
-        prev = -math.inf
-        for tier in epsf_tiers:
-            mask = _tier_mask(cnt_total, prev, tier['flux_max'])
-            if hasattr(mask, 'numpy') and not np.any(mask.numpy()):
-                prev = float(tier['flux_max'])
-                continue
-            fpa = transform_and_add_epsf(
-                fpa,
-                tf.boolean_mask(r, mask),
-                tf.boolean_mask(c, mask),
-                tf.boolean_mask(cnt_total, mask),
-                t_start,
-                t_end,
-                t_osf,
-                rotation,
-                translation,
-                crop_epsf_lut(epsf_lut, tier['kernel_size']),
-                s_osf,
-                batch_size=batch_size,
-                filter_out_of_bounds=False,
-                point_rendering=point_rendering,
-                epsf_tiers=None,
-                batch_element_budget=batch_element_budget,
-                batch_size_cap=batch_size_cap,
-                position_offset_os=position_offset_os,
-                position_transform=position_transform,
-            )
-            prev = float(tier['flux_max'])
-        return fpa
-
-    n = tf.shape(r)[0]
-    kernel_size = tf.shape(epsf_lut)[2]
+    ``accumulator`` selects how the stamps are summed. ``'tensorflow'`` uses
+    TensorFlow ops on any device and in graphs. ``'cpu'`` sums in float64 with
+    a compiled CPU kernel and returns ``fpa.dtype``; it requires eager
+    execution, a float32 or float64 ``fpa`` and every tensor argument already
+    on the CPU, and raises ``ValueError`` otherwise rather than copying
+    anything. ``'auto'`` uses ``'cpu'`` when those conditions hold and
+    ``'tensorflow'`` otherwise. Both give the same samples, phases, weights and
+    tiers; only the summation order and precision differ. On the CPU path a
+    ``position_transform`` runs under the image's device scope. If a batch of
+    its outputs is not on the CPU, ``'cpu'`` raises ``ValueError`` and
+    ``'auto'`` deposits that batch and the rest of the render with TensorFlow.
+    """
+    fpa = tf.convert_to_tensor(fpa)
     if batch_size_cap is None and batch_size is not None:
         batch_size_cap = batch_size
-    source_batch_size = effective_epsf_batch_size(
-        kernel_size,
+    stars = _plan_star_deposition(
+        fpa, r_os, c_os, cnt, t_start, t_end, t_osf, rotation, translation,
+        epsf_lut, s_osf,
+        epsf_tiers=epsf_tiers,
+        filter_out_of_bounds=filter_out_of_bounds,
         point_rendering=point_rendering,
+        position_offset_os=position_offset_os,
+        position_transform=position_transform,
         batch_element_budget=batch_element_budget,
         batch_size_cap=batch_size_cap,
-        temporal_osf=t_osf,
-        source_count=n,
     )
-    if position_transform is not None:
-        source_batch_size = tf.minimum(source_batch_size, tf.maximum(1, 65536 // t_osf))
-    deposit_batch_size = effective_epsf_batch_size(
-        kernel_size,
-        point_rendering=point_rendering,
-        batch_element_budget=batch_element_budget,
-        batch_size_cap=batch_size_cap,
-        temporal_osf=1,
-    )
+    return _deposit_stars(fpa, stars, accumulator)
+
+
+@dataclass(frozen=True)
+class _StarGroup:
+    """Stars that deposit through one optical LUT.
+
+    ``lut`` is the centered crop for one flux tier, or the full LUT when
+    tiering is off. Every source's total ``counts`` lies in that tier.
+    ``rows`` and ``cols`` are float32 epoch positions in padded-frame
+    oversampled pixels. ``source_batch_size`` is the number of sources whose
+    samples are transformed and deposited together.
+    """
+    lut: object
+    rows: tf.Tensor
+    cols: tf.Tensor
+    counts: tf.Tensor
+    source_batch_size: tf.Tensor
+
+
+@dataclass(frozen=True)
+class _StarPlan:
+    """Every star sample to deposit; built only by ``_plan_star_deposition``.
+
+    ``groups`` partitions the planned (filtered) sources by flux tier.
+    ``samples`` is 1 when rotation and translation are statically exactly
+    zero and there is no ``position_transform``, and ``t_osf`` otherwise.
+    ``time_grid`` holds the ``samples`` exposure-bin midpoints, and each
+    sample deposits a source's ``counts / samples``. ``input_devices`` lists
+    the devices of the caller's tensor arguments as passed, before any cast or
+    copy.
+    """
+    groups: Tuple[_StarGroup, ...]
+    samples: tf.Tensor
+    time_grid: tf.Tensor
+    rotation: tf.Tensor
+    translation: Tuple[tf.Tensor, tf.Tensor]
+    frame_extent_os: Tuple[tf.Tensor, tf.Tensor]
+    offset_os: Tuple[object, object]
+    s_osf: tf.Tensor
+    point_rendering: str
+    position_transform: Optional[Callable]
+    batch_element_budget: Optional[int]
+    batch_size_cap: Optional[int]
+    input_devices: Tuple[str, ...]
+
+
+def _plan_star_deposition(
+        fpa, r_os, c_os, cnt, t_start, t_end, t_osf, rotation, translation,
+        epsf_lut, s_osf, epsf_tiers=None, filter_out_of_bounds=True,
+        point_rendering='bilinear', position_offset_os=0.0, position_transform=None,
+        batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT, batch_size_cap=None):
+    """Return the ``_StarPlan`` for ``transform_and_add_epsf`` arguments.
+
+    The only place stars are filtered, collapsed to one sample, split into
+    flux tiers and batched. Works in eager and graph mode.
+    """
+    point_rendering = _validate_point_rendering(point_rendering)
+    input_devices = _input_devices(
+        fpa, r_os, c_os, cnt, t_start, t_end, t_osf, rotation, translation, epsf_lut, s_osf, position_offset_os)
+    s_osf = tf.cast(s_osf, tf.int32)
+    shape = tf.shape(fpa)
+    h_minus_1 = tf.cast(shape[0] * s_osf, tf.float32) - 1.0
+    w_minus_1 = tf.cast(shape[1] * s_osf, tf.float32) - 1.0
+    rotation_f = tf.cast(rotation, tf.float32)
+    translation_f = (tf.cast(translation[0], tf.float32), tf.cast(translation[1], tf.float32))
+    offset_os = _offset_pair(position_offset_os)
+
+    if filter_out_of_bounds and position_transform is None:
+        rows, cols, counts = filter_epsf_sources_in_bounds(
+            fpa, r_os, c_os, cnt, t_start, t_end, rotation_f, translation_f, s_osf,
+            tf.shape(epsf_lut)[2], position_offset_os=offset_os,
+        )
+    else:
+        rows, cols, counts = [tf.reshape(tf.cast(x, tf.float32), [-1]) for x in (r_os, c_os, cnt)]
+
+    if _is_exact_zero_motion(rotation, translation, position_transform):
+        samples = tf.constant(1, tf.int32)
+    else:
+        samples = tf.cast(t_osf, tf.int32)
     t_start_f = tf.cast(t_start, tf.float32)
     t_duration = tf.cast(t_end, tf.float32) - t_start_f
-    t_osf_f = tf.cast(t_osf, tf.float32)
-    time_grid = t_start_f + (tf.cast(tf.range(t_osf), tf.float32) + 0.5) * (t_duration / t_osf_f)
+    time_grid = t_start_f + (tf.cast(tf.range(samples), tf.float32) + 0.5) * (t_duration / tf.cast(samples, tf.float32))
 
-    def cond(i, image):
-        return tf.less(i, n)
+    if epsf_tiers:
+        selections = []
+        prev = -math.inf
+        for tier in epsf_tiers:
+            selections.append((crop_epsf_lut(epsf_lut, tier['kernel_size']), _tier_mask(counts, prev, tier['flux_max'])))
+            prev = float(tier['flux_max'])
+    else:
+        selections = [(epsf_lut, None)]
 
-    def body(i, image):
-        end = tf.minimum(i + source_batch_size, n)
-        r_batch = r[i:end]
-        c_batch = c[i:end]
-        cnt_batch = cnt_os[i:end]
-        current_batch = tf.shape(r_batch)[0]
-
-        tt = tf.repeat(time_grid, current_batch)
-        rr = tf.tile(r_batch, [t_osf])
-        cc = tf.tile(c_batch, [t_osf])
-        ccnt = tf.tile(cnt_batch, [t_osf])
-
-        rr, cc = rotate_and_translate(h_minus_1, w_minus_1, rr, cc, tt, rotation, translation)
-        if position_transform is not None:
-            rr, cc = position_transform(rr, cc)
-        image = add_epsf_counts(
-            image,
-            rr,
-            cc,
-            ccnt,
-            epsf_lut,
-            s_osf,
-            r_offset_os=row_offset_os,
-            c_offset_os=col_offset_os,
-            batch_size=deposit_batch_size,
+    groups = []
+    for lut, mask in selections:
+        if mask is None:
+            group_rows, group_cols, group_counts = rows, cols, counts
+        elif tf.executing_eagerly() and not bool(tf.reduce_any(mask)):
+            continue
+        else:
+            group_rows, group_cols, group_counts = [tf.boolean_mask(x, mask) for x in (rows, cols, counts)]
+        source_batch_size = effective_epsf_batch_size(
+            tf.shape(lut)[2],
             point_rendering=point_rendering,
             batch_element_budget=batch_element_budget,
             batch_size_cap=batch_size_cap,
+            temporal_osf=samples,
+            source_count=tf.shape(group_rows)[0],
         )
-        return end, image
+        if position_transform is not None:
+            source_batch_size = tf.minimum(source_batch_size, tf.maximum(1, _POSITION_TRANSFORM_BATCH_SAMPLES // samples))
+        groups.append(_StarGroup(lut, group_rows, group_cols, group_counts, source_batch_size))
 
-    _, fpa = tf.while_loop(cond, body, (tf.constant(0, tf.int32), fpa))
+    return _StarPlan(
+        groups=tuple(groups),
+        samples=samples,
+        time_grid=time_grid,
+        rotation=rotation_f,
+        translation=translation_f,
+        frame_extent_os=(h_minus_1, w_minus_1),
+        offset_os=offset_os,
+        s_osf=s_osf,
+        point_rendering=point_rendering,
+        position_transform=position_transform,
+        batch_element_budget=batch_element_budget,
+        batch_size_cap=batch_size_cap,
+        input_devices=input_devices,
+    )
+
+
+def _input_devices(*values):
+    """Return the device of every tensor in ``values``, walking nested lists and tuples.
+
+    Python scalars, strings, ``None`` and numeric NumPy arrays live on the host
+    and add nothing. Any other leaf, such as a sparse tensor or an object
+    array, adds an empty device so it never counts as a CPU input.
+    """
+    devices = []
+    for value in tf.nest.flatten(values):
+        if isinstance(value, (tf.Tensor, tf.Variable)):
+            devices.append(value.device)
+        elif not _is_host_value(value):
+            devices.append('')
+    return tuple(devices)
+
+
+def _is_host_value(value):
+    if value is None or isinstance(value, (bool, int, float, str, np.number, np.bool_)):
+        return True
+    return isinstance(value, np.ndarray) and value.dtype.kind in 'biuf'
+
+
+def _is_exact_zero_motion(rotation, translation, position_transform):
+    """Return True when no star can move during the exposure.
+
+    Requires rotation and both translation components to be statically
+    exactly zero (``-0.0`` included) and no ``position_transform``. A value
+    that is not static, such as a dynamic graph tensor, never qualifies.
+    """
+    if position_transform is not None:
+        return False
+    statics = [tf.get_static_value(value) for value in (rotation, translation[0], translation[1])]
+    return all(static is not None and np.all(np.asarray(static) == 0) for static in statics)
+
+
+def _deposit_stars(fpa, stars, accumulator):
+    """Deposit every sample of the ``_StarPlan`` ``stars`` into ``fpa``.
+
+    The only place the accumulator is chosen. Placement is judged on the
+    caller's inputs and on every planned tensor the accumulator reads.
+    """
+    devices = stars.input_devices + _input_devices(
+        stars.time_grid, stars.rotation, stars.translation, stars.frame_extent_os, stars.s_osf,
+        [(group.lut, group.rows, group.cols, group.counts) for group in stars.groups])
+    if _choose_star_accumulator(accumulator, tf.executing_eagerly(), devices, fpa.dtype) == 'cpu':
+        return _accumulate_stars_cpu(fpa, stars, accumulator)
+    return _accumulate_stars_tf(fpa, stars)
+
+
+def _choose_star_accumulator(requested, executing_eagerly, devices, image_dtype):
+    """Return ``'cpu'`` or ``'tensorflow'`` for an ``accumulator`` request.
+
+    A render is eligible for ``'cpu'`` only when it executes eagerly, the image
+    dtype is float32 or float64, and every device string names a CPU (an empty
+    string, as graph tensors report, does not). Whether the host has a GPU is
+    never consulted. ``'auto'`` returns ``'cpu'`` exactly when eligible,
+    ``'tensorflow'`` always returns ``'tensorflow'``, and ``'cpu'`` raises
+    ``ValueError`` when the render is not eligible.
+    """
+    if requested not in _STAR_ACCUMULATORS:
+        raise ValueError("accumulator must be 'auto', 'tensorflow', or 'cpu'")
+    if requested == 'tensorflow':
+        return 'tensorflow'
+    if not executing_eagerly:
+        requirement = 'eager execution'
+    elif image_dtype not in (tf.float32, tf.float64):
+        requirement = 'a float32 or float64 image'
+    elif not _on_cpu(devices):
+        requirement = 'every render tensor on the CPU'
+    else:
+        return 'cpu'
+    if requested == 'cpu':
+        raise ValueError('the cpu ePSF star accumulator requires {}'.format(requirement))
+    return 'tensorflow'
+
+
+def _on_cpu(devices):
+    return all(tf.DeviceSpec.from_string(device).device_type == 'CPU' for device in devices)
+
+
+@dataclass(frozen=True)
+class _PendingBatch:
+    """A transformed sample batch the CPU accumulator handed to TensorFlow.
+
+    ``rows``, ``cols`` and ``values`` are ``_star_sample_batch`` output for
+    sources ``start:end`` of ``groups[group_index]``; ``end`` is where the
+    rest of that group resumes.
+    """
+    group_index: int
+    end: tf.Tensor
+    rows: tf.Tensor
+    cols: tf.Tensor
+    values: tf.Tensor
+
+
+def _accumulate_stars_tf(fpa, stars, pending=None):
+    """Deposit ``stars`` with TensorFlow ops; graph-safe on any device.
+
+    With a ``_PendingBatch``, deposit it, then the rest of its group and every
+    later group; earlier sources are already in ``fpa``.
+    """
+    groups = stars.groups
+    if pending is not None:
+        group = groups[pending.group_index]
+        fpa = _add_star_samples(fpa, stars, group, pending.rows, pending.cols, pending.values)
+        fpa = _deposit_star_group(fpa, stars, group, start=pending.end)
+        groups = groups[pending.group_index + 1:]
+    for group in groups:
+        fpa = _deposit_star_group(fpa, stars, group)
     return fpa
+
+
+def _deposit_star_group(fpa, stars, group, start=0):
+    n = tf.shape(group.rows)[0]
+
+    def cond(start, image):
+        return tf.less(start, n)
+
+    def body(start, image):
+        end, rr, cc, vv = _star_sample_batch(stars, group, start)
+        return end, _add_star_samples(image, stars, group, rr, cc, vv)
+
+    _, fpa = tf.while_loop(cond, body, (tf.convert_to_tensor(start, tf.int32), fpa))
+    return fpa
+
+
+def _add_star_samples(image, stars, group, rr, cc, vv):
+    row_offset_os, col_offset_os = stars.offset_os
+    return add_epsf_counts(
+        image,
+        rr,
+        cc,
+        vv,
+        group.lut,
+        stars.s_osf,
+        r_offset_os=row_offset_os,
+        c_offset_os=col_offset_os,
+        point_rendering=stars.point_rendering,
+        batch_element_budget=stars.batch_element_budget,
+        batch_size_cap=stars.batch_size_cap,
+    )
+
+
+def _accumulate_stars_cpu(fpa, stars, requested):
+    """Deposit ``stars`` with the compiled float64 kernel; return an image of ``fpa.dtype``.
+
+    Computes the same sample positions, phases, bilinear weights and
+    dtype-cast LUT values as ``_accumulate_stars_tf``; only the sum differs.
+    Callers must have routed here with ``_choose_star_accumulator``, so every
+    input tensor is already on the CPU. ``position_transform`` outputs are
+    placed only when it runs, so each batch is checked here: off the CPU,
+    ``'auto'`` hands that batch and the partial sum to ``_accumulate_stars_tf``
+    without transforming it again, and ``'cpu'`` raises ``ValueError``.
+    """
+    with tf.device(fpa.device):
+        image, pending = _sum_stars_on_cpu(fpa, stars, requested)
+        partial = tf.constant(image.astype(fpa.dtype.as_numpy_dtype))
+    if pending is None:
+        return partial
+    return _accumulate_stars_tf(partial, stars, pending)
+
+
+def _sum_stars_on_cpu(fpa, stars, requested):
+    """Return the float64 image sum and the first ``_PendingBatch`` not on the CPU, or ``None``."""
+    row_offset_os, col_offset_os = stars.offset_os
+    image = np.array(fpa.numpy(), dtype=np.float64)
+    for group_index, group in enumerate(stars.groups):
+        lut = tf.cast(group.lut, fpa.dtype)
+        lut_values = lut.numpy()
+        n = tf.shape(group.rows)[0]
+        start = 0
+        while start < n:
+            end, rr, cc, vv = _star_sample_batch(stars, group, start)
+            if not _on_cpu(_input_devices(rr, cc)):
+                if requested == 'cpu':
+                    raise ValueError('the cpu ePSF star accumulator requires position_transform outputs on the CPU')
+                return image, _PendingBatch(group_index, end, rr, cc, vv)
+            coords = _epsf_lookup_coords(
+                rr, cc, vv, row_offset_os, col_offset_os, stars.point_rendering, fpa.dtype, stars.s_osf, lut)
+            add_epsf_stamps(image, *(coord.numpy() for coord in coords), lut_values)
+            start = end
+    return image, None
+
+
+def _star_sample_batch(stars, group, start):
+    """Return ``(end, rows, cols, values)`` for the samples of ``group`` sources ``start:end``.
+
+    Both accumulators walk a group by calling this from ``start = 0`` until
+    ``end`` reaches the group's source count, so they deposit the same
+    batches. Rows and columns are sample-major positions from
+    ``rotate_and_translate`` at each ``time_grid`` midpoint, then
+    ``position_transform`` when set; each value is a per-sample count.
+    """
+    end = tf.minimum(start + group.source_batch_size, tf.shape(group.rows)[0])
+    rows = group.rows[start:end]
+    cols = group.cols[start:end]
+    values = group.counts[start:end] / tf.cast(stars.samples, tf.float32)
+    tt = tf.repeat(stars.time_grid, tf.shape(rows)[0])
+    rr = tf.tile(rows, [stars.samples])
+    cc = tf.tile(cols, [stars.samples])
+    vv = tf.tile(values, [stars.samples])
+    h_minus_1, w_minus_1 = stars.frame_extent_os
+    rr, cc = rotate_and_translate(h_minus_1, w_minus_1, rr, cc, tt, stars.rotation, stars.translation)
+    if stars.position_transform is not None:
+        rr, cc = stars.position_transform(rr, cc)
+    return end, rr, cc, vv
+
+
+def _warn_deprecated(message):
+    warnings.warn(message, DeprecationWarning, stacklevel=3)
+
+
+def build_trailed_epsf_lut(*args, **kwargs):
+    """Removed; ``streak`` stars deposit ``build_epsf_lut`` stamps at exposure-bin midpoints."""
+    raise NotImplementedError(
+        'build_trailed_epsf_lut was removed; build the optical LUT with build_epsf_lut and deposit '
+        'moving stars with transform_and_add_epsf')
+
+
+def transform_and_add_trailed_epsf(*args, **kwargs):
+    """Removed; use ``transform_and_add_epsf``."""
+    raise NotImplementedError('transform_and_add_trailed_epsf was removed; use transform_and_add_epsf')
+
+
+def add_epsf_counts_tiered(*args, **kwargs):
+    """Removed; use ``transform_and_add_epsf`` with ``epsf_tiers``."""
+    raise NotImplementedError('add_epsf_counts_tiered was removed; use transform_and_add_epsf with epsf_tiers')
