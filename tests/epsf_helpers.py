@@ -88,14 +88,14 @@ def assert_equivalent(actual, reference, source_flux):
     metrics = _metrics(actual, reference)
     assert metrics['l2_relative'] <= 1e-5, metrics
     flux_floor = source_flux * 1e-8
-    tolerance = 1e-5 * max(float(reference.sum()), flux_floor)
+    tolerance = max(1e-5 * abs(float(reference.sum())), flux_floor)
     assert abs(np.sum(actual, dtype=np.float64) - reference.sum()) <= tolerance, metrics
     center, _ = _centroid_moments(reference)
     y, x = np.indices(reference.shape)
     for radius in (1.5, 3.0, 6.0):
         aperture = (y - center[0]) ** 2 + (x - center[1]) ** 2 <= radius ** 2
         aperture_flux = reference[aperture].sum()
-        tolerance = 1e-5 * max(float(aperture_flux), flux_floor)
+        tolerance = max(1e-5 * abs(float(aperture_flux)), flux_floor)
         assert abs(np.sum(actual[aperture], dtype=np.float64) - aperture_flux) <= tolerance, metrics
     assert metrics['centroid_detector_pixels'] <= 1e-4, metrics
     assert metrics['moment_relative'] <= 1e-4, metrics

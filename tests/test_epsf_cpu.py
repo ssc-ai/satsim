@@ -176,8 +176,10 @@ def test_cpu_scope_on_gpu_host_matches_gpu_render():
 
 
 @requires_gpu
-@pytest.mark.parametrize('cpu_batches', [0, 1], ids=['first-batch', 'later-batch'])
-def test_gpu_position_transform_outputs_never_reach_cpu_kernel(monkeypatch, cpu_batches):
+@pytest.mark.parametrize('cpu_batches', [0, 1, 3], ids=['first-batch', 'later-batch', 'last-batch'])
+@pytest.mark.parametrize('tiered', [False, True], ids=['full-lut', 'flux-tiers'])
+@pytest.mark.parametrize('gpu_columns', [False, True], ids=['mixed-output', 'gpu-output'])
+def test_gpu_position_transform_outputs_never_reach_cpu_kernel(monkeypatch, cpu_batches, tiered, gpu_columns):
     kernel_batches = []
     add_stamps = epsf.add_epsf_stamps
 
@@ -196,12 +198,14 @@ def test_gpu_position_transform_outputs_never_reach_cpu_kernel(monkeypatch, cpu_
             if len(calls) <= cpu_batches:
                 return rows, cols
             with tf.device('/GPU:0'):
-                return tf.identity(rows), tf.identity(cols)
+                return tf.identity(rows), tf.identity(cols) if gpu_columns else cols
 
         with tf.device('/CPU:0'):
             image = transform_and_add_epsf(
                 tf.zeros([12, 12]), ROWS, COLS, COUNTS, 0., 1., 4, 0.002, [0.3, -0.2], _lut(True), 3,
-                batch_size_cap=2, position_transform=position_transform, accumulator=accumulator)
+                batch_size_cap=2, position_transform=position_transform, accumulator=accumulator,
+                epsf_tiers=[{'flux_max': 10., 'kernel_size': 3}, {'flux_max': float('inf'), 'kernel_size': 7}]
+                if tiered else None)
         return image, calls
 
     expected, expected_calls = render('tensorflow')
