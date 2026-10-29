@@ -1304,8 +1304,7 @@ def test_epsf_native_stars_land_on_catalog_with_fftconv2p_flux_runtime(tmp_path,
         window = frame[r - 5:r + 6, c - 5:c + 6]
         centroids.append(np.add(scipy.ndimage.center_of_mass(window), [r - 5, c - 5]))
 
-    # The ePSF LUT is built with fftconv2p, which centers it about 0.025 px right of the PSF.
-    np.testing.assert_allclose(centroids, expected_rc, atol=0.05)
+    np.testing.assert_allclose(centroids, expected_rc, atol=1e-4)
     np.testing.assert_allclose(np.sum(frame), np.sum(fft_frame), rtol=5e-3)
 
 
