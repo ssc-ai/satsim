@@ -132,13 +132,29 @@ $ export PATH=$PATH:$HOME/.local/bin
 ## Deploying
 
 A reminder for the maintainers on how to deploy.
-Make sure all your changes are committed (including an entry in HISTORY.md).
-Then run:
+Confirm the intended release version in `setup.cfg`, `setup.py`,
+`satsim/__init__.py`, `docs/conf.py`, the Dockerfiles and the Docker tags in
+`Makefile`. Finalize the matching entry in `HISTORY.md` by removing
+`(unreleased)` and documenting behavior and API changes.
+
+If the release branch already has the intended version, do not run
+`bumpversion patch`: it would advance to the following release. For a new
+patch version, use `bumpversion --no-commit --no-tag patch` and update the remaining
+version references listed above before review.
+
+After reviewing and committing the release changes, run the test/coverage,
+lint and documentation checks. Build the source distribution and wheel with
+`make dist BROWSER=true`, then validate them with `python3 -m twine check
+dist/*`. `make release` uploads packages to PyPI; use it only when ready to
+publish.
+
+Tag the reviewed release commit with its exact version (for example,
+`v0.27.2`) and push the branch and that tag:
 
 ```
-$ bumpversion patch # possible: major / minor / patch
+$ git tag v0.27.2
 $ git push
-$ git push --tags
+$ git push origin v0.27.2
 ```
 
 ## Other Ways of Contributing

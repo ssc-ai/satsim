@@ -2,7 +2,7 @@
 
 The equivalent native `transform` calculation shows no unexplained GPU slowdown in these fixtures. Dense static collects are **1.59× faster**; moving collect medians are close to the baseline. All numerical and output acceptance checks pass.
 
-The old shared `streak` approximation is a different calculation. Replacing it with correct per-source sampling costs **6.00×** in the dense moving renderer probe, and **7.4%** in the complete-collect median (overlapping ranges). That tradeoff needs an explicit maintainer decision before merging/closing #61. This report does not waive that decision.
+The old shared `streak` approximation is a different calculation. Replacing it with correct per-source sampling costs **6.00×** in the dense moving renderer probe, and **7.4%** in the complete-collect median (overlapping ranges). The maintainer accepted this correctness cost for 0.27.2; PR #63 was merged and [#61](https://github.com/ssc-ai/satsim/issues/61) closed. Further optimization is proposed in [PR #67](https://github.com/ssc-ai/satsim/pull/67) for [#65](https://github.com/ssc-ai/satsim/issues/65). The measurements below remain the historical PR #63 qualification, before the subsequent FFT fixes in #66 and #68.
 
 ## Inputs and protocol
 
@@ -71,7 +71,7 @@ Single observations, seconds; import/setup and rendering are measured separately
 
 The older path deposits a precomputed shared trail once per source; the corrected renderer deposits each source at every midpoint with its own rotation. Their star images differ by 11.8% relative L2 in the renderer probe and about 25.5% in the collect frames. Those images are not equivalent references. The PR's sampled result agrees with the equivalent `transform` reference within the acceptance gates above. The 7.4% collect median increase has overlapping observed ranges; no precise universal slowdown percentage is claimed.
 
-A follow-up GPU optimization may be useful. Keeping the faster legacy approximation would retain the fidelity defects this PR fixes. Choose explicitly whether to accept the measured correctness cost now or optimize before merge.
+The accepted release uses correct per-source sampling. Follow-up GPU optimization in #65 must preserve that calculation and compare against the corrected implementation.
 
 ## GPU transfer audit
 

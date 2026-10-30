@@ -1,11 +1,12 @@
 History
 =======
 
-0.27.2 (unreleased)
+0.27.2
 ---------------------
 
 * **BEHAVIORAL CHANGE:** Preserve the original padded grid size in real inverse FFT convolution. Fix column shifts and ringing in odd-width FFT renders and ePSF lookup-table generation. Previously cached ePSF LUTs are automatically rebuilt to remove the baked-in bias; affected seeded images can change. (#64)
 * **BEHAVIORAL CHANGE:** Render native ePSF `streak` stars like `transform`: each star deposits its optical ePSF at every exposure-bin midpoint. This fixes clipped one-sided trails, field-rotation shape and phase carry. Stars whose ePSF wings reach the frame are now kept, so dense fields deposit slightly more stars. `epsf.crop` tier counts count the deposited stars, and frame metadata no longer includes `trail_det`. (#63)
+* Document the accepted cost of correct per-source GPU streak sampling. Historical PR #63 qualification on an RTX 3090 measured a 6× dense moving renderer cost and a 7.4% increase in the complete-collect median versus the previous shared-trail approximation, with overlapping collect timing ranges. Equivalent `transform` rendering showed no unexplained slowdown. These measurements precede subsequent FFT fixes; see the [benchmark report](https://github.com/ssc-ai/satsim/blob/3b0ceabb089c4c6467b40f32a739a661ca0f2a57/benchmarks/epsf_gpu/report.md) for scope and limits. Further optimization is proposed in #67 for #65.
 * Accelerate eager CPU ePSF star deposition with a compiled float64 kernel. It runs only when every render tensor, including `position_transform` output, is on the CPU; GPU, mixed-device and graph renders keep TensorFlow. Pixels can differ from TensorFlow at rounding level. (#63)
 * Skip unused PSF generation for native ePSF `streak` frames with a warm LUT cache, and keep FFT temporal sampling and per-source star transforms when `fallback_to_fft_for_models` applies. (#63)
 * **API CHANGE:** Deprecate the trailed ePSF path. `render_epsf` `phase_oversample` and `epsf_normalize`, and `resolve_epsf_tiers` `trail_det`, are ignored with a `DeprecationWarning`. `filter_epsf_sources_in_bounds` without `kernel_size` warns and applies the previous center-only rule. `build_trailed_epsf_lut`, `transform_and_add_trailed_epsf` and `add_epsf_counts_tiered` raise `NotImplementedError` naming their replacement. (#63)
