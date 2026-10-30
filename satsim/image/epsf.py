@@ -3,6 +3,7 @@ from __future__ import division, print_function, absolute_import
 import math
 import warnings
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable, Optional, Tuple
 
 import numpy as np
@@ -629,6 +630,17 @@ def add_epsf_counts(
         batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
         batch_size_cap=None):
     """Deposit oversampled point sources as detector-space ePSF stamps."""
+    return _add_epsf_counts_impl(
+        fpa, r_os, c_os, cnt, epsf_lut, s_osf, r_offset_os, c_offset_os,
+        batch_size, point_rendering, batch_element_budget, batch_size_cap)
+
+
+def _add_epsf_counts_impl(
+        fpa, r_os, c_os, cnt, epsf_lut, s_osf, r_offset_os=0, c_offset_os=0,
+        batch_size=None, point_rendering='bilinear',
+        batch_element_budget=EPSF_BATCH_ELEMENT_BUDGET_DEFAULT,
+        batch_size_cap=None, parallel_iterations=10):
+    """Shared deposition; GPU star graphs bound the number of in-flight batches."""
     point_rendering = _validate_point_rendering(point_rendering)
     s_osf = tf.cast(s_osf, tf.int32)
 
@@ -704,8 +716,26 @@ def add_epsf_counts(
         image = tf.reshape(flat_image, shape)
         return end, image
 
-    _, padded_fpa = tf.while_loop(cond, body, (tf.constant(0, tf.int32), padded_fpa))
+    _, padded_fpa = tf.while_loop(
+        cond, body, (tf.constant(0, tf.int32), padded_fpa), parallel_iterations=parallel_iterations)
     return tf.slice(padded_fpa, [stamp_pad, stamp_pad], fpa_shape)
+
+
+def _compile_gpu_epsf_deposition():
+    """Build a reusable graph without initializing devices or capturing LUT values.
+
+    One loop iteration at a time avoids overlapping large stamp intermediates.
+    Shape relaxation reuses graphs as source counts, image sizes and LUT shapes
+    change. Motion and user callbacks run outside this function, as before.
+    """
+    deposit = partial(_add_epsf_counts_impl, parallel_iterations=1)
+    try:
+        return tf.function(deposit, reduce_retracing=True)
+    except TypeError:  # TensorFlow versions before reduce_retracing was available.
+        return tf.function(deposit, experimental_relax_shapes=True)
+
+
+_add_epsf_counts_graph = _compile_gpu_epsf_deposition()
 
 
 def transform_and_add_epsf(
@@ -1008,7 +1038,13 @@ def _deposit_star_group(fpa, stars, group, start=0):
 
 def _add_star_samples(image, stars, group, rr, cc, vv):
     row_offset_os, col_offset_os = stars.offset_os
-    return add_epsf_counts(
+    deposit = add_epsf_counts
+    # Compile only eager, multi-sample GPU stars. Keep CPU, existing graph and
+    # single-sample deposition on their original paths; targets never come here.
+    if (tf.executing_eagerly() and stars.time_grid.shape[0] not in (None, 1)
+            and tf.DeviceSpec.from_string(image.device).device_type == 'GPU'):
+        deposit = _add_epsf_counts_graph
+    return deposit(
         image,
         rr,
         cc,

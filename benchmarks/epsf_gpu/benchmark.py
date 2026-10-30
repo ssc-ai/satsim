@@ -377,8 +377,11 @@ def analyze(args):
     normal = json.loads((root / 'results.json').read_text())
     extra = json.loads((Path(args.extra_output) / 'results.json').read_text())
     deterministic = json.loads((Path(args.deterministic_output) / 'results.json').read_text())
+    streak_key = 'streak' if args.corrected_baseline else 'legacy_streak'
     report = dict(commits=normal['commits'], setup=normal['setup'], timing=[],
-                  fidelity={}, exports={}, legacy_streak={}, profiles=profile_summary(Path(args.extra_output)))
+                  fidelity={}, exports={}, profiles=profile_summary(Path(args.extra_output)),
+                  comparison='corrected' if args.corrected_baseline else 'legacy')
+    report[streak_key] = {}
     for kind in ['stage', 'collect']:
         for case, _, _ in CASES:
             item = dict(kind=kind, case=case)
@@ -392,10 +395,15 @@ def analyze(args):
             item['speedup'] = item['baseline']['median'] / item['candidate']['median']
             report['timing'].append(item)
 
-    for label, results in [('normal', normal), ('deterministic', deterministic)]:
+    cohorts = [('normal', normal), ('deterministic', deterministic)]
+    if args.corrected_baseline:
+        cohorts.append(('extra', extra))
+    for label, results in cohorts:
         maxima = dict(l2=0., flux=0., centroid_px=0., moment=0., aperture_tolerance_ratio=0.)
         images, targets_bitwise = 0, True
         sections = list(results['cold'].values()) + [results['measurements']]
+        if args.corrected_baseline:
+            sections += [results.get(key, []) for key in ['streak', 'streak_collect', 'profiles']]
         for section in sections:
             for base in section:
                 if base['version'] != 'baseline' or 'array_prefix' not in base:
@@ -444,16 +452,21 @@ def analyze(args):
                 bd, cd = Path(base['directory']), Path(candidate['directory'])
                 for bp in sorted((bd / 'Annotations').glob('*.json')):
                     cp = cd / 'Annotations' / bp.name
-                    bj, cj = [json.loads(p.read_text())['data'] for p in [bp, cp]]
+                    bj, cj = [json.loads(p.read_text()) for p in [bp, cp]]
+                    if args.corrected_baseline:
+                        assert bj == cj, ('Annotation/SNR/metadata difference', bp)
+                    bj, cj = bj['data'], cj['data']
                     assert bj['objects'] == cj['objects'], ('Annotation/SNR difference', bp, cp)
                     bm, cm = bj['metadata'], cj['metadata']
-                    bm['epsf']['crop'].pop('trail_det', None)
+                    if not args.corrected_baseline:
+                        bm['epsf']['crop'].pop('trail_det', None)
                     assert bm == cm, ('Unexpected frame metadata difference', bp)
                     objects += len(bj['objects'])
                     bf, cf = [directory / 'ImageFiles' / (bp.stem + '.fits') for directory in [bd, cd]]
                     bh, ch = dict(fits.getheader(bf)), dict(fits.getheader(cf))
-                    bh.pop('SWCREATE')
-                    ch.pop('SWCREATE')
+                    if not args.corrected_baseline:
+                        bh.pop('SWCREATE')
+                        ch.pop('SWCREATE')
                     assert bh == ch, ('Unexpected FITS header difference', bp)
                     b, c = [fits.getdata(p).astype(np.int32) for p in [bf, cf]]
                     assert b.shape == c.shape == (HEIGHT, WIDTH) and np.ptp(b) > 4 and np.ptp(c) > 4
@@ -464,7 +477,8 @@ def analyze(args):
                     frames += 1
         report['exports'][label] = dict(paired_frames=frames, annotation_objects_compared=objects,
                                         maximum_adu_difference=maximum_adu, differing_pixels=changed_pixels,
-                                        header_exclusions=['SWCREATE'], metadata_exclusions=['epsf.crop.trail_det'])
+                                        header_exclusions=[] if args.corrected_baseline else ['SWCREATE'],
+                                        metadata_exclusions=[] if args.corrected_baseline else ['epsf.crop.trail_det'])
 
     for key, values in [('stage', normal['streak']), ('collect', extra['streak_collect'])]:
         entry = {}
@@ -477,7 +491,7 @@ def analyze(args):
         entry['star_image_differences'] = [image_metrics(
             np.load(candidate['array_prefix'] + f'_{i}_stars.npy'),
             np.load(base['array_prefix'] + f'_{i}_stars.npy')) for i in range(base['frames'])]
-        report['legacy_streak'][key] = entry
+        report[streak_key][key] = entry
     report['dispatch'] = {mode: statistics.median(m['seconds'] for m in normal['dispatch'] if m['force_tf'] == forced)
                           for mode, forced in [('auto', False), ('tensorflow', True)]}
     report['source_sha256'] = {
@@ -502,6 +516,8 @@ if __name__ == '__main__':
     parser.add_argument('--extra-only', action='store_true', help='Only run requested streak-collect/profile checks')
     parser.add_argument('--streak-collect', action='store_true', help='Also compare legacy/corrected streak collects')
     parser.add_argument('--analyze', action='store_true')
+    parser.add_argument('--corrected-baseline', action='store_true',
+                        help='Analyze corrected renderers with exact metadata and additional streak fidelity checks')
     parser.add_argument('--extra-output')
     parser.add_argument('--deterministic-output')
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)

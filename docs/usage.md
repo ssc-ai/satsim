@@ -321,6 +321,12 @@ image-plane target:
   exposure-bin midpoint sample, and stars with exactly zero rotation and
   translation and no distortion use one sample. `fft` is accepted as a legacy
   alias for `streak`.
+  Moving native ePSF stars on a GPU use a reusable TensorFlow deposition graph
+  in eager execution. The graph preserves the same samples, interpolation
+  and flux tiers, and permits one in-flight stamp batch to bound temporary
+  allocations. First use with new shapes/settings can take longer while the
+  graph is traced. CPU, existing graph execution, single-sample and target
+  rendering keep their existing paths; no configuration change is required.
 - `point_rendering`: `bilinear` is the default and preserves sub-pixel point
   centroids by distributing fractional sources over neighboring oversampled
   pixels. Use `floor` to preserve legacy integer-pixel deposition behavior.
